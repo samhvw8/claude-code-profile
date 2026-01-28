@@ -86,6 +86,7 @@ ccp use --show
 | `ccp init` | Migrate existing ~/.claude to ~/.ccp structure |
 | `ccp use <profile>` | Set default profile (~/.claude symlink) |
 | `ccp use --show` | Show current default profile |
+| `ccp env <profile>` | Configure project env (mise/direnv) for a profile |
 | `ccp profile create <name>` | Create new profile |
 | `ccp profile list` | List all profiles |
 | `ccp profile check <name>` | Validate profile against manifest |

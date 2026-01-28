@@ -387,6 +387,7 @@ hub/
 | `ccp init` | Migrate existing ~/.claude to hub + default profile | `ccp init` |
 | `ccp use <n>` | Set default profile (~/.claude symlink) | `ccp use quickfix` |
 | `ccp use --show` | Show current default profile | `ccp use --show` |
+| `ccp env <profile>` | Configure project env for a profile | `ccp env dev --format=mise` |
 | `ccp profile create <name>` | Create new profile | `ccp profile create quickfix --skills=git-basics,debugging-core` |
 | `ccp profile list` | List all profiles | `ccp profile list` |
 | `ccp profile check <name>` | Validate profile against manifest | `ccp profile check quickfix` |
@@ -401,6 +402,11 @@ hub/
 **`ccp init`**
 - `--dry-run` — Show migration plan without executing
 - `--force` — Overwrite existing hub structure
+
+**`ccp env`**
+- `--format=shell` — Print shell export command (default)
+- `--format=mise` — Update mise.toml with CLAUDE_CONFIG_DIR
+- `--format=direnv` — Update .envrc with export CLAUDE_CONFIG_DIR
 
 **`ccp profile create`**
 - `--skills=a,b,c` — Skills to include
