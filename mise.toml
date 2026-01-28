@@ -1,0 +1,53 @@
+# mise.toml - ccp development environment
+[tools]
+go = "1.25.1"
+
+[env]
+CGO_ENABLED = "0"
+
+[tasks.build]
+alias = "b"
+description = "Build ccp binary"
+sources = ["**/*.go", "go.mod", "go.sum"]
+outputs = ["ccp"]
+run = "go build -o ccp ."
+
+[tasks.test]
+alias = "t"
+description = "Run all tests"
+sources = ["**/*.go"]
+run = "go test ./..."
+
+[tasks."test:verbose"]
+description = "Run tests with verbose output"
+run = "go test ./... -v"
+
+[tasks."test:coverage"]
+description = "Run tests with coverage report"
+run = "go test ./... -coverprofile=coverage.out && go tool cover -html=coverage.out -o coverage.html"
+
+[tasks.lint]
+description = "Run golangci-lint"
+sources = ["**/*.go"]
+run = "golangci-lint run"
+
+[tasks.fmt]
+description = "Format code"
+run = "go fmt ./..."
+
+[tasks.tidy]
+description = "Tidy go modules"
+run = "go mod tidy"
+
+[tasks.clean]
+description = "Remove build artifacts"
+run = "rm -f ccp coverage.out coverage.html"
+
+[tasks.install]
+description = "Install ccp locally"
+depends = ["build"]
+run = "go install ."
+
+[tasks.check]
+description = "Run all checks (fmt, test, build)"
+depends = ["fmt", "test", "build"]
