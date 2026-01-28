@@ -284,7 +284,13 @@ func (m *Migrator) activateDefaultProfile() error {
 		return fmt.Errorf("failed to cleanup source dir: %w", err)
 	}
 
-	// Remove the source directory
+	// Move any remaining unknown directories/files to the new profile
+	// This preserves user data that isn't in our known types
+	if err := m.moveRemainingItems(defaultProfileDir); err != nil {
+		return fmt.Errorf("failed to move remaining items: %w", err)
+	}
+
+	// Remove the source directory (should be empty now)
 	if err := os.RemoveAll(m.paths.ClaudeDir); err != nil {
 		return fmt.Errorf("failed to remove source dir: %w", err)
 	}
@@ -292,6 +298,45 @@ func (m *Migrator) activateDefaultProfile() error {
 	// Create symlink ~/.claude -> ~/.ccp/profiles/default
 	if err := m.symMgr.Create(m.paths.ClaudeDir, defaultProfileDir); err != nil {
 		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+
+	return nil
+}
+
+// moveRemainingItems moves any remaining files/dirs from source to profile
+// This handles unknown directories (like debug/) that aren't in our known types
+func (m *Migrator) moveRemainingItems(profileDir string) error {
+	entries, err := os.ReadDir(m.paths.ClaudeDir)
+	if err != nil {
+		return err
+	}
+
+	// Build set of known names to skip (already handled)
+	knownNames := make(map[string]bool)
+	for _, t := range config.AllHubItemTypes() {
+		knownNames[string(t)] = true
+	}
+	for _, t := range config.AllDataItemTypes() {
+		knownNames[string(t)] = true
+	}
+	// Also skip files we already copied
+	knownNames["CLAUDE.md"] = true
+	knownNames["settings.json"] = true
+	knownNames["settings.local.json"] = true
+	knownNames["profile.yaml"] = true
+
+	for _, entry := range entries {
+		if knownNames[entry.Name()] {
+			continue
+		}
+
+		src := filepath.Join(m.paths.ClaudeDir, entry.Name())
+		dst := filepath.Join(profileDir, entry.Name())
+
+		// Move unknown item to profile
+		if err := m.moveItem(src, dst); err != nil {
+			return fmt.Errorf("failed to move %s: %w", entry.Name(), err)
+		}
 	}
 
 	return nil
