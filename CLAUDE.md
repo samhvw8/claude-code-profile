@@ -58,7 +58,15 @@ go mod tidy               # Update dependencies
 
 ```go
 // internal/config/paths.go
-type HubItemType string    // skills, hooks, rules, commands, md-fragments
+type Paths struct {
+    CcpDir      string // ~/.ccp (ccp data directory)
+    ClaudeDir   string // ~/.claude (symlink to active profile)
+    HubDir      string // ~/.ccp/hub
+    ProfilesDir string // ~/.ccp/profiles
+    SharedDir   string // ~/.ccp/profiles/shared
+}
+
+type HubItemType string    // skills, agents, hooks, rules, commands, md-fragments
 type DataItemType string   // tasks, todos, history, etc.
 type ShareMode string      // shared, isolated
 

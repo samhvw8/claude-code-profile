@@ -7,18 +7,18 @@ import (
 )
 
 func TestResolvePaths(t *testing.T) {
-	// Test with CCP_CLAUDE_DIR set
+	// Test with CCP_DIR set
 	testDir := t.TempDir()
-	os.Setenv("CCP_CLAUDE_DIR", testDir)
-	defer os.Unsetenv("CCP_CLAUDE_DIR")
+	os.Setenv("CCP_DIR", testDir)
+	defer os.Unsetenv("CCP_DIR")
 
 	paths, err := ResolvePaths()
 	if err != nil {
 		t.Fatalf("ResolvePaths() error: %v", err)
 	}
 
-	if paths.ClaudeDir != testDir {
-		t.Errorf("ClaudeDir = %q, want %q", paths.ClaudeDir, testDir)
+	if paths.CcpDir != testDir {
+		t.Errorf("CcpDir = %q, want %q", paths.CcpDir, testDir)
 	}
 
 	if paths.HubDir != filepath.Join(testDir, "hub") {
@@ -32,12 +32,12 @@ func TestResolvePaths(t *testing.T) {
 
 func TestPathsProfileDir(t *testing.T) {
 	paths := &Paths{
-		ClaudeDir:   "/home/user/.claude",
-		ProfilesDir: "/home/user/.claude/profiles",
+		CcpDir:      "/home/user/.ccp",
+		ProfilesDir: "/home/user/.ccp/profiles",
 	}
 
 	got := paths.ProfileDir("test")
-	want := "/home/user/.claude/profiles/test"
+	want := "/home/user/.ccp/profiles/test"
 	if got != want {
 		t.Errorf("ProfileDir() = %q, want %q", got, want)
 	}
@@ -45,11 +45,11 @@ func TestPathsProfileDir(t *testing.T) {
 
 func TestPathsHubItemPath(t *testing.T) {
 	paths := &Paths{
-		HubDir: "/home/user/.claude/hub",
+		HubDir: "/home/user/.ccp/hub",
 	}
 
 	got := paths.HubItemPath(HubSkills, "debugging")
-	want := "/home/user/.claude/hub/skills/debugging"
+	want := "/home/user/.ccp/hub/skills/debugging"
 	if got != want {
 		t.Errorf("HubItemPath() = %q, want %q", got, want)
 	}
@@ -85,8 +85,8 @@ func TestPathsIsInitialized(t *testing.T) {
 	testDir := t.TempDir()
 
 	paths := &Paths{
-		ClaudeDir: testDir,
-		HubDir:    filepath.Join(testDir, "hub"),
+		CcpDir: testDir,
+		HubDir: filepath.Join(testDir, "hub"),
 	}
 
 	// Not initialized yet

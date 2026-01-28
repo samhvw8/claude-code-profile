@@ -79,30 +79,41 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 		return nil
 	}
 
-	// Step 1: Create hub directory structure
+	// Step 1: Create ccp directory structure
+	if err := os.MkdirAll(m.paths.CcpDir, 0755); err != nil {
+		return m.rollbackAndReturn(fmt.Errorf("failed to create ccp dir: %w", err))
+	}
+	m.rollback.AddDir(m.paths.CcpDir)
+
+	// Step 2: Create hub directory structure
 	if err := m.createHubStructure(); err != nil {
 		return m.rollbackAndReturn(err)
 	}
 
-	// Step 2: Move hub items to hub directory
+	// Step 3: Move hub items to hub directory
 	if err := m.moveHubItems(plan); err != nil {
 		return m.rollbackAndReturn(err)
 	}
 
-	// Step 3: Create profiles directory
+	// Step 4: Create profiles directory
 	if err := os.MkdirAll(m.paths.ProfilesDir, 0755); err != nil {
 		return m.rollbackAndReturn(fmt.Errorf("failed to create profiles dir: %w", err))
 	}
 	m.rollback.AddDir(m.paths.ProfilesDir)
 
-	// Step 4: Create shared directory
+	// Step 5: Create shared directory
 	if err := os.MkdirAll(m.paths.SharedDir, 0755); err != nil {
 		return m.rollbackAndReturn(fmt.Errorf("failed to create shared dir: %w", err))
 	}
 	m.rollback.AddDir(m.paths.SharedDir)
 
-	// Step 5: Create default profile
+	// Step 6: Create default profile
 	if err := m.createDefaultProfile(plan); err != nil {
+		return m.rollbackAndReturn(err)
+	}
+
+	// Step 7: Replace ~/.claude with symlink to default profile
+	if err := m.activateDefaultProfile(); err != nil {
 		return m.rollbackAndReturn(err)
 	}
 
@@ -258,6 +269,47 @@ func (m *Migrator) createDefaultProfile(plan *MigrationPlan) error {
 	manifestPath := filepath.Join(defaultDir, "profile.yaml")
 	if err := manifest.Save(manifestPath); err != nil {
 		return fmt.Errorf("failed to save manifest: %w", err)
+	}
+
+	return nil
+}
+
+// activateDefaultProfile replaces ~/.claude with a symlink to the default profile
+func (m *Migrator) activateDefaultProfile() error {
+	defaultProfileDir := m.paths.ProfileDir("default")
+
+	// Remove the original ~/.claude directory (now empty of migrated items)
+	// First, clean up any remaining empty directories
+	if err := m.cleanupSourceDir(); err != nil {
+		return fmt.Errorf("failed to cleanup source dir: %w", err)
+	}
+
+	// Remove the source directory
+	if err := os.RemoveAll(m.paths.ClaudeDir); err != nil {
+		return fmt.Errorf("failed to remove source dir: %w", err)
+	}
+
+	// Create symlink ~/.claude -> ~/.ccp/profiles/default
+	if err := m.symMgr.Create(m.paths.ClaudeDir, defaultProfileDir); err != nil {
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+
+	return nil
+}
+
+// cleanupSourceDir removes empty directories from the source claude dir
+func (m *Migrator) cleanupSourceDir() error {
+	// Remove empty hub item directories
+	for _, itemType := range config.AllHubItemTypes() {
+		dir := filepath.Join(m.paths.ClaudeDir, string(itemType))
+		// Try to remove - will fail if not empty, which is fine
+		os.Remove(dir)
+	}
+
+	// Remove empty data directories
+	for _, dataType := range config.AllDataItemTypes() {
+		dir := filepath.Join(m.paths.ClaudeDir, string(dataType))
+		os.Remove(dir)
 	}
 
 	return nil

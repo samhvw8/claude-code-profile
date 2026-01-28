@@ -8,7 +8,7 @@ Claude Code's 20 skill limit forces manual reconfiguration for different work mo
 
 ## Solution
 
-`ccp` manages a central hub of reusable components (skills, hooks, rules, commands, md-fragments) and multiple profiles. Each profile is a complete Claude Code configuration directory, activated via `CLAUDE_CONFIG_DIR` or symlink.
+`ccp` manages a central hub of reusable components (skills, agents, hooks, rules, commands, md-fragments) and multiple profiles. Each profile is a complete Claude Code configuration directory. The `~/.claude` directory becomes a symlink to the active profile.
 
 ## Installation
 
@@ -49,9 +49,10 @@ ccp use --show
 ## Architecture
 
 ```
-~/.claude/
+~/.ccp/                               # CCP data directory
 ├── hub/                              # Single source of truth
 │   ├── skills/
+│   ├── agents/
 │   ├── hooks/
 │   ├── rules/
 │   ├── commands/
@@ -62,6 +63,7 @@ ccp use --show
 │   │   ├── CLAUDE.md
 │   │   ├── settings.json
 │   │   ├── skills/                   # Symlinks → hub/skills/*
+│   │   ├── agents/                   # Symlinks → hub/agents/*
 │   │   ├── hooks/
 │   │   ├── profile.yaml              # Manifest
 │   │   └── ...
@@ -73,13 +75,15 @@ ccp use --show
 │       ├── tasks/
 │       ├── todos/
 │       └── ...
+
+~/.claude → ~/.ccp/profiles/default   # Symlink to active profile
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `ccp init` | Migrate existing ~/.claude to hub + profile structure |
+| `ccp init` | Migrate existing ~/.claude to ~/.ccp structure |
 | `ccp use <profile>` | Set default profile (~/.claude symlink) |
 | `ccp use --show` | Show current default profile |
 | `ccp profile create <name>` | Create new profile |
@@ -97,7 +101,7 @@ ccp use --show
 
 ```bash
 ccp use quickfix
-# ~/.claude → ~/.claude/profiles/quickfix
+# ~/.claude → ~/.ccp/profiles/quickfix
 ```
 
 ### Per-Project (mise)
@@ -105,20 +109,20 @@ ccp use quickfix
 ```toml
 # .mise.toml
 [env]
-CLAUDE_CONFIG_DIR = "~/.claude/profiles/dev"
+CLAUDE_CONFIG_DIR = "~/.ccp/profiles/dev"
 ```
 
 ### Per-Project (direnv)
 
 ```bash
 # .envrc
-export CLAUDE_CONFIG_DIR="$HOME/.claude/profiles/dev"
+export CLAUDE_CONFIG_DIR="$HOME/.ccp/profiles/dev"
 ```
 
 ### Inline
 
 ```bash
-CLAUDE_CONFIG_DIR=~/.claude/profiles/quickfix claude "fix the bug"
+CLAUDE_CONFIG_DIR=~/.ccp/profiles/quickfix claude "fix the bug"
 ```
 
 ## Profile Manifest

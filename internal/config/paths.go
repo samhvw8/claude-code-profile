@@ -7,10 +7,11 @@ import (
 
 // Paths holds all resolved paths for ccp operations
 type Paths struct {
-	ClaudeDir   string // ~/.claude (or CLAUDE_CONFIG_DIR)
-	HubDir      string // ~/.claude/hub
-	ProfilesDir string // ~/.claude/profiles
-	SharedDir   string // ~/.claude/profiles/shared
+	CcpDir      string // ~/.ccp (ccp data directory)
+	ClaudeDir   string // ~/.claude (symlink to active profile)
+	HubDir      string // ~/.ccp/hub
+	ProfilesDir string // ~/.ccp/profiles
+	SharedDir   string // ~/.ccp/profiles/shared
 }
 
 // HubItemType represents the type of item in the hub
@@ -76,20 +77,29 @@ const (
 
 // ResolvePaths resolves all paths based on environment and defaults
 func ResolvePaths() (*Paths, error) {
-	claudeDir := os.Getenv("CCP_CLAUDE_DIR")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+
+	// CCP data directory (can be overridden)
+	ccpDir := os.Getenv("CCP_DIR")
+	if ccpDir == "" {
+		ccpDir = filepath.Join(home, ".ccp")
+	}
+
+	// Claude config directory (symlink target)
+	claudeDir := os.Getenv("CLAUDE_CONFIG_DIR")
 	if claudeDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, err
-		}
 		claudeDir = filepath.Join(home, ".claude")
 	}
 
 	return &Paths{
+		CcpDir:      ccpDir,
 		ClaudeDir:   claudeDir,
-		HubDir:      filepath.Join(claudeDir, "hub"),
-		ProfilesDir: filepath.Join(claudeDir, "profiles"),
-		SharedDir:   filepath.Join(claudeDir, "profiles", "shared"),
+		HubDir:      filepath.Join(ccpDir, "hub"),
+		ProfilesDir: filepath.Join(ccpDir, "profiles"),
+		SharedDir:   filepath.Join(ccpDir, "profiles", "shared"),
 	}, nil
 }
 
@@ -122,11 +132,31 @@ func (p *Paths) IsInitialized() bool {
 	return info.IsDir()
 }
 
-// ClaudeDirExists checks if the claude directory exists
-func (p *Paths) ClaudeDirExists() bool {
-	info, err := os.Stat(p.ClaudeDir)
+// CcpDirExists checks if the ccp directory exists
+func (p *Paths) CcpDirExists() bool {
+	info, err := os.Stat(p.CcpDir)
 	if err != nil {
 		return false
 	}
 	return info.IsDir()
+}
+
+// ClaudeDirExistsAsDir checks if ~/.claude exists as a real directory (not symlink)
+// Used to detect existing Claude config that can be migrated
+func (p *Paths) ClaudeDirExistsAsDir() bool {
+	info, err := os.Lstat(p.ClaudeDir)
+	if err != nil {
+		return false
+	}
+	// Must be a directory, not a symlink
+	return info.IsDir() && info.Mode()&os.ModeSymlink == 0
+}
+
+// ClaudeDirIsSymlink checks if ~/.claude is a symlink
+func (p *Paths) ClaudeDirIsSymlink() bool {
+	info, err := os.Lstat(p.ClaudeDir)
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeSymlink != 0
 }

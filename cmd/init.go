@@ -17,13 +17,13 @@ var (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize ccp from existing ~/.claude",
-	Long: `Migrate existing ~/.claude configuration to hub + profile structure.
+	Long: `Migrate existing ~/.claude configuration to ccp structure.
 
 This command:
-1. Creates ~/.claude/hub/ with all hub-eligible items
-2. Creates ~/.claude/profiles/default/ with symlinks to hub items
-3. Creates ~/.claude/profiles/shared/ for shared data
-4. Preserves your existing Claude Code behavior`,
+1. Creates ~/.ccp/hub/ with all hub-eligible items (skills, agents, hooks, etc.)
+2. Creates ~/.ccp/profiles/default/ as the default profile
+3. Creates ~/.ccp/profiles/shared/ for shared data
+4. Replaces ~/.claude with a symlink to the active profile`,
 	RunE: runInit,
 }
 
@@ -39,14 +39,17 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Check if claude directory exists
-	if !paths.ClaudeDirExists() {
+	// Check if claude directory exists as a real directory (not symlink)
+	if !paths.ClaudeDirExistsAsDir() {
+		if paths.ClaudeDirIsSymlink() {
+			return fmt.Errorf("~/.claude is already a symlink (ccp may already be initialized)\n\nUse --force to reinitialize")
+		}
 		return fmt.Errorf("~/.claude directory not found\n\nPlease create a Claude Code configuration first by running claude")
 	}
 
 	// Check if already initialized
 	if paths.IsInitialized() && !initForce {
-		return fmt.Errorf("ccp already initialized\n\nUse --force to reinitialize (this may cause data loss)")
+		return fmt.Errorf("ccp already initialized (~/.ccp exists)\n\nUse --force to reinitialize (this may cause data loss)")
 	}
 
 	migrator := migration.NewMigrator(paths)
@@ -105,7 +108,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  3. Create new profile: ccp profile create <name>\n")
 	fmt.Println()
 	fmt.Println("To use a profile per-project, add to your .envrc or .mise.toml:")
-	fmt.Printf("  export CLAUDE_CONFIG_DIR=\"%s/profiles/<name>\"\n", paths.ClaudeDir)
+	fmt.Printf("  export CLAUDE_CONFIG_DIR=\"%s/profiles/<name>\"\n", paths.CcpDir)
 
 	return nil
 }

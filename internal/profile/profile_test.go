@@ -130,7 +130,8 @@ func TestManifestAllHubItemsFlat(t *testing.T) {
 func TestProfileManager(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		ClaudeDir:   testDir,
+		CcpDir:      testDir,
+		ClaudeDir:   filepath.Join(testDir, "claude-link"),
 		HubDir:      filepath.Join(testDir, "hub"),
 		ProfilesDir: filepath.Join(testDir, "profiles"),
 		SharedDir:   filepath.Join(testDir, "profiles", "shared"),

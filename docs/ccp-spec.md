@@ -26,9 +26,10 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 ## Architecture
 
 ```
-~/.claude/
+~/.ccp/                               # CCP data directory
 ├── hub/                              # Single source of truth (Lego box)
 │   ├── skills/
+│   ├── agents/
 │   ├── rules/
 │   ├── hooks/
 │   ├── md-fragments/
@@ -39,6 +40,7 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 │   │   ├── CLAUDE.md
 │   │   ├── settings.json
 │   │   ├── skills/                   # Symlinks → hub/skills/*
+│   │   ├── agents/                   # Symlinks → hub/agents/*
 │   │   ├── hooks/                    # Symlinks → hub/hooks/*
 │   │   ├── rules/                    # Symlinks → hub/rules/*
 │   │   ├── tasks/                    # Local OR symlink → shared/tasks
@@ -57,6 +59,8 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 │       ├── tasks/
 │       ├── todos/
 │       └── paste-cache/
+
+~/.claude → ~/.ccp/profiles/default   # Symlink to active profile
 ```
 
 **Activation (two modes):**
@@ -64,20 +68,20 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 1. **Default (symlink):** `~/.claude` is a symlink to active profile
    ```bash
    ccp use quickfix
-   # → ~/.claude → ~/.claude/profiles/quickfix
+   # → ~/.claude → ~/.ccp/profiles/quickfix
    ```
 
 2. **Override (env):** `CLAUDE_CONFIG_DIR` takes precedence over symlink
    ```bash
    # Via mise (.mise.toml in project root)
    [env]
-   CLAUDE_CONFIG_DIR = "~/.claude/profiles/quickfix"
+   CLAUDE_CONFIG_DIR = "~/.ccp/profiles/quickfix"
 
    # Via direnv (.envrc in project root)
-   export CLAUDE_CONFIG_DIR="$HOME/.claude/profiles/quickfix"
+   export CLAUDE_CONFIG_DIR="$HOME/.ccp/profiles/quickfix"
 
    # Via inline command
-   CLAUDE_CONFIG_DIR=~/.claude/profiles/quickfix claude "fix the bug"
+   CLAUDE_CONFIG_DIR=~/.ccp/profiles/quickfix claude "fix the bug"
    ```
 
 **Parallel execution:** Different terminals can use different profiles via env override while `~/.claude` symlink remains the fallback default.
