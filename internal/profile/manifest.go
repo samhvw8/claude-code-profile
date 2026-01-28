@@ -22,6 +22,7 @@ type Manifest struct {
 // HubLinks defines which hub items are linked to this profile
 type HubLinks struct {
 	Skills      []string `yaml:"skills,omitempty"`
+	Agents      []string `yaml:"agents,omitempty"`
 	Hooks       []string `yaml:"hooks,omitempty"`
 	Rules       []string `yaml:"rules,omitempty"`
 	Commands    []string `yaml:"commands,omitempty"`
@@ -96,6 +97,8 @@ func (m *Manifest) GetHubItems(itemType config.HubItemType) []string {
 	switch itemType {
 	case config.HubSkills:
 		return m.Hub.Skills
+	case config.HubAgents:
+		return m.Hub.Agents
 	case config.HubHooks:
 		return m.Hub.Hooks
 	case config.HubRules:
@@ -114,6 +117,8 @@ func (m *Manifest) SetHubItems(itemType config.HubItemType, items []string) {
 	switch itemType {
 	case config.HubSkills:
 		m.Hub.Skills = items
+	case config.HubAgents:
+		m.Hub.Agents = items
 	case config.HubHooks:
 		m.Hub.Hooks = items
 	case config.HubRules:
