@@ -42,7 +42,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Check if claude directory exists as a real directory (not symlink)
 	if !paths.ClaudeDirExistsAsDir() {
 		if paths.ClaudeDirIsSymlink() {
-			return fmt.Errorf("~/.claude is already a symlink (ccp may already be initialized)\n\nUse --force to reinitialize")
+			if !initForce {
+				return fmt.Errorf("~/.claude is already a symlink (ccp may already be initialized)\n\nUse --force to reinitialize")
+			}
+			// Force mode: we need to reset first, then reinit won't work without a real directory
+			return fmt.Errorf("~/.claude is a symlink - run 'ccp reset' first to restore, then 'ccp init'")
 		}
 		return fmt.Errorf("~/.claude directory not found\n\nPlease create a Claude Code configuration first by running claude")
 	}
