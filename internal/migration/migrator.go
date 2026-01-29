@@ -367,15 +367,20 @@ func (m *Migrator) rollbackAndReturn(err error) error {
 	return err
 }
 
-// copyFile copies a single file
+// copyFile copies a single file preserving permissions
 func copyFile(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
 	source, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer source.Close()
 
-	dest, err := os.Create(dst)
+	dest, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
 	if err != nil {
 		return err
 	}
@@ -398,9 +403,14 @@ func copyRecursive(src, dst string) error {
 	return copyFile(src, dst)
 }
 
-// copyDir copies a directory recursively
+// copyDir copies a directory recursively preserving permissions
 func copyDir(src, dst string) error {
-	if err := os.MkdirAll(dst, 0755); err != nil {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
 		return err
 	}
 

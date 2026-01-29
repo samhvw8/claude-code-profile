@@ -63,12 +63,17 @@ func (r *Resetter) copyProfileContents(profileDir, destDir string) error {
 
 // copyDirResolvingSymlinks copies a directory, resolving symlinks to actual content
 func (r *Resetter) copyDirResolvingSymlinks(srcDir, dstDir string, isRoot bool) error {
+	srcInfo, err := os.Stat(srcDir)
+	if err != nil {
+		return err
+	}
+
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		return err
 	}
 
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, srcInfo.Mode()); err != nil {
 		return err
 	}
 

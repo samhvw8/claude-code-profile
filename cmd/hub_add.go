@@ -94,6 +94,11 @@ func isValidHubType(t config.HubItemType) bool {
 }
 
 func copyFileSimple(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
 	source, err := os.Open(src)
 	if err != nil {
 		return err
@@ -104,7 +109,7 @@ func copyFileSimple(src, dst string) error {
 		return err
 	}
 
-	dest, err := os.Create(dst)
+	dest, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
 	if err != nil {
 		return err
 	}
@@ -115,7 +120,12 @@ func copyFileSimple(src, dst string) error {
 }
 
 func copyDirRecursive(src, dst string) error {
-	if err := os.MkdirAll(dst, 0755); err != nil {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
 		return err
 	}
 
