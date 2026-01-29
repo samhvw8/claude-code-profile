@@ -174,7 +174,13 @@ func (m *Migrator) moveItem(src, dst string) error {
 func (m *Migrator) createDefaultProfile(plan *MigrationPlan) error {
 	defaultDir := m.paths.ProfileDir("default")
 
-	if err := os.MkdirAll(defaultDir, 0755); err != nil {
+	// Preserve original ~/.claude permissions if it exists, otherwise use 0755
+	profilePerm := os.FileMode(0755)
+	if info, err := os.Stat(m.paths.ClaudeDir); err == nil {
+		profilePerm = info.Mode().Perm()
+	}
+
+	if err := os.MkdirAll(defaultDir, profilePerm); err != nil {
 		return fmt.Errorf("failed to create default profile dir: %w", err)
 	}
 	m.rollback.AddDir(defaultDir)
@@ -190,7 +196,15 @@ func (m *Migrator) createDefaultProfile(plan *MigrationPlan) error {
 	// Create hub item directories and symlinks
 	for _, itemType := range config.AllHubItemTypes() {
 		itemDir := filepath.Join(defaultDir, string(itemType))
-		if err := os.MkdirAll(itemDir, 0755); err != nil {
+
+		// Preserve original subdir permissions if it exists
+		srcItemDir := filepath.Join(m.paths.ClaudeDir, string(itemType))
+		itemPerm := os.FileMode(0755)
+		if info, err := os.Stat(srcItemDir); err == nil {
+			itemPerm = info.Mode().Perm()
+		}
+
+		if err := os.MkdirAll(itemDir, itemPerm); err != nil {
 			return err
 		}
 
@@ -217,17 +231,24 @@ func (m *Migrator) createDefaultProfile(plan *MigrationPlan) error {
 		srcDir := filepath.Join(m.paths.ClaudeDir, string(dataType))
 		dstDir := filepath.Join(defaultDir, string(dataType))
 
+		// Get source permissions if it exists
+		var srcInfo os.FileInfo
 		srcExists := false
 		if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
 			srcExists = true
+			srcInfo = info
 		}
 
 		mode := manifest.GetDataShareMode(dataType)
 
 		if mode == config.ShareModeShared {
-			// Create shared directory
+			// Create shared directory with source permissions or default
 			sharedDir := m.paths.SharedDataDir(dataType)
-			if err := os.MkdirAll(sharedDir, 0755); err != nil {
+			sharedPerm := os.FileMode(0755)
+			if srcExists {
+				sharedPerm = srcInfo.Mode().Perm()
+			}
+			if err := os.MkdirAll(sharedDir, sharedPerm); err != nil {
 				return err
 			}
 

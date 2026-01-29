@@ -105,15 +105,29 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		return nil, os.ErrExist
 	}
 
+	// Get default permissions from ~/.claude if it exists (resolved through symlink)
+	defaultPerm := os.FileMode(0755)
+	if info, err := os.Stat(m.paths.ClaudeDir); err == nil {
+		defaultPerm = info.Mode().Perm()
+	}
+
 	// Create profile directory
-	if err := os.MkdirAll(profileDir, 0755); err != nil {
+	if err := os.MkdirAll(profileDir, defaultPerm); err != nil {
 		return nil, err
 	}
 
 	// Create hub item directories
 	for _, itemType := range config.AllHubItemTypes() {
 		itemDir := filepath.Join(profileDir, string(itemType))
-		if err := os.MkdirAll(itemDir, 0755); err != nil {
+
+		// Preserve subdir permissions from ~/.claude if they exist
+		itemPerm := defaultPerm
+		srcItemDir := filepath.Join(m.paths.ClaudeDir, string(itemType))
+		if info, err := os.Stat(srcItemDir); err == nil {
+			itemPerm = info.Mode().Perm()
+		}
+
+		if err := os.MkdirAll(itemDir, itemPerm); err != nil {
 			return nil, err
 		}
 	}
@@ -123,10 +137,17 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		mode := manifest.GetDataShareMode(dataType)
 		dataDir := filepath.Join(profileDir, string(dataType))
 
+		// Preserve data dir permissions from ~/.claude if they exist
+		dataPerm := defaultPerm
+		srcDataDir := filepath.Join(m.paths.ClaudeDir, string(dataType))
+		if info, err := os.Stat(srcDataDir); err == nil {
+			dataPerm = info.Mode().Perm()
+		}
+
 		if mode == config.ShareModeShared {
 			// Create symlink to shared directory
 			sharedDir := m.paths.SharedDataDir(dataType)
-			if err := os.MkdirAll(sharedDir, 0755); err != nil {
+			if err := os.MkdirAll(sharedDir, dataPerm); err != nil {
 				return nil, err
 			}
 			if err := m.symMgr.Create(dataDir, sharedDir); err != nil {
@@ -134,7 +155,7 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 			}
 		} else {
 			// Create local directory
-			if err := os.MkdirAll(dataDir, 0755); err != nil {
+			if err := os.MkdirAll(dataDir, dataPerm); err != nil {
 				return nil, err
 			}
 		}

@@ -26,6 +26,13 @@ func (r *Resetter) Execute() error {
 		return fmt.Errorf("failed to read symlink: %w", err)
 	}
 
+	// Get the profile directory permissions to restore later
+	profileInfo, err := os.Stat(activeProfile)
+	if err != nil {
+		return fmt.Errorf("failed to stat profile: %w", err)
+	}
+	profilePerm := profileInfo.Mode().Perm()
+
 	// Step 2: Create a temporary directory to hold restored content
 	tempDir, err := os.MkdirTemp(filepath.Dir(r.paths.ClaudeDir), ".claude-restore-")
 	if err != nil {
@@ -48,7 +55,12 @@ func (r *Resetter) Execute() error {
 		return fmt.Errorf("failed to rename temp dir: %w", err)
 	}
 
-	// Step 6: Remove ~/.ccp entirely
+	// Step 6: Restore the correct permissions (MkdirTemp creates with 0700)
+	if err := os.Chmod(r.paths.ClaudeDir, profilePerm); err != nil {
+		return fmt.Errorf("failed to set permissions: %w", err)
+	}
+
+	// Step 7: Remove ~/.ccp entirely
 	if err := os.RemoveAll(r.paths.CcpDir); err != nil {
 		return fmt.Errorf("failed to remove ccp dir: %w", err)
 	}
