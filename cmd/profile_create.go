@@ -157,6 +157,52 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 
 			manifest.SetHubItems(itemType, selected)
 		}
+
+		// Ask about data sharing configuration
+		fmt.Println()
+		fmt.Println("Configure data sharing (shared data is accessible across profiles):")
+		fmt.Println()
+
+		var dataItems []picker.Item
+		defaultConfig := config.DefaultDataConfig()
+		for _, dataType := range config.AllDataItemTypes() {
+			isShared := defaultConfig[dataType] == config.ShareModeShared
+			label := fmt.Sprintf("%s", dataType)
+			if isShared {
+				label = fmt.Sprintf("%s (default: shared)", dataType)
+			} else {
+				label = fmt.Sprintf("%s (default: isolated)", dataType)
+			}
+			dataItems = append(dataItems, picker.Item{
+				ID:       string(dataType),
+				Label:    label,
+				Selected: isShared,
+			})
+		}
+
+		sharedDataTypes, err := picker.Run("Select data directories to SHARE across profiles:", dataItems)
+		if err != nil {
+			return fmt.Errorf("picker error: %w", err)
+		}
+		if sharedDataTypes == nil {
+			fmt.Println("Cancelled")
+			return nil
+		}
+
+		// Build shared set
+		sharedSet := make(map[string]bool)
+		for _, dt := range sharedDataTypes {
+			sharedSet[dt] = true
+		}
+
+		// Apply to manifest
+		for _, dataType := range config.AllDataItemTypes() {
+			if sharedSet[string(dataType)] {
+				manifest.SetDataShareMode(dataType, config.ShareModeShared)
+			} else {
+				manifest.SetDataShareMode(dataType, config.ShareModeIsolated)
+			}
+		}
 	}
 
 	// Create the profile
@@ -178,6 +224,22 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 	}
 	if len(summaryParts) > 0 {
 		fmt.Printf("Linked: %s\n", strings.Join(summaryParts, ", "))
+	}
+
+	// Print data sharing summary
+	var sharedData, isolatedData []string
+	for _, dataType := range config.AllDataItemTypes() {
+		if manifest.GetDataShareMode(dataType) == config.ShareModeShared {
+			sharedData = append(sharedData, string(dataType))
+		} else {
+			isolatedData = append(isolatedData, string(dataType))
+		}
+	}
+	if len(sharedData) > 0 {
+		fmt.Printf("Shared data: %s\n", strings.Join(sharedData, ", "))
+	}
+	if len(isolatedData) > 0 {
+		fmt.Printf("Isolated data: %s\n", strings.Join(isolatedData, ", "))
 	}
 
 	fmt.Println()
