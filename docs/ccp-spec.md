@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 1.2
+**Version:** 1.3
 **Date:** 2026-01-29
 **Status:** Draft
 
@@ -395,22 +395,43 @@ AND tool reports items only in A, only in B, and data sharing differences
 ### AC-19: Profile Sync Command
 
 ```gherkin
-GIVEN profile has hooks configured in manifest
+GIVEN profile exists with hub hooks or symlinks
 WHEN user runs `ccp profile sync [name]`
-THEN tool updates settings.json with hook configurations
-AND each hook is registered with correct type (SessionStart, PreToolUse, etc.)
+THEN tool regenerates symlinks for all hub items in manifest
+AND tool removes symlinks not in manifest
+AND tool regenerates settings.json with hook configurations
+AND each hook includes interpreter prefix and $HOME-based paths
+AND supports --all flag to sync all profiles
 ```
 
-### AC-20: Hub Add Command
+### AC-20: Profile Edit Command
+
+```gherkin
+GIVEN profile exists
+WHEN user runs `ccp profile edit [name]`
+THEN tool allows adding/removing hub items via flags or interactive picker
+AND --add-<type>=name adds items to profile
+AND --remove-<type>=name removes items from profile
+AND -i/--interactive opens tabbed picker with current selections
+AND tool syncs symlinks and regenerates settings.json after changes
+```
+
+### AC-21: Hub Add Command
 
 ```gherkin
 GIVEN hub is initialized
 WHEN user runs `ccp hub add <type> <path>`
 THEN tool copies file or directory to hub/<type>/
 AND item is available for linking to profiles
+
+GIVEN hub is initialized and profile exists
+WHEN user runs `ccp hub add <type> <name> --from-profile=<profile>`
+THEN tool copies item from profile to hub/<type>/
+AND --replace flag allows overwriting existing hub items
+AND tool suggests linking the item back to the profile
 ```
 
-### AC-21: Hub Remove Command
+### AC-22: Hub Remove Command
 
 ```gherkin
 GIVEN hub item exists
@@ -419,7 +440,7 @@ THEN tool warns if item is used by profiles
 AND tool removes item from hub after confirmation (or with --force)
 ```
 
-### AC-22: Hub Show Command
+### AC-23: Hub Show Command
 
 ```gherkin
 GIVEN hub item exists
@@ -428,7 +449,7 @@ THEN tool displays item path, type (file/directory), contents or file list
 AND tool shows which profiles use this item
 ```
 
-### AC-23: Usage Command
+### AC-24: Usage Command
 
 ```gherkin
 GIVEN hub and profiles exist
@@ -592,7 +613,8 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp profile delete <name>` | Delete a profile | `ccp profile delete quickfix` |
 | `ccp profile clone <src> <new>` | Clone an existing profile | `ccp profile clone default dev` |
 | `ccp profile diff <a> [b]` | Compare two profiles | `ccp profile diff dev prod` |
-| `ccp profile sync [name]` | Sync settings.json from manifest | `ccp profile sync` |
+| `ccp profile sync [name]` | Regenerate symlinks and settings.json | `ccp profile sync --all` |
+| `ccp profile edit [name]` | Add/remove hub items from profile | `ccp profile edit -i` |
 
 ### Hub Commands
 
@@ -600,6 +622,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 |---------|-------------|---------|
 | `ccp hub list [type]` | List hub contents | `ccp hub list skills` |
 | `ccp hub add <type> <path>` | Add item to hub | `ccp hub add skills ./my-skill.md` |
+| `ccp hub add <type> <name> --from-profile` | Promote profile item to hub | `ccp hub add skills my-skill --from-profile=default` |
 | `ccp hub show <type>/<name>` | Show hub item details | `ccp hub show skills/git-basics` |
 | `ccp hub edit <type>/<name>` | Edit hub item in $EDITOR | `ccp hub edit hooks/pre-commit.sh` |
 | `ccp hub remove <type>/<name>` | Remove item from hub | `ccp hub remove skills/old-skill` |
@@ -644,8 +667,28 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 **`ccp profile fix`**
 - `--dry-run` — Show changes without executing
 
+**`ccp profile sync`**
+- `--all` — Sync all profiles
+
+**`ccp profile edit`**
+- `--add-skills=a,b` — Add skills to profile
+- `--add-hooks=x,y` — Add hooks to profile
+- `--add-rules=p,q` — Add rules to profile
+- `--add-commands=c,d` — Add commands to profile
+- `--add-md-fragments=m,n` — Add md-fragments to profile
+- `--remove-skills=a` — Remove skills from profile
+- `--remove-hooks=x` — Remove hooks from profile
+- `--remove-rules=p` — Remove rules from profile
+- `--remove-commands=c` — Remove commands from profile
+- `--remove-md-fragments=m` — Remove md-fragments from profile
+- `-i, --interactive` — Interactive picker mode (default if no flags)
+
 **`ccp auto`**
 - `--path` — Output profile path instead of name
+
+**`ccp hub add`**
+- `--from-profile=<name>` — Promote item from profile to hub
+- `--replace` — Replace existing hub item if it exists
 
 **`ccp hub remove`**
 - `--force` — Skip confirmation and usage check
@@ -700,6 +743,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.3 | 2026-01-29 | — | Added: profile edit command (add/remove hub items via flags or picker), enhanced profile sync (regenerates symlinks and settings.json, --all flag), hub add --from-profile (promote profile items to hub), --replace flag for hub add. Hook migration preserves interpreter prefix and uses $HOME-based paths. Reset command rewrites settings.json hook paths. |
 | 1.2 | 2026-01-29 | — | Added: permission preservation for init, profile create, and reset commands. Fixed paths in AC-1, AC-2 (was ~/.claude, now ~/.ccp). |
 | 1.1 | 2026-01-29 | — | Added: reset, status, doctor, which, auto, session, run, usage commands. Hub CRUD (add, show, edit, remove, rename). Profile clone, diff, sync commands. Hook type configuration for settings.json. Tabbed picker for interactive profile creation. Project config (.ccp.yaml) for auto profile selection. |
 | 1.0 | 2025-01-28 | — | Initial specification |
