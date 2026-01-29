@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 1.1
+**Version:** 1.2
 **Date:** 2026-01-29
 **Status:** Draft
 
@@ -221,9 +221,10 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 ```gherkin
 GIVEN user has existing ~/.claude with skills, hooks, rules, commands
 WHEN user runs `ccp init`
-THEN tool creates ~/.claude/hub/ with all hub-eligible items moved
-AND tool creates ~/.claude/profiles/default/ with symlinks to hub items
-AND tool creates ~/.claude/profiles/shared/ directory
+THEN tool creates ~/.ccp/hub/ with all hub-eligible items moved
+AND tool creates ~/.ccp/profiles/default/ with symlinks to hub items
+AND tool preserves original ~/.claude directory permissions for profile
+AND tool creates ~/.ccp/profiles/shared/ directory
 AND existing Claude Code behavior is unchanged (default profile mirrors original)
 AND tool outputs next steps for shell configuration
 ```
@@ -233,7 +234,8 @@ AND tool outputs next steps for shell configuration
 ```gherkin
 GIVEN hub is initialized
 WHEN user runs `ccp profile create <name>` with item selections
-THEN tool creates ~/.claude/profiles/<name>/ directory
+THEN tool creates ~/.ccp/profiles/<name>/ directory
+AND tool inherits directory permissions from current ~/.claude
 AND tool creates profile.yaml with selected items and sharing config
 AND tool creates symlinks for all selected hub items
 AND tool creates CLAUDE.md (composed or template)
@@ -321,6 +323,7 @@ THEN tool outputs the name of the currently linked profile
 GIVEN ccp is initialized with ~/.claude as symlink
 WHEN user runs `ccp reset` and confirms
 THEN tool copies active profile contents to ~/.claude (replacing symlink)
+AND tool preserves directory permissions from the profile
 AND tool removes ~/.ccp directory entirely
 AND Claude Code continues working with restored ~/.claude directory
 ```
@@ -697,5 +700,6 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.2 | 2026-01-29 | — | Added: permission preservation for init, profile create, and reset commands. Fixed paths in AC-1, AC-2 (was ~/.claude, now ~/.ccp). |
 | 1.1 | 2026-01-29 | — | Added: reset, status, doctor, which, auto, session, run, usage commands. Hub CRUD (add, show, edit, remove, rename). Profile clone, diff, sync commands. Hook type configuration for settings.json. Tabbed picker for interactive profile creation. Project config (.ccp.yaml) for auto profile selection. |
 | 1.0 | 2025-01-28 | — | Initial specification |
