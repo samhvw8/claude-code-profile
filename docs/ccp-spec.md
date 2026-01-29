@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 1.0
-**Date:** 2025-01-28
+**Version:** 1.1
+**Date:** 2026-01-29
 **Status:** Draft
 
 ---
@@ -125,6 +125,30 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 **As a** user who wants a fallback profile when no env override is set
 **I want to** set which profile `~/.claude` points to
 **So that** Claude Code works without requiring env configuration in every terminal
+
+### US-7: Reset ccp and Restore Original Setup
+
+**As a** user who wants to uninstall ccp
+**I want to** reset ccp and restore my original ~/.claude directory
+**So that** I can go back to a standard Claude Code configuration
+
+### US-8: Diagnose Configuration Issues
+
+**As a** user experiencing issues with profiles or symlinks
+**I want to** run diagnostics to identify problems
+**So that** I can fix broken configurations
+
+### US-9: Auto-Select Profile by Project
+
+**As a** user working on different projects
+**I want to** have profiles automatically selected based on project configuration
+**So that** I don't need to manually switch profiles when changing projects
+
+### US-10: Compare Profile Configurations
+
+**As a** user managing multiple profiles
+**I want to** compare two profiles to see their differences
+**So that** I can understand what makes each profile unique
 
 ---
 
@@ -291,6 +315,126 @@ WHEN user runs `ccp use --show`
 THEN tool outputs the name of the currently linked profile
 ```
 
+### AC-11: Reset Command
+
+```gherkin
+GIVEN ccp is initialized with ~/.claude as symlink
+WHEN user runs `ccp reset` and confirms
+THEN tool copies active profile contents to ~/.claude (replacing symlink)
+AND tool removes ~/.ccp directory entirely
+AND Claude Code continues working with restored ~/.claude directory
+```
+
+### AC-12: Doctor Command
+
+```gherkin
+GIVEN ccp may have configuration issues
+WHEN user runs `ccp doctor`
+THEN tool checks: initialization, ~/.claude symlink, hub structure, profile manifests, broken symlinks
+AND tool reports status for each check (OK/FAIL/WARN)
+AND tool provides remediation instructions for failures
+```
+
+### AC-13: Status Command
+
+```gherkin
+GIVEN ccp is initialized
+WHEN user runs `ccp status`
+THEN tool displays: active profile, hub item counts, profile health, overall system health
+AND tool indicates profiles with drift or broken links
+```
+
+### AC-14: Auto Profile Selection
+
+```gherkin
+GIVEN .ccp.yaml exists in current or parent directory with profile: <name>
+WHEN user runs `ccp auto`
+THEN tool outputs the profile name
+AND with --path flag, outputs full profile path
+```
+
+### AC-15: Session Command
+
+```gherkin
+GIVEN profile exists
+WHEN user runs `ccp session <profile>`
+THEN tool starts new shell with CLAUDE_CONFIG_DIR set to profile path
+AND Claude Code commands in that shell use the specified profile
+```
+
+### AC-16: Run Command
+
+```gherkin
+GIVEN profile exists
+WHEN user runs `ccp run <profile> -- <command> [args]`
+THEN tool executes command with CLAUDE_CONFIG_DIR set to profile path
+AND command inherits the profile's Claude Code configuration
+```
+
+### AC-17: Profile Clone Command
+
+```gherkin
+GIVEN source profile exists
+WHEN user runs `ccp profile clone <source> <new-name>`
+THEN tool creates new profile with copied manifest configuration
+AND new profile has same hub links and data sharing config as source
+```
+
+### AC-18: Profile Diff Command
+
+```gherkin
+GIVEN two profiles exist
+WHEN user runs `ccp profile diff <a> <b>`
+THEN tool compares hub item links between profiles
+AND tool reports items only in A, only in B, and data sharing differences
+```
+
+### AC-19: Profile Sync Command
+
+```gherkin
+GIVEN profile has hooks configured in manifest
+WHEN user runs `ccp profile sync [name]`
+THEN tool updates settings.json with hook configurations
+AND each hook is registered with correct type (SessionStart, PreToolUse, etc.)
+```
+
+### AC-20: Hub Add Command
+
+```gherkin
+GIVEN hub is initialized
+WHEN user runs `ccp hub add <type> <path>`
+THEN tool copies file or directory to hub/<type>/
+AND item is available for linking to profiles
+```
+
+### AC-21: Hub Remove Command
+
+```gherkin
+GIVEN hub item exists
+WHEN user runs `ccp hub remove <type>/<name>`
+THEN tool warns if item is used by profiles
+AND tool removes item from hub after confirmation (or with --force)
+```
+
+### AC-22: Hub Show Command
+
+```gherkin
+GIVEN hub item exists
+WHEN user runs `ccp hub show <type>/<name>`
+THEN tool displays item path, type (file/directory), contents or file list
+AND tool shows which profiles use this item
+```
+
+### AC-23: Usage Command
+
+```gherkin
+GIVEN hub and profiles exist
+WHEN user runs `ccp usage`
+THEN tool displays orphaned items (not used by any profile)
+AND tool displays missing items (referenced but not in hub)
+AND tool displays shared items (used by multiple profiles)
+```
+
 ---
 
 ## Rejection Criteria (Explicit Non-Goals for MVP)
@@ -317,7 +461,7 @@ The system explicitly does NOT:
 ### profile.yaml
 
 ```yaml
-# ~/.claude/profiles/quickfix/profile.yaml
+# ~/.ccp/profiles/quickfix/profile.yaml
 
 name: quickfix
 description: "Minimal bug-fixing configuration"
@@ -339,7 +483,7 @@ hub:
     - base-rules.md
 
 # Data directory sharing configuration
-# "shared" = symlink to ~/.claude/profiles/shared/<name>
+# "shared" = symlink to ~/.ccp/profiles/shared/<name>
 # "isolated" = local directory within profile
 data:
   tasks: shared
@@ -350,7 +494,28 @@ data:
   session-env: isolated
   projects: shared
   plans: isolated
+
+# Hook configuration for settings.json integration
+# Specifies hook type (when to run) for each linked hook
+hooks:
+  - name: pre-commit-lint
+    type: PreToolUse           # SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SubagentStop
+    matcher: "Bash"            # Optional: tool matcher for PreToolUse/PostToolUse
+    timeout: 60                # Optional: timeout in seconds (default: 60)
+  - name: session-init
+    type: SessionStart
 ```
+
+### Hook Types
+
+| Type | Description |
+|------|-------------|
+| `SessionStart` | Runs when Claude Code session starts |
+| `UserPromptSubmit` | Runs before processing user input |
+| `PreToolUse` | Runs before a tool is executed (use `matcher` to filter) |
+| `PostToolUse` | Runs after a tool is executed (use `matcher` to filter) |
+| `Stop` | Runs when Claude Code session stops |
+| `SubagentStop` | Runs when a subagent stops |
 
 ### Hub Directory Structure
 
@@ -378,30 +543,88 @@ hub/
     └── documentation-standards.md
 ```
 
+### Project Config (.ccp.yaml)
+
+Project-level configuration file for automatic profile selection.
+
+```yaml
+# .ccp.yaml (in project root)
+
+profile: dev
+```
+
+When `ccp auto` is run, it searches for `.ccp.yaml` or `.ccp.yml` in the current directory and parent directories. Use with shell integration:
+
+```bash
+# In .bashrc/.zshrc
+export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
+```
+
 ---
 
 ## CLI Command Reference
 
+### Core Commands
+
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp init` | Migrate existing ~/.claude to hub + default profile | `ccp init` |
+| `ccp reset` | Undo ccp initialization and restore ~/.claude | `ccp reset` |
 | `ccp use <n>` | Set default profile (~/.claude symlink) | `ccp use quickfix` |
 | `ccp use --show` | Show current default profile | `ccp use --show` |
+| `ccp which` | Show currently active profile | `ccp which` |
+| `ccp status` | Show ccp status and health | `ccp status` |
+| `ccp doctor` | Diagnose and fix common issues | `ccp doctor` |
+| `ccp usage` | Show hub item usage across profiles | `ccp usage` |
 | `ccp env <profile>` | Configure project env for a profile | `ccp env dev --format=mise` |
-| `ccp profile create <name>` | Create new profile | `ccp profile create quickfix --skills=git-basics,debugging-core` |
+
+### Profile Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp profile create <name>` | Create new profile | `ccp profile create quickfix` |
 | `ccp profile list` | List all profiles | `ccp profile list` |
 | `ccp profile check <name>` | Validate profile against manifest | `ccp profile check quickfix` |
 | `ccp profile fix <name>` | Reconcile profile to match manifest | `ccp profile fix quickfix --dry-run` |
 | `ccp profile delete <name>` | Delete a profile | `ccp profile delete quickfix` |
+| `ccp profile clone <src> <new>` | Clone an existing profile | `ccp profile clone default dev` |
+| `ccp profile diff <a> [b]` | Compare two profiles | `ccp profile diff dev prod` |
+| `ccp profile sync [name]` | Sync settings.json from manifest | `ccp profile sync` |
+
+### Hub Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp hub list [type]` | List hub contents | `ccp hub list skills` |
+| `ccp hub add <type> <path>` | Add item to hub | `ccp hub add skills ./my-skill.md` |
+| `ccp hub show <type>/<name>` | Show hub item details | `ccp hub show skills/git-basics` |
+| `ccp hub edit <type>/<name>` | Edit hub item in $EDITOR | `ccp hub edit hooks/pre-commit.sh` |
+| `ccp hub remove <type>/<name>` | Remove item from hub | `ccp hub remove skills/old-skill` |
+| `ccp hub rename <type>/<name> <new>` | Rename hub item | `ccp hub rename skills/old new` |
+
+### Link Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
 | `ccp link <profile> <path>` | Add hub item to profile | `ccp link quickfix skills/vue-dev` |
 | `ccp unlink <profile> <path>` | Remove hub item from profile | `ccp unlink quickfix skills/vue-dev` |
-| `ccp hub list [type]` | List hub contents | `ccp hub list skills` |
+
+### Workflow Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp auto` | Auto-select profile from .ccp.yaml | `ccp auto --path` |
+| `ccp session <profile>` | Start shell with profile active | `ccp session dev` |
+| `ccp run <profile> -- <cmd>` | Run command with profile | `ccp run minimal -- claude "fix bug"` |
 
 ### Command Flags
 
 **`ccp init`**
 - `--dry-run` — Show migration plan without executing
 - `--force` — Overwrite existing hub structure
+
+**`ccp reset`**
+- `--force` — Skip confirmation prompt
 
 **`ccp env`**
 - `--format=shell` — Print shell export command (default)
@@ -417,6 +640,12 @@ hub/
 
 **`ccp profile fix`**
 - `--dry-run` — Show changes without executing
+
+**`ccp auto`**
+- `--path` — Output profile path instead of name
+
+**`ccp hub remove`**
+- `--force` — Skip confirmation and usage check
 
 ---
 
@@ -458,6 +687,9 @@ hub/
 | **Isolated data** | Data directories that are local to a specific profile |
 | **Manifest** | profile.yaml file that declares what a profile should contain |
 | **Drift** | State where profile directory doesn't match its manifest |
+| **Hook Type** | Event trigger for hook execution (SessionStart, PreToolUse, etc.) |
+| **Project Config** | .ccp.yaml file in project root for automatic profile selection |
+| **Session** | Shell environment with CLAUDE_CONFIG_DIR set to a specific profile |
 
 ---
 
@@ -465,4 +697,5 @@ hub/
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.1 | 2026-01-29 | — | Added: reset, status, doctor, which, auto, session, run, usage commands. Hub CRUD (add, show, edit, remove, rename). Profile clone, diff, sync commands. Hook type configuration for settings.json. Tabbed picker for interactive profile creation. Project config (.ccp.yaml) for auto profile selection. |
 | 1.0 | 2025-01-28 | — | Initial specification |
