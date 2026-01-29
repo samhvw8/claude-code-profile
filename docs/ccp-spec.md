@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.8.2
+**Version:** 0.8.3
 **Date:** 2026-01-29
 **Status:** Draft
 
@@ -781,6 +781,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.8.3 | 2026-01-29 | — | Added: `ccp skills find <query>` to search skills.sh for installable skills, `ccp skills add <owner/repo@skill>` to download and install skills from GitHub into the hub. |
 | 0.8.2 | 2026-01-29 | — | Added: dynamic shell completions for profile names and hub items (profile commands, link, unlink, use). Profile validation on use: warns about configuration drift before switching and suggests `ccp profile fix`. |
 | 0.8.1 | 2026-01-29 | — | Added: doctor --fix flag to auto-repair issues (creates missing hub directories, fixes broken symlinks across profiles). Stability improvements: comprehensive test coverage for migration package (71.6%), improved error messages with actionable context and fix suggestions. |
 | 0.8.0 | 2026-01-29 | — | Removed: md-fragments hub type (Claude Code doesn't load markdown fragments from directory, only CLAUDE.md). Hub types are now: skills, agents, hooks, rules, commands, setting-fragments. |
