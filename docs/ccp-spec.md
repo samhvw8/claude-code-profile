@@ -655,6 +655,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp hub list [type]` | List hub contents | `ccp hub list skills` |
 | `ccp hub add <type> <path>` | Add item to hub | `ccp hub add skills ./my-skill.md` |
 | `ccp hub add <type> <name> --from-profile` | Promote profile item to hub | `ccp hub add skills my-skill --from-profile=default` |
+| `ccp hub extract-fragments` | Extract setting fragments from profile | `ccp hub extract-fragments --from=default` |
 | `ccp hub show <type>/<name>` | Show hub item details | `ccp hub show skills/git-basics` |
 | `ccp hub edit <type>/<name>` | Edit hub item in $EDITOR | `ccp hub edit hooks/pre-commit.sh` |
 | `ccp hub remove <type>/<name>` | Remove item from hub | `ccp hub remove skills/old-skill` |
@@ -780,7 +781,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 0.7.0 | 2026-01-29 | — | Added: setting-fragments hub type for storing settings.json keys as YAML fragments. Init extracts fragments from existing settings.json with interactive selection (--all-fragments to skip). Profile create/sync merges selected fragments into settings.json. TUI picker enhanced with scrolling (max 10 visible items with scroll indicators), search bar (/ key to search, esc to clear), and cursor wrap-around. |
+| 0.7.0 | 2026-01-29 | — | Added: setting-fragments hub type for storing settings.json keys as YAML fragments. Init extracts fragments from existing settings.json with interactive selection (--all-fragments to skip). Profile create/sync merges selected fragments into settings.json (rebuilds from fragments only, removing stale keys). Added hub extract-fragments command to extract fragments from existing profiles without re-init. TUI picker enhanced with scrolling (max 10 visible items with scroll indicators), search bar (/ key to search, esc to clear), and cursor wrap-around. Fixed search filter persistence after exiting search mode. |
 | 0.6.0 | 2026-01-29 | — | Added: profile edit command (add/remove hub items via flags or picker), enhanced profile sync (regenerates symlinks and settings.json, --all flag), hub add --from-profile (promote profile items to hub), --replace flag for hub add. Hook migration preserves interpreter prefix and uses $HOME-based paths. Reset command rewrites settings.json hook paths. |
 | 0.5.0 | 2026-01-29 | — | Added: permission preservation for init, profile create, and reset commands. Fixed paths in AC-1, AC-2 (was ~/.claude, now ~/.ccp). |
 | 0.4.0 | 2026-01-29 | — | Added: reset, status, doctor, which, auto, session, run, usage commands. Hub CRUD (add, show, edit, remove, rename). Profile clone, diff, sync commands. Hook type configuration for settings.json. Tabbed picker for interactive profile creation. Project config (.ccp.yaml) for auto profile selection. |
