@@ -205,6 +205,40 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 				manifest.SetDataShareMode(dataType, config.ShareModeIsolated)
 			}
 		}
+
+		// Configure hooks if any were selected
+		selectedHooks := manifest.GetHubItems(config.HubHooks)
+		if len(selectedHooks) > 0 {
+			fmt.Println()
+			fmt.Println("Configure hook types (press 't' to cycle type for selected hooks):")
+
+			var hookItems []picker.HookItem
+			for _, hookName := range selectedHooks {
+				hookItems = append(hookItems, picker.HookItem{
+					Name:     hookName,
+					Type:     config.HookSessionStart, // default
+					Selected: true,
+				})
+			}
+
+			configuredHooks, err := picker.RunHookPicker("Configure hook types:", hookItems)
+			if err != nil {
+				return fmt.Errorf("hook picker error: %w", err)
+			}
+			if configuredHooks == nil {
+				fmt.Println("Cancelled")
+				return nil
+			}
+
+			// Apply hook configurations to manifest
+			for _, hook := range configuredHooks {
+				manifest.SetHookConfig(config.HookConfig{
+					Name:    hook.Name,
+					Type:    hook.Type,
+					Timeout: config.DefaultHookTimeout(),
+				})
+			}
+		}
 	}
 
 	// Create the profile

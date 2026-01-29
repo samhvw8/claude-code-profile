@@ -11,12 +11,13 @@ import (
 
 // Manifest represents the profile.yaml file
 type Manifest struct {
-	Name        string     `yaml:"name"`
-	Description string     `yaml:"description,omitempty"`
-	Created     time.Time  `yaml:"created"`
-	Updated     time.Time  `yaml:"updated"`
-	Hub         HubLinks   `yaml:"hub"`
-	Data        DataConfig `yaml:"data"`
+	Name        string            `yaml:"name"`
+	Description string            `yaml:"description,omitempty"`
+	Created     time.Time         `yaml:"created"`
+	Updated     time.Time         `yaml:"updated"`
+	Hub         HubLinks          `yaml:"hub"`
+	Data        DataConfig        `yaml:"data"`
+	Hooks       []config.HookConfig `yaml:"hooks,omitempty"`
 }
 
 // HubLinks defines which hub items are linked to this profile

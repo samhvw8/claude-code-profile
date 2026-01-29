@@ -158,6 +158,15 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		return nil, err
 	}
 
+	// Sync hooks to settings.json
+	if len(manifest.Hooks) > 0 {
+		settingsMgr := NewSettingsManager(m.paths)
+		if err := settingsMgr.SyncHooksFromManifest(profileDir, manifest); err != nil {
+			// Non-fatal - just log and continue
+			// The profile is created, just settings.json might be incomplete
+		}
+	}
+
 	return &Profile{
 		Name:     name,
 		Path:     profileDir,
