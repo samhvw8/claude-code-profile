@@ -1,6 +1,8 @@
 package migration
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,9 +16,12 @@ import (
 
 // MigrationPlan describes what will be migrated
 type MigrationPlan struct {
-	HubItems    map[config.HubItemType][]string
-	FilesToCopy []string // CLAUDE.md, settings.json, etc.
-	DataDirs    []string // tasks, todos, etc.
+	HubItems          map[config.HubItemType][]string
+	FilesToCopy       []string // CLAUDE.md, settings.json, etc.
+	DataDirs          []string // tasks, todos, etc.
+	HookClassification *HookClassification // Classified hooks from settings.json
+	HookMigrationPlan  *HookMigrationPlan  // User decisions for hook migration
+	MigratedHooks      []MigratedHook      // Successfully migrated hooks
 }
 
 // Migrator handles the init migration process
@@ -70,6 +75,31 @@ func (m *Migrator) Plan() (*MigrationPlan, error) {
 		}
 	}
 
+	// Parse hooks from settings.json
+	settingsPath := filepath.Join(m.paths.ClaudeDir, "settings.json")
+	if _, err := os.Stat(settingsPath); err == nil {
+		settings, err := ParseSettings(settingsPath)
+		if err == nil && settings.Hooks != nil {
+			extractedHooks := ExtractHookPaths(settings, m.paths.ClaudeDir)
+			plan.HookClassification = ClassifyHooks(extractedHooks, m.paths.ClaudeDir)
+
+			// Build initial HookMigrationPlan from classification
+			// Inside and inline hooks are automatically migrated
+			// Outside hooks default to Copy (can be changed via TUI before Execute)
+			plan.HookMigrationPlan = &HookMigrationPlan{
+				Inside: plan.HookClassification.Inside,
+				Inline: plan.HookClassification.Inline,
+			}
+			// Default all outside hooks to Copy
+			for _, hook := range plan.HookClassification.Outside {
+				plan.HookMigrationPlan.Decisions = append(plan.HookMigrationPlan.Decisions, HookMigrationDecision{
+					Hook:   hook,
+					Choice: HookChoiceCopy,
+				})
+			}
+		}
+	}
+
 	return plan, nil
 }
 
@@ -112,6 +142,41 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 		return m.rollbackAndReturn(err)
 	}
 
+	// Step 6.5: Migrate hooks if there are any
+	if plan.HookMigrationPlan != nil {
+		defaultDir := m.paths.ProfileDir("default")
+		hookMigrator := NewHookMigrator(m.paths, m.rollback)
+		migratedHooks, err := hookMigrator.MigrateHooks(plan.HookMigrationPlan, defaultDir)
+		if err != nil {
+			return m.rollbackAndReturn(fmt.Errorf("failed to migrate hooks: %w", err))
+		}
+		plan.MigratedHooks = migratedHooks
+
+		// Update manifest with migrated hook names
+		if len(migratedHooks) > 0 {
+			manifestPath := filepath.Join(defaultDir, "profile.yaml")
+			manifest, err := profile.LoadManifest(manifestPath)
+			if err != nil {
+				return m.rollbackAndReturn(fmt.Errorf("failed to load manifest for hook update: %w", err))
+			}
+
+			for _, hook := range migratedHooks {
+				manifest.AddHubItem(config.HubHooks, hook.Name)
+			}
+
+			if err := manifest.Save(manifestPath); err != nil {
+				return m.rollbackAndReturn(fmt.Errorf("failed to save manifest with hooks: %w", err))
+			}
+
+			// Rewrite settings.json with updated hook paths
+			settingsPath := filepath.Join(defaultDir, "settings.json")
+			profileHooksDir := filepath.Join(defaultDir, "hooks")
+			if err := m.rewriteSettingsHooks(settingsPath, profileHooksDir, migratedHooks, plan.HookMigrationPlan); err != nil {
+				return m.rollbackAndReturn(fmt.Errorf("failed to rewrite settings.json: %w", err))
+			}
+		}
+	}
+
 	// Step 7: Replace ~/.claude with symlink to default profile
 	if err := m.activateDefaultProfile(); err != nil {
 		return m.rollbackAndReturn(err)
@@ -138,8 +203,14 @@ func (m *Migrator) createHubStructure() error {
 }
 
 // moveHubItems moves items from source to hub
+// Note: hooks are excluded here as they're handled separately by HookMigrator
 func (m *Migrator) moveHubItems(plan *MigrationPlan) error {
 	for itemType, items := range plan.HubItems {
+		// Skip hooks - they're handled by HookMigrator with folder+manifest structure
+		if itemType == config.HubHooks {
+			continue
+		}
+
 		for _, itemName := range items {
 			src := filepath.Join(m.paths.ClaudeDir, string(itemType), itemName)
 			dst := m.paths.HubItemPath(itemType, itemName)
@@ -188,13 +259,20 @@ func (m *Migrator) createDefaultProfile(plan *MigrationPlan) error {
 	// Create manifest
 	manifest := profile.NewManifest("default", "Migrated from original ~/.claude")
 
-	// Add all hub items to manifest
+	// Add all hub items to manifest (except hooks - they're added by HookMigrator)
 	for itemType, items := range plan.HubItems {
+		if itemType == config.HubHooks {
+			continue // Hooks handled separately
+		}
 		manifest.SetHubItems(itemType, items)
 	}
 
-	// Create hub item directories and symlinks
+	// Create hub item directories and symlinks (except hooks)
 	for _, itemType := range config.AllHubItemTypes() {
+		if itemType == config.HubHooks {
+			continue // Hooks handled by HookMigrator
+		}
+
 		itemDir := filepath.Join(defaultDir, string(itemType))
 
 		// Preserve original subdir permissions if it exists
@@ -456,4 +534,82 @@ func copyDir(src, dst string) error {
 	}
 
 	return nil
+}
+
+// rewriteSettingsHooks rewrites the hooks section in settings.json with new paths
+func (m *Migrator) rewriteSettingsHooks(settingsPath string, profileHooksDir string, migrated []MigratedHook, plan *HookMigrationPlan) error {
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		// No settings.json, nothing to rewrite
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	// Parse existing settings
+	var settings map[string]interface{}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return fmt.Errorf("failed to parse settings.json: %w", err)
+	}
+
+	// Build new hooks section from migrated hooks
+	newHooks := make(map[string][]map[string]interface{})
+
+	for _, hook := range migrated {
+		hookType := string(hook.HookType)
+
+		entry := map[string]interface{}{
+			"hooks": []map[string]interface{}{{
+				"command": BuildSettingsCommand(hook.Manifest, profileHooksDir),
+				"timeout": hook.Manifest.Timeout,
+				"type":    "command",
+			}},
+		}
+
+		if hook.Manifest.Matcher != "" {
+			entry["matcher"] = hook.Manifest.Matcher
+		}
+
+		newHooks[hookType] = append(newHooks[hookType], entry)
+	}
+
+	// Add hooks that are kept as external references
+	if plan != nil {
+		for _, hook := range plan.GetHooksToKeep() {
+			hookType := string(hook.HookType)
+
+			entry := map[string]interface{}{
+				"hooks": []map[string]interface{}{{
+					"command": hook.Command,
+					"timeout": hook.Timeout,
+					"type":    "command",
+				}},
+			}
+
+			if hook.Matcher != "" {
+				entry["matcher"] = hook.Matcher
+			}
+
+			newHooks[hookType] = append(newHooks[hookType], entry)
+		}
+	}
+
+	// Replace hooks section
+	settings["hooks"] = newHooks
+
+	// Write back with pretty printing (no HTML escaping)
+	return writeJSONFile(settingsPath, settings)
+}
+
+// writeJSONFile writes data as JSON without HTML escaping
+func writeJSONFile(path string, data interface{}) error {
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(data); err != nil {
+		return err
+	}
+	return os.WriteFile(path, buf.Bytes(), 0644)
 }

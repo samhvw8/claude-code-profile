@@ -140,12 +140,7 @@ func (sm *SettingsManager) SaveSettings(profileDir string, settings *Settings) e
 		output["hooks"] = hooksData
 	}
 
-	data, err := json.MarshalIndent(output, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(settingsPath, data, 0644)
+	return writeJSONFile(settingsPath, output)
 }
 
 // SyncHooksFromManifest updates settings.json hooks based on manifest
