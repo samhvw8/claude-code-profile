@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 1.3
+**Version:** 0.7.0
 **Date:** 2026-01-29
 **Status:** Draft
 
@@ -33,7 +33,8 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 │   ├── rules/
 │   ├── hooks/
 │   ├── md-fragments/
-│   └── commands/
+│   ├── commands/
+│   └── setting-fragments/            # Settings.json key-value fragments
 │
 ├── profiles/
 │   ├── default/                      # Migrated from original ~/.claude
@@ -222,6 +223,8 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 GIVEN user has existing ~/.claude with skills, hooks, rules, commands
 WHEN user runs `ccp init`
 THEN tool creates ~/.ccp/hub/ with all hub-eligible items moved
+AND tool extracts settings.json keys as setting-fragments in hub
+AND tool presents interactive picker for fragment selection (or uses --all-fragments)
 AND tool creates ~/.ccp/profiles/default/ with symlinks to hub items
 AND tool preserves original ~/.claude directory permissions for profile
 AND tool creates ~/.ccp/profiles/shared/ directory
@@ -239,7 +242,7 @@ AND tool inherits directory permissions from current ~/.claude
 AND tool creates profile.yaml with selected items and sharing config
 AND tool creates symlinks for all selected hub items
 AND tool creates CLAUDE.md (composed or template)
-AND tool creates settings.json (default or template)
+AND tool generates settings.json from selected setting-fragments and hooks
 AND data directories are created per sharing config (local dir or symlink to shared/)
 ```
 
@@ -399,7 +402,7 @@ GIVEN profile exists with hub hooks or symlinks
 WHEN user runs `ccp profile sync [name]`
 THEN tool regenerates symlinks for all hub items in manifest
 AND tool removes symlinks not in manifest
-AND tool regenerates settings.json with hook configurations
+AND tool regenerates settings.json with hook configurations and setting-fragments
 AND each hook includes interpreter prefix and $HOME-based paths
 AND supports --all flag to sync all profiles
 ```
@@ -413,6 +416,7 @@ THEN tool allows adding/removing hub items via flags or interactive picker
 AND --add-<type>=name adds items to profile
 AND --remove-<type>=name removes items from profile
 AND -i/--interactive opens tabbed picker with current selections
+AND picker supports scrolling (max 10 visible items) and search (/ key)
 AND tool syncs symlinks and regenerates settings.json after changes
 ```
 
@@ -505,6 +509,9 @@ hub:
     - quick-test
   md-fragments:
     - base-rules.md
+  setting-fragments:
+    - api-permissions
+    - model-preferences
 
 # Data directory sharing configuration
 # "shared" = symlink to ~/.ccp/profiles/shared/<name>
@@ -561,11 +568,36 @@ hub/
 ├── commands/
 │   ├── quick-test/
 │   └── deploy-staging/
-└── md-fragments/
-    ├── base-rules.md
-    ├── code-style.md
-    └── documentation-standards.md
+├── md-fragments/
+│   ├── base-rules.md
+│   ├── code-style.md
+│   └── documentation-standards.md
+└── setting-fragments/
+    ├── api-permissions.yaml
+    ├── model-preferences.yaml
+    └── allowed-tools.yaml
 ```
+
+### Setting Fragment Schema
+
+Setting fragments store individual settings.json keys as YAML files for selective composition.
+
+```yaml
+# hub/setting-fragments/api-permissions.yaml
+name: api-permissions
+description: API key permissions configuration
+key: permissions
+value:
+  allow:
+    - Read
+    - Edit
+    - Bash(git *)
+  deny:
+    - Write(*.env)
+```
+
+During profile creation or sync, selected setting-fragments are merged into settings.json.
+Keys from fragments are merged (later fragments override earlier ones), then hooks are added.
 
 ### Project Config (.ccp.yaml)
 
@@ -648,6 +680,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 **`ccp init`**
 - `--dry-run` — Show migration plan without executing
 - `--force` — Overwrite existing hub structure
+- `--all-fragments` — Export all setting fragments without interactive selection
 
 **`ccp reset`**
 - `--force` — Skip confirmation prompt
@@ -661,6 +694,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--skills=a,b,c` — Skills to include
 - `--hooks=x,y` — Hooks to include
 - `--rules=p,q` — Rules to include
+- `--setting-fragments=s,t` — Setting fragments to include
 - `--from=<profile>` — Copy configuration from existing profile
 - `--interactive` — Interactive picker mode (default if no flags)
 
@@ -676,11 +710,13 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--add-rules=p,q` — Add rules to profile
 - `--add-commands=c,d` — Add commands to profile
 - `--add-md-fragments=m,n` — Add md-fragments to profile
+- `--add-setting-fragments=s,t` — Add setting-fragments to profile
 - `--remove-skills=a` — Remove skills from profile
 - `--remove-hooks=x` — Remove hooks from profile
 - `--remove-rules=p` — Remove rules from profile
 - `--remove-commands=c` — Remove commands from profile
 - `--remove-md-fragments=m` — Remove md-fragments from profile
+- `--remove-setting-fragments=s` — Remove setting-fragments from profile
 - `-i, --interactive` — Interactive picker mode (default if no flags)
 
 **`ccp auto`**
@@ -736,6 +772,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | **Hook Type** | Event trigger for hook execution (SessionStart, PreToolUse, etc.) |
 | **Project Config** | .ccp.yaml file in project root for automatic profile selection |
 | **Session** | Shell environment with CLAUDE_CONFIG_DIR set to a specific profile |
+| **Setting Fragment** | YAML file storing a single settings.json key-value for selective composition |
 
 ---
 
@@ -743,7 +780,8 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.3 | 2026-01-29 | — | Added: profile edit command (add/remove hub items via flags or picker), enhanced profile sync (regenerates symlinks and settings.json, --all flag), hub add --from-profile (promote profile items to hub), --replace flag for hub add. Hook migration preserves interpreter prefix and uses $HOME-based paths. Reset command rewrites settings.json hook paths. |
-| 1.2 | 2026-01-29 | — | Added: permission preservation for init, profile create, and reset commands. Fixed paths in AC-1, AC-2 (was ~/.claude, now ~/.ccp). |
-| 1.1 | 2026-01-29 | — | Added: reset, status, doctor, which, auto, session, run, usage commands. Hub CRUD (add, show, edit, remove, rename). Profile clone, diff, sync commands. Hook type configuration for settings.json. Tabbed picker for interactive profile creation. Project config (.ccp.yaml) for auto profile selection. |
-| 1.0 | 2025-01-28 | — | Initial specification |
+| 0.7.0 | 2026-01-29 | — | Added: setting-fragments hub type for storing settings.json keys as YAML fragments. Init extracts fragments from existing settings.json with interactive selection (--all-fragments to skip). Profile create/sync merges selected fragments into settings.json. TUI picker enhanced with scrolling (max 10 visible items with scroll indicators), search bar (/ key to search, esc to clear), and cursor wrap-around. |
+| 0.6.0 | 2026-01-29 | — | Added: profile edit command (add/remove hub items via flags or picker), enhanced profile sync (regenerates symlinks and settings.json, --all flag), hub add --from-profile (promote profile items to hub), --replace flag for hub add. Hook migration preserves interpreter prefix and uses $HOME-based paths. Reset command rewrites settings.json hook paths. |
+| 0.5.0 | 2026-01-29 | — | Added: permission preservation for init, profile create, and reset commands. Fixed paths in AC-1, AC-2 (was ~/.claude, now ~/.ccp). |
+| 0.4.0 | 2026-01-29 | — | Added: reset, status, doctor, which, auto, session, run, usage commands. Hub CRUD (add, show, edit, remove, rename). Profile clone, diff, sync commands. Hook type configuration for settings.json. Tabbed picker for interactive profile creation. Project config (.ccp.yaml) for auto profile selection. |
+| 0.1.0 | 2025-01-28 | — | Initial specification |
