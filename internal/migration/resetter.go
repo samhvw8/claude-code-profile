@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/samhoang/ccp/internal/config"
 )
@@ -58,6 +59,13 @@ func (r *Resetter) Execute() error {
 	// Step 6: Restore the correct permissions (MkdirTemp creates with 0700)
 	if err := os.Chmod(r.paths.ClaudeDir, profilePerm); err != nil {
 		return fmt.Errorf("failed to set permissions: %w", err)
+	}
+
+	// Step 6.5: Rewrite settings.json to update hook paths
+	// Replace $HOME/.ccp/profiles/<name>/hooks/ with $HOME/.claude/hooks/
+	if err := r.rewriteSettingsHooks(activeProfile); err != nil {
+		// Warn but don't fail - the reset succeeded
+		fmt.Printf("Warning: failed to rewrite settings.json hook paths: %v\n", err)
 	}
 
 	// Step 7: Remove ~/.ccp entirely
@@ -141,4 +149,37 @@ func (r *Resetter) copyDirResolvingSymlinks(srcDir, dstDir string, isRoot bool) 
 	}
 
 	return nil
+}
+
+// rewriteSettingsHooks rewrites settings.json to update hook paths from profile paths to ~/.claude paths
+func (r *Resetter) rewriteSettingsHooks(oldProfileDir string) error {
+	settingsPath := filepath.Join(r.paths.ClaudeDir, "settings.json")
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil // No settings.json, nothing to rewrite
+		}
+		return err
+	}
+
+	content := string(data)
+
+	// Get the profile hooks path pattern to replace
+	// e.g., $HOME/.ccp/profiles/default/hooks/ -> $HOME/.claude/hooks/
+	home, _ := os.UserHomeDir()
+
+	// Build the old path pattern (with $HOME)
+	oldHooksPath := oldProfileDir + "/hooks/"
+	if home != "" && strings.HasPrefix(oldHooksPath, home) {
+		oldHooksPath = "$HOME" + oldHooksPath[len(home):]
+	}
+
+	// Build the new path pattern
+	newHooksPath := "$HOME/.claude/hooks/"
+
+	// Replace all occurrences
+	content = strings.ReplaceAll(content, oldHooksPath, newHooksPath)
+
+	return os.WriteFile(settingsPath, []byte(content), 0644)
 }
