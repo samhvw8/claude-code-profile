@@ -7,11 +7,13 @@ import (
 
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/migration"
+	"github.com/samhoang/ccp/internal/picker"
 )
 
 var (
-	initDryRun bool
-	initForce  bool
+	initDryRun      bool
+	initForce       bool
+	initAllFragments bool
 )
 
 var initCmd = &cobra.Command{
@@ -23,13 +25,16 @@ This command:
 1. Creates ~/.ccp/hub/ with all hub-eligible items (skills, agents, hooks, etc.)
 2. Creates ~/.ccp/profiles/default/ as the default profile
 3. Creates ~/.ccp/profiles/shared/ for shared data
-4. Replaces ~/.claude with a symlink to the active profile`,
+4. Replaces ~/.claude with a symlink to the active profile
+
+By default, setting fragments are interactively selected. Use --all-fragments to export all.`,
 	RunE: runInit,
 }
 
 func init() {
 	initCmd.Flags().BoolVar(&initDryRun, "dry-run", false, "Show migration plan without executing")
 	initCmd.Flags().BoolVar(&initForce, "force", false, "Overwrite existing hub structure")
+	initCmd.Flags().BoolVar(&initAllFragments, "all-fragments", false, "Export all setting fragments without interactive selection")
 	rootCmd.AddCommand(initCmd)
 }
 
@@ -86,6 +91,55 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	if len(plan.DataDirs) > 0 {
 		fmt.Printf("  Data directories: %v\n", plan.DataDirs)
+	}
+
+	// Handle setting fragments
+	if len(plan.SettingFragments) > 0 {
+		fmt.Printf("  Setting fragments: %d available\n", len(plan.SettingFragments))
+
+		if !initAllFragments && !initDryRun {
+			// Interactive selection
+			fmt.Println("\nSelect setting fragments to include in the default profile:")
+
+			var pickerItems []picker.Item
+			for _, fragment := range plan.SettingFragments {
+				label := fragment.Name
+				if fragment.Description != "" {
+					label = fmt.Sprintf("%s - %s", fragment.Name, fragment.Description)
+				}
+				pickerItems = append(pickerItems, picker.Item{
+					ID:       fragment.Name,
+					Label:    label,
+					Selected: true, // Default all selected
+				})
+			}
+
+			selected, err := picker.Run("Setting Fragments", pickerItems)
+			if err != nil {
+				return fmt.Errorf("fragment selection failed: %w", err)
+			}
+
+			if selected == nil {
+				fmt.Println("Cancelled")
+				return nil
+			}
+
+			// Filter fragments based on selection
+			selectedMap := make(map[string]bool)
+			for _, id := range selected {
+				selectedMap[id] = true
+			}
+
+			var filteredFragments []migration.SettingFragment
+			for _, fragment := range plan.SettingFragments {
+				if selectedMap[fragment.Name] {
+					filteredFragments = append(filteredFragments, fragment)
+				}
+			}
+			plan.SettingFragments = filteredFragments
+
+			fmt.Printf("\nSelected %d fragments\n", len(filteredFragments))
+		}
 	}
 
 	fmt.Println()

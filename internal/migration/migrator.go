@@ -16,12 +16,13 @@ import (
 
 // MigrationPlan describes what will be migrated
 type MigrationPlan struct {
-	HubItems          map[config.HubItemType][]string
-	FilesToCopy       []string // CLAUDE.md, settings.json, etc.
-	DataDirs          []string // tasks, todos, etc.
+	HubItems           map[config.HubItemType][]string
+	FilesToCopy        []string // CLAUDE.md, settings.json, etc.
+	DataDirs           []string // tasks, todos, etc.
 	HookClassification *HookClassification // Classified hooks from settings.json
 	HookMigrationPlan  *HookMigrationPlan  // User decisions for hook migration
 	MigratedHooks      []MigratedHook      // Successfully migrated hooks
+	SettingFragments   []SettingFragment   // Extracted setting fragments
 }
 
 // Migrator handles the init migration process
@@ -98,6 +99,12 @@ func (m *Migrator) Plan() (*MigrationPlan, error) {
 				})
 			}
 		}
+
+		// Extract setting fragments (non-hook keys)
+		fragments, err := ExtractSettingFragments(settingsPath)
+		if err == nil && len(fragments) > 0 {
+			plan.SettingFragments = fragments
+		}
 	}
 
 	return plan, nil
@@ -118,6 +125,13 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 	// Step 2: Create hub directory structure
 	if err := m.createHubStructure(); err != nil {
 		return m.rollbackAndReturn(err)
+	}
+
+	// Step 2.5: Save setting fragments to hub
+	if len(plan.SettingFragments) > 0 {
+		if err := SaveSettingFragments(m.paths.HubDir, plan.SettingFragments); err != nil {
+			return m.rollbackAndReturn(fmt.Errorf("failed to save setting fragments: %w", err))
+		}
 	}
 
 	// Step 3: Move hub items to hub directory
@@ -174,6 +188,24 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 			if err := m.rewriteSettingsHooks(settingsPath, profileHooksDir, migratedHooks, plan.HookMigrationPlan); err != nil {
 				return m.rollbackAndReturn(fmt.Errorf("failed to rewrite settings.json: %w", err))
 			}
+		}
+	}
+
+	// Step 6.6: Add setting fragments to default profile manifest
+	if len(plan.SettingFragments) > 0 {
+		defaultDir := m.paths.ProfileDir("default")
+		manifestPath := filepath.Join(defaultDir, "profile.yaml")
+		manifest, err := profile.LoadManifest(manifestPath)
+		if err != nil {
+			return m.rollbackAndReturn(fmt.Errorf("failed to load manifest for setting fragments: %w", err))
+		}
+
+		for _, fragment := range plan.SettingFragments {
+			manifest.AddHubItem(config.HubSettingFragments, fragment.Name)
+		}
+
+		if err := manifest.Save(manifestPath); err != nil {
+			return m.rollbackAndReturn(fmt.Errorf("failed to save manifest with setting fragments: %w", err))
 		}
 	}
 

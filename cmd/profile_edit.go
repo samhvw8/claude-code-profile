@@ -307,8 +307,8 @@ func syncProfileEdit(paths *config.Paths, p *profile.Profile) error {
 		}
 	}
 
-	// Regenerate settings.json for hooks
-	if len(p.Manifest.Hub.Hooks) > 0 {
+	// Regenerate settings.json for hooks and setting fragments
+	if len(p.Manifest.Hub.Hooks) > 0 || len(p.Manifest.Hub.SettingFragments) > 0 {
 		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
 			return fmt.Errorf("failed to regenerate settings.json: %w", err)
 		}

@@ -167,12 +167,17 @@ func syncProfile(paths *config.Paths, p *profile.Profile) error {
 	}
 
 	// Regenerate settings.json
-	if len(p.Manifest.Hub.Hooks) > 0 {
-		fmt.Println("  Regenerating settings.json hooks...")
+	if len(p.Manifest.Hub.Hooks) > 0 || len(p.Manifest.Hub.SettingFragments) > 0 {
+		fmt.Println("  Regenerating settings.json...")
 		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
 			return fmt.Errorf("failed to regenerate settings.json: %w", err)
 		}
-		fmt.Printf("  Configured %d hooks\n", len(p.Manifest.Hub.Hooks))
+		if len(p.Manifest.Hub.Hooks) > 0 {
+			fmt.Printf("  Configured %d hooks\n", len(p.Manifest.Hub.Hooks))
+		}
+		if len(p.Manifest.Hub.SettingFragments) > 0 {
+			fmt.Printf("  Merged %d setting fragments\n", len(p.Manifest.Hub.SettingFragments))
+		}
 	} else if len(p.Manifest.Hooks) > 0 {
 		// Legacy: Sync hooks from old-style manifest.Hooks
 		fmt.Println("  Syncing legacy hooks...")

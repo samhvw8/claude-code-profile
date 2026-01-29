@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/hub"
 )
@@ -71,7 +73,7 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 	return hooks, nil
 }
 
-// RegenerateSettings regenerates settings.json with updated hook paths
+// RegenerateSettings regenerates settings.json with updated hook paths and setting fragments
 func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manifest) error {
 	settingsPath := filepath.Join(profileDir, "settings.json")
 
@@ -90,6 +92,17 @@ func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manife
 		}
 	}
 
+	// Merge setting fragments from hub
+	if len(manifest.Hub.SettingFragments) > 0 {
+		fragmentSettings, err := mergeSettingFragments(paths.HubDir, manifest.Hub.SettingFragments)
+		if err != nil {
+			return err
+		}
+		for key, value := range fragmentSettings {
+			settings[key] = value
+		}
+	}
+
 	// Generate hooks section
 	hooks, err := GenerateSettingsHooks(paths, profileDir, manifest)
 	if err != nil {
@@ -103,6 +116,37 @@ func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manife
 
 	// Write back with pretty printing (no HTML escaping)
 	return writeJSONFile(settingsPath, settings)
+}
+
+// settingFragment represents a single setting fragment (local copy to avoid import cycle)
+type settingFragment struct {
+	Name        string      `yaml:"name"`
+	Description string      `yaml:"description,omitempty"`
+	Key         string      `yaml:"key"`
+	Value       interface{} `yaml:"value"`
+}
+
+// mergeSettingFragments merges multiple fragments into a settings map
+func mergeSettingFragments(hubDir string, fragmentNames []string) (map[string]interface{}, error) {
+	settings := make(map[string]interface{})
+
+	for _, name := range fragmentNames {
+		fragmentPath := filepath.Join(hubDir, string(config.HubSettingFragments), name+".yaml")
+
+		data, err := os.ReadFile(fragmentPath)
+		if err != nil {
+			return nil, err
+		}
+
+		var fragment settingFragment
+		if err := yaml.Unmarshal(data, &fragment); err != nil {
+			return nil, err
+		}
+
+		settings[fragment.Key] = fragment.Value
+	}
+
+	return settings, nil
 }
 
 // writeJSONFile writes data as JSON without HTML escaping

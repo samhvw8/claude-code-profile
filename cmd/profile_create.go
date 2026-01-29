@@ -13,14 +13,15 @@ import (
 )
 
 var (
-	createSkills      []string
-	createHooks       []string
-	createRules       []string
-	createCommands    []string
-	createMdFragments []string
-	createFrom        string
-	createInteractive bool
-	createDescription string
+	createSkills           []string
+	createHooks            []string
+	createRules            []string
+	createCommands         []string
+	createMdFragments      []string
+	createSettingFragments []string
+	createFrom             string
+	createInteractive      bool
+	createDescription      string
 )
 
 var profileCreateCmd = &cobra.Command{
@@ -42,6 +43,7 @@ func init() {
 	profileCreateCmd.Flags().StringSliceVar(&createRules, "rules", nil, "Rules to include")
 	profileCreateCmd.Flags().StringSliceVar(&createCommands, "commands", nil, "Commands to include")
 	profileCreateCmd.Flags().StringSliceVar(&createMdFragments, "md-fragments", nil, "MD fragments to include")
+	profileCreateCmd.Flags().StringSliceVar(&createSettingFragments, "setting-fragments", nil, "Setting fragments to include")
 	profileCreateCmd.Flags().StringVar(&createFrom, "from", "", "Copy configuration from existing profile")
 	profileCreateCmd.Flags().BoolVarP(&createInteractive, "interactive", "i", false, "Interactive picker mode")
 	profileCreateCmd.Flags().StringVarP(&createDescription, "description", "d", "", "Profile description")
@@ -109,10 +111,13 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 	if len(createMdFragments) > 0 {
 		manifest.Hub.MdFragments = createMdFragments
 	}
+	if len(createSettingFragments) > 0 {
+		manifest.Hub.SettingFragments = createSettingFragments
+	}
 
 	// Interactive mode
 	hasAnyFlags := len(createSkills) > 0 || len(createHooks) > 0 || len(createRules) > 0 ||
-		len(createCommands) > 0 || len(createMdFragments) > 0 || createFrom != ""
+		len(createCommands) > 0 || len(createMdFragments) > 0 || len(createSettingFragments) > 0 || createFrom != ""
 
 	if createInteractive || !hasAnyFlags {
 		// Scan hub for available items

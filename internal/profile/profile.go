@@ -180,11 +180,11 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		return nil, err
 	}
 
-	// Generate settings.json with hooks from hub
-	if len(manifest.Hub.Hooks) > 0 {
+	// Generate settings.json with hooks and setting fragments from hub
+	if len(manifest.Hub.Hooks) > 0 || len(manifest.Hub.SettingFragments) > 0 {
 		if err := RegenerateSettings(m.paths, profileDir, manifest); err != nil {
 			// Non-fatal - log and continue
-			fmt.Fprintf(os.Stderr, "Warning: failed to generate settings.json hooks: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: failed to generate settings.json: %v\n", err)
 		}
 	} else if len(manifest.Hooks) > 0 {
 		// Legacy: Sync hooks from old-style manifest.Hooks
