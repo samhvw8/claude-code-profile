@@ -39,8 +39,9 @@ Examples:
   ccp profile edit default --add-skills=git-basics   # Add a skill
   ccp profile edit default --remove-hooks=session-start  # Remove a hook
   ccp profile edit default --add-skills=a,b --remove-rules=c`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runProfileEdit,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeProfileNames,
+	RunE:              runProfileEdit,
 }
 
 func init() {

@@ -20,8 +20,9 @@ The path should be in format: type/name
 Examples:
   ccp link quickfix skills/debugging-core
   ccp link dev-fullstack hooks/pre-commit-lint`,
-	Args: cobra.ExactArgs(2),
-	RunE: runLink,
+	Args:              cobra.ExactArgs(2),
+	ValidArgsFunction: completeLinkArgs,
+	RunE:              runLink,
 }
 
 func init() {

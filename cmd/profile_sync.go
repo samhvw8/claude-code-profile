@@ -28,8 +28,9 @@ Examples:
   ccp profile sync           # Sync active profile
   ccp profile sync default   # Sync the 'default' profile
   ccp profile sync --all     # Sync all profiles`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runProfileSync,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeProfileNames,
+	RunE:              runProfileSync,
 }
 
 var syncAll bool

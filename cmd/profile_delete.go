@@ -21,8 +21,9 @@ var profileDeleteCmd = &cobra.Command{
 
 This action is irreversible. Use --force to skip confirmation.
 Note: The 'default' profile cannot be deleted if it's the only profile.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runProfileDelete,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeProfileNames,
+	RunE:              runProfileDelete,
 }
 
 func init() {

@@ -24,8 +24,9 @@ Reports:
 Exit codes:
   0 - profile is valid
   1 - drift detected`,
-	Args: cobra.ExactArgs(1),
-	RunE: runProfileCheck,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeProfileNames,
+	RunE:              runProfileCheck,
 }
 
 func init() {

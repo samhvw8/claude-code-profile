@@ -20,8 +20,9 @@ This is equivalent to: ccp profile create <new-name> --from=<source>
 Examples:
   ccp profile clone default dev
   ccp profile clone minimal quickfix`,
-	Args: cobra.ExactArgs(2),
-	RunE: runProfileClone,
+	Args:              cobra.ExactArgs(2),
+	ValidArgsFunction: completeProfileNames,
+	RunE:              runProfileClone,
 }
 
 func init() {

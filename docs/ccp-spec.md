@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.8.1
+**Version:** 0.8.2
 **Date:** 2026-01-29
 **Status:** Draft
 
@@ -781,6 +781,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.8.2 | 2026-01-29 | — | Added: dynamic shell completions for profile names and hub items (profile commands, link, unlink, use). Profile validation on use: warns about configuration drift before switching and suggests `ccp profile fix`. |
 | 0.8.1 | 2026-01-29 | — | Added: doctor --fix flag to auto-repair issues (creates missing hub directories, fixes broken symlinks across profiles). Stability improvements: comprehensive test coverage for migration package (71.6%), improved error messages with actionable context and fix suggestions. |
 | 0.8.0 | 2026-01-29 | — | Removed: md-fragments hub type (Claude Code doesn't load markdown fragments from directory, only CLAUDE.md). Hub types are now: skills, agents, hooks, rules, commands, setting-fragments. |
 | 0.7.0 | 2026-01-29 | — | Added: setting-fragments hub type for storing settings.json keys as YAML fragments. Init extracts fragments from existing settings.json with interactive selection (--all-fragments to skip). Profile create/sync merges selected fragments into settings.json (rebuilds from fragments only, removing stale keys). Added hub extract-fragments command to extract fragments from existing profiles without re-init. TUI picker enhanced with scrolling (max 10 visible items with scroll indicators), search bar (/ key to search, esc to clear), and cursor wrap-around. Fixed search filter persistence after exiting search mode. |

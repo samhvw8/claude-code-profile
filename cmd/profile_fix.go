@@ -22,8 +22,9 @@ Actions taken:
   - Recreate broken or mismatched symlinks
 
 Use --dry-run to preview changes without executing.`,
-	Args: cobra.ExactArgs(1),
-	RunE: runProfileFix,
+	Args:              cobra.ExactArgs(1),
+	ValidArgsFunction: completeProfileNames,
+	RunE:              runProfileFix,
 }
 
 func init() {

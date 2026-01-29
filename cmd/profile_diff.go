@@ -23,8 +23,9 @@ If only one profile is specified, compares against the active profile.
 Examples:
   ccp profile diff dev prod
   ccp profile diff minimal  # compares to active profile`,
-	Args: cobra.RangeArgs(1, 2),
-	RunE: runProfileDiff,
+	Args:              cobra.RangeArgs(1, 2),
+	ValidArgsFunction: completeProfileNames,
+	RunE:              runProfileDiff,
 }
 
 func init() {

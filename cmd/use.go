@@ -19,8 +19,9 @@ var useCmd = &cobra.Command{
 Examples:
   ccp use quickfix     # Set default to quickfix profile
   ccp use --show       # Show current default profile`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: runUse,
+	Args:              cobra.MaximumNArgs(1),
+	ValidArgsFunction: completeProfileNames,
+	RunE:              runUse,
 }
 
 func init() {
@@ -69,6 +70,17 @@ func runUse(cmd *cobra.Command, args []string) error {
 	}
 	if p == nil {
 		return fmt.Errorf("profile not found: %s", profileName)
+	}
+
+	// Check for drift before switching
+	detector := profile.NewDetector(paths)
+	report, err := detector.Detect(p)
+	if err != nil {
+		// Warn but don't block switch
+		fmt.Printf("Warning: could not check profile health: %v\n", err)
+	} else if report.HasDrift() {
+		fmt.Printf("Warning: profile '%s' has configuration drift (%d issues)\n", profileName, len(report.Issues))
+		fmt.Printf("  Run 'ccp profile fix %s' to reconcile\n\n", profileName)
 	}
 
 	// Set active
