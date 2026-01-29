@@ -76,7 +76,7 @@ func (m Model) Init() tea.Cmd {
 
 // getFilteredItems returns items matching the current search query
 func (m Model) getFilteredItems() []Item {
-	if !m.searching || m.searchInput.Value() == "" {
+	if m.searchInput.Value() == "" {
 		return m.items
 	}
 

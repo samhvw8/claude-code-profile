@@ -82,7 +82,7 @@ func (m TabbedModel) Init() tea.Cmd {
 
 // getFilteredItems returns items matching the current search query
 func (m TabbedModel) getFilteredItems(tab *Tab) []Item {
-	if !m.searching || m.searchInput.Value() == "" {
+	if m.searchInput.Value() == "" {
 		return tab.Items
 	}
 
