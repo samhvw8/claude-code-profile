@@ -44,12 +44,11 @@ func (s *Scanner) ScanSource(claudeDir string) (*Hub, error) {
 
 	// Map source directories to hub types
 	dirMap := map[string]config.HubItemType{
-		"skills":       config.HubSkills,
-		"agents":       config.HubAgents,
-		"hooks":        config.HubHooks,
-		"rules":        config.HubRules,
-		"commands":     config.HubCommands,
-		"md-fragments": config.HubMdFragments,
+		"skills":   config.HubSkills,
+		"agents":   config.HubAgents,
+		"hooks":    config.HubHooks,
+		"rules":    config.HubRules,
+		"commands": config.HubCommands,
 	}
 
 	for dirName, itemType := range dirMap {

@@ -15,17 +15,15 @@ import (
 )
 
 var (
-	editAddSkills       []string
-	editAddHooks        []string
-	editAddRules        []string
-	editAddCommands     []string
-	editAddMdFragments  []string
-	editRemoveSkills    []string
-	editRemoveHooks     []string
-	editRemoveRules     []string
-	editRemoveCommands  []string
-	editRemoveMdFragments []string
-	editInteractive     bool
+	editAddSkills      []string
+	editAddHooks       []string
+	editAddRules       []string
+	editAddCommands    []string
+	editRemoveSkills   []string
+	editRemoveHooks    []string
+	editRemoveRules    []string
+	editRemoveCommands []string
+	editInteractive    bool
 )
 
 var profileEditCmd = &cobra.Command{
@@ -51,14 +49,12 @@ func init() {
 	profileEditCmd.Flags().StringSliceVar(&editAddHooks, "add-hooks", nil, "Hooks to add")
 	profileEditCmd.Flags().StringSliceVar(&editAddRules, "add-rules", nil, "Rules to add")
 	profileEditCmd.Flags().StringSliceVar(&editAddCommands, "add-commands", nil, "Commands to add")
-	profileEditCmd.Flags().StringSliceVar(&editAddMdFragments, "add-md-fragments", nil, "MD fragments to add")
 
 	// Remove flags
 	profileEditCmd.Flags().StringSliceVar(&editRemoveSkills, "remove-skills", nil, "Skills to remove")
 	profileEditCmd.Flags().StringSliceVar(&editRemoveHooks, "remove-hooks", nil, "Hooks to remove")
 	profileEditCmd.Flags().StringSliceVar(&editRemoveRules, "remove-rules", nil, "Rules to remove")
 	profileEditCmd.Flags().StringSliceVar(&editRemoveCommands, "remove-commands", nil, "Commands to remove")
-	profileEditCmd.Flags().StringSliceVar(&editRemoveMdFragments, "remove-md-fragments", nil, "MD fragments to remove")
 
 	profileEditCmd.Flags().BoolVarP(&editInteractive, "interactive", "i", false, "Interactive picker mode")
 
@@ -102,9 +98,9 @@ func runProfileEdit(cmd *cobra.Command, args []string) error {
 
 	// Check if any flags were provided
 	hasFlags := len(editAddSkills) > 0 || len(editAddHooks) > 0 || len(editAddRules) > 0 ||
-		len(editAddCommands) > 0 || len(editAddMdFragments) > 0 ||
+		len(editAddCommands) > 0 ||
 		len(editRemoveSkills) > 0 || len(editRemoveHooks) > 0 || len(editRemoveRules) > 0 ||
-		len(editRemoveCommands) > 0 || len(editRemoveMdFragments) > 0
+		len(editRemoveCommands) > 0
 
 	if editInteractive || !hasFlags {
 		// Interactive mode
@@ -199,11 +195,10 @@ func runInteractiveEdit(paths *config.Paths, p *profile.Profile) error {
 func runFlagEdit(paths *config.Paths, p *profile.Profile) error {
 	// Process additions
 	addItems := map[config.HubItemType][]string{
-		config.HubSkills:      editAddSkills,
-		config.HubHooks:       editAddHooks,
-		config.HubRules:       editAddRules,
-		config.HubCommands:    editAddCommands,
-		config.HubMdFragments: editAddMdFragments,
+		config.HubSkills:   editAddSkills,
+		config.HubHooks:    editAddHooks,
+		config.HubRules:    editAddRules,
+		config.HubCommands: editAddCommands,
 	}
 
 	for itemType, items := range addItems {
@@ -221,11 +216,10 @@ func runFlagEdit(paths *config.Paths, p *profile.Profile) error {
 
 	// Process removals
 	removeItems := map[config.HubItemType][]string{
-		config.HubSkills:      editRemoveSkills,
-		config.HubHooks:       editRemoveHooks,
-		config.HubRules:       editRemoveRules,
-		config.HubCommands:    editRemoveCommands,
-		config.HubMdFragments: editRemoveMdFragments,
+		config.HubSkills:   editRemoveSkills,
+		config.HubHooks:    editRemoveHooks,
+		config.HubRules:    editRemoveRules,
+		config.HubCommands: editRemoveCommands,
 	}
 
 	for itemType, items := range removeItems {

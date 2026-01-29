@@ -24,7 +24,7 @@ var hubAddCmd = &cobra.Command{
 	Short: "Add an item to the hub",
 	Long: `Add a file/directory to the hub, or promote an item from a profile.
 
-Types: skills, agents, hooks, rules, commands, md-fragments
+Types: skills, agents, hooks, rules, commands, setting-fragments
 
 Examples:
   # Add from filesystem
@@ -62,7 +62,7 @@ func runHubAdd(cmd *cobra.Command, args []string) error {
 
 	// Validate type
 	if !isValidHubType(itemType) {
-		return fmt.Errorf("invalid type: %s (valid: skills, agents, hooks, rules, commands, md-fragments)", args[0])
+		return fmt.Errorf("invalid type: %s (valid: skills, agents, hooks, rules, commands, setting-fragments)", args[0])
 	}
 
 	if hubAddFromProfile != "" {

@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.7.0
+**Version:** 0.8.0
 **Date:** 2026-01-29
 **Status:** Draft
 
@@ -32,7 +32,6 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 │   ├── agents/
 │   ├── rules/
 │   ├── hooks/
-│   ├── md-fragments/
 │   ├── commands/
 │   └── setting-fragments/            # Settings.json key-value fragments
 │
@@ -507,8 +506,6 @@ hub:
     - minimal-change
   commands:
     - quick-test
-  md-fragments:
-    - base-rules.md
   setting-fragments:
     - api-permissions
     - model-preferences
@@ -568,10 +565,6 @@ hub/
 ├── commands/
 │   ├── quick-test/
 │   └── deploy-staging/
-├── md-fragments/
-│   ├── base-rules.md
-│   ├── code-style.md
-│   └── documentation-standards.md
 └── setting-fragments/
     ├── api-permissions.yaml
     ├── model-preferences.yaml
@@ -710,13 +703,11 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--add-hooks=x,y` — Add hooks to profile
 - `--add-rules=p,q` — Add rules to profile
 - `--add-commands=c,d` — Add commands to profile
-- `--add-md-fragments=m,n` — Add md-fragments to profile
 - `--add-setting-fragments=s,t` — Add setting-fragments to profile
 - `--remove-skills=a` — Remove skills from profile
 - `--remove-hooks=x` — Remove hooks from profile
 - `--remove-rules=p` — Remove rules from profile
 - `--remove-commands=c` — Remove commands from profile
-- `--remove-md-fragments=m` — Remove md-fragments from profile
 - `--remove-setting-fragments=s` — Remove setting-fragments from profile
 - `-i, --interactive` — Interactive picker mode (default if no flags)
 
@@ -746,7 +737,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 ## Open Questions (Deferred to Future Phases)
 
-1. **CLAUDE.md composition** — Should tool support building CLAUDE.md from md-fragments, or just copy a complete file?
+1. **CLAUDE.md composition** — Should tool support building CLAUDE.md from fragments, or just copy a complete file?
 
 2. **settings.json merging** — Same question for settings. Fragment-based composition or complete file?
 
@@ -781,6 +772,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.8.0 | 2026-01-29 | — | Removed: md-fragments hub type (Claude Code doesn't load markdown fragments from directory, only CLAUDE.md). Hub types are now: skills, agents, hooks, rules, commands, setting-fragments. |
 | 0.7.0 | 2026-01-29 | — | Added: setting-fragments hub type for storing settings.json keys as YAML fragments. Init extracts fragments from existing settings.json with interactive selection (--all-fragments to skip). Profile create/sync merges selected fragments into settings.json (rebuilds from fragments only, removing stale keys). Added hub extract-fragments command to extract fragments from existing profiles without re-init. TUI picker enhanced with scrolling (max 10 visible items with scroll indicators), search bar (/ key to search, esc to clear), and cursor wrap-around. Fixed search filter persistence after exiting search mode. |
 | 0.6.0 | 2026-01-29 | — | Added: profile edit command (add/remove hub items via flags or picker), enhanced profile sync (regenerates symlinks and settings.json, --all flag), hub add --from-profile (promote profile items to hub), --replace flag for hub add. Hook migration preserves interpreter prefix and uses $HOME-based paths. Reset command rewrites settings.json hook paths. |
 | 0.5.0 | 2026-01-29 | — | Added: permission preservation for init, profile create, and reset commands. Fixed paths in AC-1, AC-2 (was ~/.claude, now ~/.ccp). |

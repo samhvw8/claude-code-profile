@@ -8,7 +8,7 @@ Claude Code's 20 skill limit forces manual reconfiguration for different work mo
 
 ## Solution
 
-`ccp` manages a central hub of reusable components (skills, agents, hooks, rules, commands, md-fragments) and multiple profiles. Each profile is a complete Claude Code configuration directory. The `~/.claude` directory becomes a symlink to the active profile.
+`ccp` manages a central hub of reusable components (skills, agents, hooks, rules, commands, setting-fragments) and multiple profiles. Each profile is a complete Claude Code configuration directory. The `~/.claude` directory becomes a symlink to the active profile.
 
 ## Installation
 
@@ -56,7 +56,7 @@ ccp use --show
 │   ├── hooks/
 │   ├── rules/
 │   ├── commands/
-│   └── md-fragments/
+│   └── setting-fragments/
 │
 ├── profiles/
 │   ├── default/                      # Migrated from original ~/.claude

@@ -66,7 +66,7 @@ type Paths struct {
     SharedDir   string // ~/.ccp/profiles/shared
 }
 
-type HubItemType string    // skills, agents, hooks, rules, commands, md-fragments
+type HubItemType string    // skills, agents, hooks, rules, commands, setting-fragments
 type DataItemType string   // tasks, todos, history, etc.
 type ShareMode string      // shared, isolated
 

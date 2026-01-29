@@ -57,11 +57,11 @@ func TestPathsHubItemPath(t *testing.T) {
 
 func TestAllHubItemTypes(t *testing.T) {
 	types := AllHubItemTypes()
-	if len(types) != 7 {
-		t.Errorf("AllHubItemTypes() returned %d types, want 7", len(types))
+	if len(types) != 6 {
+		t.Errorf("AllHubItemTypes() returned %d types, want 6", len(types))
 	}
 
-	expected := []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubMdFragments, HubSettingFragments}
+	expected := []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubSettingFragments}
 	for i, typ := range types {
 		if typ != expected[i] {
 			t.Errorf("types[%d] = %q, want %q", i, typ, expected[i])

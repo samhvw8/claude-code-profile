@@ -23,13 +23,12 @@ const (
 	HubHooks            HubItemType = "hooks"
 	HubRules            HubItemType = "rules"
 	HubCommands         HubItemType = "commands"
-	HubMdFragments      HubItemType = "md-fragments"
 	HubSettingFragments HubItemType = "setting-fragments"
 )
 
 // AllHubItemTypes returns all hub item types in order
 func AllHubItemTypes() []HubItemType {
-	return []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubMdFragments, HubSettingFragments}
+	return []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubSettingFragments}
 }
 
 // DataItemType represents data directories that can be shared or isolated

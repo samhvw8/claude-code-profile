@@ -27,7 +27,6 @@ type HubLinks struct {
 	Hooks            []string `yaml:"hooks,omitempty"`
 	Rules            []string `yaml:"rules,omitempty"`
 	Commands         []string `yaml:"commands,omitempty"`
-	MdFragments      []string `yaml:"md-fragments,omitempty"`
 	SettingFragments []string `yaml:"setting-fragments,omitempty"`
 }
 
@@ -107,8 +106,6 @@ func (m *Manifest) GetHubItems(itemType config.HubItemType) []string {
 		return m.Hub.Rules
 	case config.HubCommands:
 		return m.Hub.Commands
-	case config.HubMdFragments:
-		return m.Hub.MdFragments
 	case config.HubSettingFragments:
 		return m.Hub.SettingFragments
 	default:
@@ -129,8 +126,6 @@ func (m *Manifest) SetHubItems(itemType config.HubItemType, items []string) {
 		m.Hub.Rules = items
 	case config.HubCommands:
 		m.Hub.Commands = items
-	case config.HubMdFragments:
-		m.Hub.MdFragments = items
 	case config.HubSettingFragments:
 		m.Hub.SettingFragments = items
 	}
