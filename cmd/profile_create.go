@@ -122,14 +122,16 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to scan hub: %w", err)
 		}
 
-		// Run interactive picker for each type with items
+		// Build tabs for the tabbed picker
+		var tabs []picker.Tab
+
+		// Add hub item tabs
 		for _, itemType := range config.AllHubItemTypes() {
 			items := h.GetItems(itemType)
 			if len(items) == 0 {
 				continue
 			}
 
-			// Build picker items
 			var pickerItems []picker.Item
 			currentSelected := make(map[string]bool)
 			for _, name := range manifest.GetHubItems(itemType) {
@@ -144,30 +146,18 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 				})
 			}
 
-			title := fmt.Sprintf("Select %s for profile '%s':", itemType, profileName)
-			selected, err := picker.Run(title, pickerItems)
-			if err != nil {
-				return fmt.Errorf("picker error: %w", err)
-			}
-			if selected == nil {
-				// User quit
-				fmt.Println("Cancelled")
-				return nil
-			}
-
-			manifest.SetHubItems(itemType, selected)
+			tabs = append(tabs, picker.Tab{
+				Name:  string(itemType),
+				Items: pickerItems,
+			})
 		}
 
-		// Ask about data sharing configuration
-		fmt.Println()
-		fmt.Println("Configure data sharing (shared data is accessible across profiles):")
-		fmt.Println()
-
+		// Add data sharing tab
 		var dataItems []picker.Item
 		defaultConfig := config.DefaultDataConfig()
 		for _, dataType := range config.AllDataItemTypes() {
 			isShared := defaultConfig[dataType] == config.ShareModeShared
-			label := fmt.Sprintf("%s", dataType)
+			label := string(dataType)
 			if isShared {
 				label = fmt.Sprintf("%s (default: shared)", dataType)
 			} else {
@@ -179,23 +169,35 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 				Selected: isShared,
 			})
 		}
+		tabs = append(tabs, picker.Tab{
+			Name:  "data-sharing",
+			Items: dataItems,
+		})
 
-		sharedDataTypes, err := picker.Run("Select data directories to SHARE across profiles:", dataItems)
+		// Run tabbed picker
+		selections, err := picker.RunTabbed(tabs)
 		if err != nil {
 			return fmt.Errorf("picker error: %w", err)
 		}
-		if sharedDataTypes == nil {
+		if selections == nil {
 			fmt.Println("Cancelled")
 			return nil
 		}
 
-		// Build shared set
-		sharedSet := make(map[string]bool)
-		for _, dt := range sharedDataTypes {
-			sharedSet[dt] = true
+		// Apply hub item selections
+		for _, itemType := range config.AllHubItemTypes() {
+			if items, ok := selections[string(itemType)]; ok {
+				manifest.SetHubItems(itemType, items)
+			}
 		}
 
-		// Apply to manifest
+		// Apply data sharing selections
+		sharedSet := make(map[string]bool)
+		if dataItems, ok := selections["data-sharing"]; ok {
+			for _, dt := range dataItems {
+				sharedSet[dt] = true
+			}
+		}
 		for _, dataType := range config.AllDataItemTypes() {
 			if sharedSet[string(dataType)] {
 				manifest.SetDataShareMode(dataType, config.ShareModeShared)
