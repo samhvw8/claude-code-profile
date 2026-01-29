@@ -118,7 +118,7 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 
 	// Step 1: Create ccp directory structure
 	if err := os.MkdirAll(m.paths.CcpDir, 0755); err != nil {
-		return m.rollbackAndReturn(fmt.Errorf("failed to create ccp dir: %w", err))
+		return m.rollbackAndReturn(fmt.Errorf("failed to create ccp dir %s: %w (check permissions)", m.paths.CcpDir, err))
 	}
 	m.rollback.AddDir(m.paths.CcpDir)
 
@@ -141,13 +141,13 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 
 	// Step 4: Create profiles directory
 	if err := os.MkdirAll(m.paths.ProfilesDir, 0755); err != nil {
-		return m.rollbackAndReturn(fmt.Errorf("failed to create profiles dir: %w", err))
+		return m.rollbackAndReturn(fmt.Errorf("failed to create profiles dir %s: %w", m.paths.ProfilesDir, err))
 	}
 	m.rollback.AddDir(m.paths.ProfilesDir)
 
 	// Step 5: Create shared directory
 	if err := os.MkdirAll(m.paths.SharedDir, 0755); err != nil {
-		return m.rollbackAndReturn(fmt.Errorf("failed to create shared dir: %w", err))
+		return m.rollbackAndReturn(fmt.Errorf("failed to create shared dir %s: %w", m.paths.SharedDir, err))
 	}
 	m.rollback.AddDir(m.paths.SharedDir)
 
@@ -493,7 +493,7 @@ func (m *Migrator) cleanupSourceDir() error {
 
 func (m *Migrator) rollbackAndReturn(err error) error {
 	if rbErr := m.rollback.Execute(); rbErr != nil {
-		return fmt.Errorf("%w (rollback also failed: %v)", err, rbErr)
+		return fmt.Errorf("%w (rollback also failed: %v; manual cleanup of %s may be needed)", err, rbErr, m.paths.CcpDir)
 	}
 	return err
 }

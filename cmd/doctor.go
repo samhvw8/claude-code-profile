@@ -11,6 +11,8 @@ import (
 	"github.com/samhoang/ccp/internal/profile"
 )
 
+var doctorFix bool
+
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Diagnose and fix common issues",
@@ -20,11 +22,14 @@ Checks:
 - Is ~/.claude a symlink?
 - Are there broken symlinks?
 - Are profile manifests valid?
-- Is the hub structure correct?`,
+- Is the hub structure correct?
+
+Use --fix to automatically repair issues that can be fixed.`,
 	RunE: runDoctor,
 }
 
 func init() {
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Automatically fix issues where possible")
 	rootCmd.AddCommand(doctorCmd)
 }
 
@@ -38,6 +43,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	issues := 0
+	fixed := 0
 
 	// Check 1: Is ccp initialized?
 	fmt.Print("Checking initialization... ")
@@ -72,16 +78,30 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Check 3: Hub structure
 	fmt.Print("Checking hub structure... ")
-	hubIssues := 0
+	missingHubDirs := []config.HubItemType{}
 	for _, itemType := range config.AllHubItemTypes() {
 		dir := paths.HubItemDir(itemType)
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
-			hubIssues++
+			missingHubDirs = append(missingHubDirs, itemType)
 		}
 	}
-	if hubIssues > 0 {
-		fmt.Printf("WARN (%d missing directories)\n", hubIssues)
-		fmt.Println("  → Run 'ccp init --force' to fix")
+	if len(missingHubDirs) > 0 {
+		if doctorFix {
+			// Fix: create missing hub directories
+			for _, itemType := range missingHubDirs {
+				dir := paths.HubItemDir(itemType)
+				if err := os.MkdirAll(dir, 0755); err != nil {
+					fmt.Printf("FAIL\n  → Could not create %s: %v\n", dir, err)
+					issues++
+				} else {
+					fixed++
+				}
+			}
+			fmt.Printf("FIXED (%d directories created)\n", len(missingHubDirs))
+		} else {
+			fmt.Printf("WARN (%d missing directories)\n", len(missingHubDirs))
+			fmt.Println("  → Run 'ccp doctor --fix' or 'ccp init --force' to fix")
+		}
 	} else {
 		fmt.Println("OK")
 	}
@@ -107,28 +127,67 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Println("OK")
 	}
 
-	// Check 5: Broken symlinks
+	// Check 5: Broken symlinks and profile drift
 	fmt.Print("Checking for broken symlinks... ")
 	brokenLinks := findBrokenSymlinks(paths.ProfilesDir)
 	if len(brokenLinks) > 0 {
-		fmt.Printf("WARN (%d broken)\n", len(brokenLinks))
-		for _, link := range brokenLinks[:min(5, len(brokenLinks))] {
-			fmt.Printf("  → %s\n", link)
+		if doctorFix {
+			// Fix: run drift detection and fix for all profiles
+			fixedProfiles := 0
+			mgr := profile.NewManager(paths)
+			detector := profile.NewDetector(paths)
+
+			for _, entry := range entries {
+				if !entry.IsDir() || entry.Name() == "shared" {
+					continue
+				}
+				p, err := mgr.Get(entry.Name())
+				if err != nil || p == nil {
+					continue
+				}
+
+				report, err := detector.Detect(p)
+				if err != nil {
+					continue
+				}
+
+				if report.HasDrift() {
+					actions, err := detector.Fix(p, report, false)
+					if err == nil && len(actions) > 0 {
+						fixedProfiles++
+						fixed += len(actions)
+					}
+				}
+			}
+			fmt.Printf("FIXED (%d profiles repaired)\n", fixedProfiles)
+		} else {
+			fmt.Printf("WARN (%d broken)\n", len(brokenLinks))
+			for _, link := range brokenLinks[:min(5, len(brokenLinks))] {
+				fmt.Printf("  → %s\n", link)
+			}
+			if len(brokenLinks) > 5 {
+				fmt.Printf("  → ... and %d more\n", len(brokenLinks)-5)
+			}
+			fmt.Println("  → Run 'ccp doctor --fix' to repair")
 		}
-		if len(brokenLinks) > 5 {
-			fmt.Printf("  → ... and %d more\n", len(brokenLinks)-5)
-		}
-		fmt.Println("  → Run 'ccp profile fix <name>' to repair")
 	} else {
 		fmt.Println("OK")
 	}
 
 	// Summary
 	fmt.Println()
-	if issues == 0 {
+	if issues == 0 && fixed == 0 {
 		fmt.Println("All checks passed!")
+	} else if doctorFix && fixed > 0 {
+		fmt.Printf("Fixed %d issue(s)\n", fixed)
+		if issues > 0 {
+			fmt.Printf("%d issue(s) require manual intervention\n", issues)
+		}
 	} else {
 		fmt.Printf("Found %d issue(s)\n", issues)
+		if !doctorFix && (len(missingHubDirs) > 0 || len(brokenLinks) > 0) {
+			fmt.Println("Run 'ccp doctor --fix' to attempt automatic repair")
+		}
 	}
 
 	return nil

@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.8.0
+**Version:** 0.8.1
 **Date:** 2026-01-29
 **Status:** Draft
 
@@ -338,6 +338,12 @@ WHEN user runs `ccp doctor`
 THEN tool checks: initialization, ~/.claude symlink, hub structure, profile manifests, broken symlinks
 AND tool reports status for each check (OK/FAIL/WARN)
 AND tool provides remediation instructions for failures
+
+GIVEN ccp has fixable issues (missing hub dirs, broken symlinks)
+WHEN user runs `ccp doctor --fix`
+THEN tool automatically creates missing hub directories
+AND tool runs drift detection and fix for all profiles
+AND tool reports count of issues fixed
 ```
 
 ### AC-13: Status Command
@@ -623,7 +629,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp use --show` | Show current default profile | `ccp use --show` |
 | `ccp which` | Show currently active profile | `ccp which` |
 | `ccp status` | Show ccp status and health | `ccp status` |
-| `ccp doctor` | Diagnose and fix common issues | `ccp doctor` |
+| `ccp doctor` | Diagnose and fix common issues | `ccp doctor --fix` |
 | `ccp usage` | Show hub item usage across profiles | `ccp usage` |
 | `ccp env <profile>` | Configure project env for a profile | `ccp env dev --format=mise` |
 
@@ -675,6 +681,9 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--dry-run` — Show migration plan without executing
 - `--force` — Overwrite existing hub structure
 - `--all-fragments` — Export all setting fragments without interactive selection
+
+**`ccp doctor`**
+- `--fix` — Automatically fix issues where possible (missing hub dirs, broken symlinks)
 
 **`ccp reset`**
 - `--force` — Skip confirmation prompt
@@ -772,6 +781,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.8.1 | 2026-01-29 | — | Added: doctor --fix flag to auto-repair issues (creates missing hub directories, fixes broken symlinks across profiles). Stability improvements: comprehensive test coverage for migration package (71.6%), improved error messages with actionable context and fix suggestions. |
 | 0.8.0 | 2026-01-29 | — | Removed: md-fragments hub type (Claude Code doesn't load markdown fragments from directory, only CLAUDE.md). Hub types are now: skills, agents, hooks, rules, commands, setting-fragments. |
 | 0.7.0 | 2026-01-29 | — | Added: setting-fragments hub type for storing settings.json keys as YAML fragments. Init extracts fragments from existing settings.json with interactive selection (--all-fragments to skip). Profile create/sync merges selected fragments into settings.json (rebuilds from fragments only, removing stale keys). Added hub extract-fragments command to extract fragments from existing profiles without re-init. TUI picker enhanced with scrolling (max 10 visible items with scroll indicators), search bar (/ key to search, esc to clear), and cursor wrap-around. Fixed search filter persistence after exiting search mode. |
 | 0.6.0 | 2026-01-29 | — | Added: profile edit command (add/remove hub items via flags or picker), enhanced profile sync (regenerates symlinks and settings.json, --all flag), hub add --from-profile (promote profile items to hub), --replace flag for hub add. Hook migration preserves interpreter prefix and uses $HOME-based paths. Reset command rewrites settings.json hook paths. |

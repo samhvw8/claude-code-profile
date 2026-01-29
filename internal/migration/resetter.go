@@ -24,41 +24,41 @@ func (r *Resetter) Execute() error {
 	// Step 1: Get the active profile path (symlink target)
 	activeProfile, err := os.Readlink(r.paths.ClaudeDir)
 	if err != nil {
-		return fmt.Errorf("failed to read symlink: %w", err)
+		return fmt.Errorf("failed to read symlink %s: %w (is ccp initialized?)", r.paths.ClaudeDir, err)
 	}
 
 	// Get the profile directory permissions to restore later
 	profileInfo, err := os.Stat(activeProfile)
 	if err != nil {
-		return fmt.Errorf("failed to stat profile: %w", err)
+		return fmt.Errorf("failed to stat profile %s: %w (profile may be corrupted)", activeProfile, err)
 	}
 	profilePerm := profileInfo.Mode().Perm()
 
 	// Step 2: Create a temporary directory to hold restored content
 	tempDir, err := os.MkdirTemp(filepath.Dir(r.paths.ClaudeDir), ".claude-restore-")
 	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
+		return fmt.Errorf("failed to create temp dir in %s: %w (check disk space and permissions)", filepath.Dir(r.paths.ClaudeDir), err)
 	}
 	defer os.RemoveAll(tempDir) // Clean up on failure
 
 	// Step 3: Copy active profile contents to temp dir, resolving symlinks
 	if err := r.copyProfileContents(activeProfile, tempDir); err != nil {
-		return fmt.Errorf("failed to copy profile contents: %w", err)
+		return fmt.Errorf("failed to copy profile contents from %s: %w", activeProfile, err)
 	}
 
 	// Step 4: Remove the symlink
 	if err := os.Remove(r.paths.ClaudeDir); err != nil {
-		return fmt.Errorf("failed to remove symlink: %w", err)
+		return fmt.Errorf("failed to remove symlink %s: %w (check permissions)", r.paths.ClaudeDir, err)
 	}
 
 	// Step 5: Rename temp dir to ~/.claude
 	if err := os.Rename(tempDir, r.paths.ClaudeDir); err != nil {
-		return fmt.Errorf("failed to rename temp dir: %w", err)
+		return fmt.Errorf("failed to rename %s to %s: %w", tempDir, r.paths.ClaudeDir, err)
 	}
 
 	// Step 6: Restore the correct permissions (MkdirTemp creates with 0700)
 	if err := os.Chmod(r.paths.ClaudeDir, profilePerm); err != nil {
-		return fmt.Errorf("failed to set permissions: %w", err)
+		return fmt.Errorf("failed to set permissions on %s: %w", r.paths.ClaudeDir, err)
 	}
 
 	// Step 6.5: Rewrite settings.json to update hook paths
@@ -70,7 +70,7 @@ func (r *Resetter) Execute() error {
 
 	// Step 7: Remove ~/.ccp entirely
 	if err := os.RemoveAll(r.paths.CcpDir); err != nil {
-		return fmt.Errorf("failed to remove ccp dir: %w", err)
+		return fmt.Errorf("failed to remove ccp dir %s: %w (manual cleanup may be needed)", r.paths.CcpDir, err)
 	}
 
 	return nil
