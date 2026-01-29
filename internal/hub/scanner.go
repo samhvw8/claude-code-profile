@@ -83,8 +83,17 @@ func (s *Scanner) scanItemDir(dir string, itemType config.HubItemType) ([]Item, 
 			continue
 		}
 
+		name := entry.Name()
+
+		// For setting-fragments, strip the .yaml extension from the name
+		if itemType == config.HubSettingFragments && !entry.IsDir() {
+			if ext := filepath.Ext(name); ext == ".yaml" || ext == ".yml" {
+				name = name[:len(name)-len(ext)]
+			}
+		}
+
 		item := Item{
-			Name:  entry.Name(),
+			Name:  name,
 			Type:  itemType,
 			Path:  filepath.Join(dir, entry.Name()),
 			IsDir: entry.IsDir(),

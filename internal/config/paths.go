@@ -116,6 +116,10 @@ func (p *Paths) HubItemDir(itemType HubItemType) string {
 
 // HubItemPath returns the full path to a specific hub item
 func (p *Paths) HubItemPath(itemType HubItemType, name string) string {
+	// Setting fragments are stored as .yaml files
+	if itemType == HubSettingFragments {
+		return filepath.Join(p.HubDir, string(itemType), name+".yaml")
+	}
 	return filepath.Join(p.HubDir, string(itemType), name)
 }
 
