@@ -74,25 +74,26 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 }
 
 // RegenerateSettings regenerates settings.json with updated hook paths and setting fragments
+// Note: This rebuilds settings from fragments, removing keys that are no longer in any fragment
 func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manifest) error {
 	settingsPath := filepath.Join(profileDir, "settings.json")
 
-	// Read existing settings or create new
-	var settings map[string]interface{}
+	// Start with empty settings - we'll build from fragments
+	settings := make(map[string]interface{})
+
+	// Read existing settings to preserve non-fragment keys (like hooks from previous runs)
 	data, err := os.ReadFile(settingsPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			settings = make(map[string]interface{})
-		} else {
-			return err
-		}
-	} else {
-		if err := json.Unmarshal(data, &settings); err != nil {
-			return err
+	if err == nil {
+		var existingSettings map[string]interface{}
+		if err := json.Unmarshal(data, &existingSettings); err == nil {
+			// Only preserve hooks - fragments are the source of truth for other keys
+			if hooks, ok := existingSettings["hooks"]; ok {
+				settings["hooks"] = hooks
+			}
 		}
 	}
 
-	// Merge setting fragments from hub
+	// Merge setting fragments from hub - these define which keys should exist
 	if len(manifest.Hub.SettingFragments) > 0 {
 		fragmentSettings, err := mergeSettingFragments(paths.HubDir, manifest.Hub.SettingFragments)
 		if err != nil {
