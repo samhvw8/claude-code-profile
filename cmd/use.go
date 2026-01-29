@@ -76,6 +76,12 @@ func runUse(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to set active profile: %w", err)
 	}
 
+	// Regenerate settings.json with updated hook paths
+	if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
+		// Warn but don't fail - the profile switch succeeded
+		fmt.Printf("Warning: failed to regenerate settings.json: %v\n", err)
+	}
+
 	fmt.Printf("Switched to profile: %s\n", profileName)
 	return nil
 }

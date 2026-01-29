@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -179,12 +180,17 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		return nil, err
 	}
 
-	// Sync hooks to settings.json
-	if len(manifest.Hooks) > 0 {
+	// Generate settings.json with hooks from hub
+	if len(manifest.Hub.Hooks) > 0 {
+		if err := RegenerateSettings(m.paths, profileDir, manifest); err != nil {
+			// Non-fatal - log and continue
+			fmt.Fprintf(os.Stderr, "Warning: failed to generate settings.json hooks: %v\n", err)
+		}
+	} else if len(manifest.Hooks) > 0 {
+		// Legacy: Sync hooks from old-style manifest.Hooks
 		settingsMgr := NewSettingsManager(m.paths)
 		if err := settingsMgr.SyncHooksFromManifest(profileDir, manifest); err != nil {
-			// Non-fatal - just log and continue
-			// The profile is created, just settings.json might be incomplete
+			fmt.Fprintf(os.Stderr, "Warning: failed to sync hooks to settings.json: %v\n", err)
 		}
 	}
 
