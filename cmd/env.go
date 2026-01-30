@@ -171,3 +171,111 @@ func updateEnvrc(profilePath string) error {
 	fmt.Println("Run 'direnv allow' to apply changes")
 	return nil
 }
+
+// updateMiseTomlMulti updates mise.toml with multiple env vars
+func updateMiseTomlMulti(envVars map[string]string) error {
+	miseFile := "mise.toml"
+
+	content := ""
+	if data, err := os.ReadFile(miseFile); err == nil {
+		content = string(data)
+	}
+
+	lines := strings.Split(content, "\n")
+
+	// Process each env var
+	for key, value := range envVars {
+		envLine := fmt.Sprintf("%s = \"%s\"", key, value)
+		found := false
+
+		// Check if already has this key
+		for i, line := range lines {
+			if strings.Contains(line, key+" =") || strings.Contains(line, key+"=") {
+				lines[i] = envLine
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			// Need to add it to [env] section
+			envSectionFound := false
+			for i, line := range lines {
+				if strings.TrimSpace(line) == "[env]" {
+					// Insert after [env]
+					newLines := make([]string, 0, len(lines)+1)
+					newLines = append(newLines, lines[:i+1]...)
+					newLines = append(newLines, envLine)
+					newLines = append(newLines, lines[i+1:]...)
+					lines = newLines
+					envSectionFound = true
+					break
+				}
+			}
+
+			if !envSectionFound {
+				// Add [env] section at end
+				if len(lines) > 0 && lines[len(lines)-1] != "" {
+					lines = append(lines, "")
+				}
+				lines = append(lines, "[env]", envLine)
+			}
+		}
+	}
+
+	content = strings.Join(lines, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+
+	if err := os.WriteFile(miseFile, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write mise.toml: %w", err)
+	}
+
+	fmt.Printf("Updated mise.toml with Claude env vars\n")
+	return nil
+}
+
+// updateEnvrcMulti updates .envrc with multiple env vars
+func updateEnvrcMulti(envVars map[string]string) error {
+	envrcFile := ".envrc"
+
+	content := ""
+	if data, err := os.ReadFile(envrcFile); err == nil {
+		content = string(data)
+	}
+
+	lines := strings.Split(content, "\n")
+
+	// Process each env var
+	for key, value := range envVars {
+		envLine := fmt.Sprintf("export %s=\"%s\"", key, value)
+		found := false
+
+		for i, line := range lines {
+			if strings.Contains(line, key+"=") || strings.Contains(line, key+" =") {
+				lines[i] = envLine
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			// Append
+			lines = append(lines, envLine)
+		}
+	}
+
+	content = strings.Join(lines, "\n")
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+
+	if err := os.WriteFile(envrcFile, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write .envrc: %w", err)
+	}
+
+	fmt.Printf("Updated .envrc with Claude env vars\n")
+	fmt.Println("Run 'direnv allow' to apply changes")
+	return nil
+}

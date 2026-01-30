@@ -65,26 +65,41 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 
 **Activation (two modes):**
 
-1. **Default (symlink):** `~/.claude` is a symlink to active profile
+1. **Project (default):** `ccp use` auto-detects mise.toml/.envrc and updates it
    ```bash
-   ccp use quickfix
+   ccp use dev
+   # Auto-detects: mise.toml exists → updates [env] section
+   # Sets: CLAUDE_CONFIG_DIR and CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD
+   ```
+
+2. **Global (-g flag):** `~/.claude` is a symlink to active profile
+   ```bash
+   ccp use quickfix -g
    # → ~/.claude → ~/.ccp/profiles/quickfix
    ```
 
-2. **Override (env):** `CLAUDE_CONFIG_DIR` takes precedence over symlink
+3. **Override (env):** `CLAUDE_CONFIG_DIR` takes precedence over symlink
    ```bash
    # Via mise (.mise.toml in project root)
    [env]
    CLAUDE_CONFIG_DIR = "~/.ccp/profiles/quickfix"
+   CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1"
 
    # Via direnv (.envrc in project root)
    export CLAUDE_CONFIG_DIR="$HOME/.ccp/profiles/quickfix"
+   export CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD="1"
 
    # Via inline command
    CLAUDE_CONFIG_DIR=~/.ccp/profiles/quickfix claude "fix the bug"
    ```
 
 **Parallel execution:** Different terminals can use different profiles via env override while `~/.claude` symlink remains the fallback default.
+
+**Loading profile CLAUDE.md/rules with --add-dir:**
+```bash
+# Shell alias to load profile's CLAUDE.md and rules
+alias claude='CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir "${CLAUDE_CONFIG_DIR:-$(ccp which --path)}"'
+```
 
 ---
 
@@ -302,13 +317,22 @@ AND symlinked hub items are resolved correctly
 AND env override takes precedence over ~/.claude symlink
 ```
 
-### AC-9: Default Profile Switching (ccp use)
+### AC-9: Profile Switching (ccp use)
 
 ```gherkin
-GIVEN profile exists at ~/.claude/profiles/quickfix
-WHEN user runs `ccp use quickfix`
-THEN ~/.claude becomes a symlink to ~/.claude/profiles/quickfix
-AND Claude Code uses quickfix profile when no CLAUDE_CONFIG_DIR is set
+GIVEN profile exists at ~/.ccp/profiles/dev
+WHEN user runs `ccp use dev` in a directory with mise.toml
+THEN mise.toml is updated with CLAUDE_CONFIG_DIR and CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD
+AND Claude Code uses dev profile in that project
+
+GIVEN profile exists at ~/.ccp/profiles/quickfix
+WHEN user runs `ccp use quickfix -g`
+THEN ~/.claude becomes a symlink to ~/.ccp/profiles/quickfix
+AND Claude Code uses quickfix profile globally when no CLAUDE_CONFIG_DIR is set
+
+GIVEN no mise.toml or .envrc exists
+WHEN user runs `ccp use dev` and mise command is available
+THEN tool prompts to create mise.toml with Claude env vars
 ```
 
 ### AC-10: Show Current Default Profile
@@ -625,9 +649,11 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 |---------|-------------|---------|
 | `ccp init` | Migrate existing ~/.claude to hub + default profile | `ccp init` |
 | `ccp reset` | Undo ccp initialization and restore ~/.claude | `ccp reset` |
-| `ccp use <n>` | Set default profile (~/.claude symlink) | `ccp use quickfix` |
-| `ccp use --show` | Show current default profile | `ccp use --show` |
+| `ccp use <n>` | Set project profile (auto-detects mise.toml/.envrc) | `ccp use dev` |
+| `ccp use <n> -g` | Set global profile (~/.claude symlink) | `ccp use quickfix -g` |
+| `ccp use --show` | Show current active profile | `ccp use --show` |
 | `ccp which` | Show currently active profile | `ccp which` |
+| `ccp which --path` | Show profile directory path (for scripts) | `ccp which --path` |
 | `ccp status` | Show ccp status and health | `ccp status` |
 | `ccp doctor` | Diagnose and fix common issues | `ccp doctor --fix` |
 | `ccp usage` | Show hub item usage across profiles | `ccp usage` |
@@ -704,6 +730,13 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 **`ccp reset`**
 - `--force` — Skip confirmation prompt
+
+**`ccp use`**
+- `-g, --global` — Update global ~/.claude symlink (default: update project env)
+- `--show` — Show current active profile
+
+**`ccp which`**
+- `--path` — Output only the profile directory path (for scripts/aliases)
 
 **`ccp env`**
 - `--format=shell` — Print shell export command (default)
