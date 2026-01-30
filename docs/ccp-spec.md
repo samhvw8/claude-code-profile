@@ -658,6 +658,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp doctor` | Diagnose and fix common issues | `ccp doctor --fix` |
 | `ccp usage` | Show hub item usage across profiles | `ccp usage` |
 | `ccp env <profile>` | Configure project env for a profile | `ccp env dev --format=mise` |
+| `ccp config shell` | Output shell aliases for Claude integration | `ccp config shell >> ~/.zshrc` |
 
 ### Profile Commands
 
