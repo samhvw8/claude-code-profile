@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.8.4
+**Version:** 0.8.5
 **Date:** 2026-01-29
 **Status:** Draft
 
@@ -781,6 +781,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.8.5 | 2026-01-29 | — | Added: `ccp hub prune` to remove unused hub items not linked to any profile. Supports interactive selection (-i), force removal (-f), and type filtering (--type). |
 | 0.8.4 | 2026-01-29 | — | Added: `ccp plugin list <owner/repo>` to list plugins from a Claude Code marketplace, `ccp plugin add <owner/repo@plugin>` to install plugins (agents, commands, skills, rules) from marketplace repositories into the hub. |
 | 0.8.3 | 2026-01-29 | — | Added: `ccp skills find <query>` to search skills.sh for installable skills, `ccp skills add <owner/repo@skill>` to download and install skills from GitHub into the hub. |
 | 0.8.2 | 2026-01-29 | — | Added: dynamic shell completions for profile names and hub items (profile commands, link, unlink, use). Profile validation on use: warns about configuration drift before switching and suggests `ccp profile fix`. |
