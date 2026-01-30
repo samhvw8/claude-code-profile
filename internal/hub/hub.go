@@ -17,10 +17,11 @@ type Hub struct {
 
 // Item represents a single hub item (skill, hook, rule, etc.)
 type Item struct {
-	Name     string
-	Type     config.HubItemType
-	Path     string
-	IsDir    bool
+	Name   string
+	Type   config.HubItemType
+	Path   string
+	IsDir  bool
+	Source *SourceManifest // nil if no source.yaml
 }
 
 // New creates a new Hub instance

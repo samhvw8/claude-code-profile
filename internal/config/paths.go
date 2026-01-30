@@ -127,6 +127,11 @@ func (p *Paths) SharedDataDir(dataType DataItemType) string {
 	return filepath.Join(p.SharedDir, string(dataType))
 }
 
+// PluginsDir returns the plugins tracking directory
+func (p *Paths) PluginsDir() string {
+	return filepath.Join(p.HubDir, "plugins")
+}
+
 // IsInitialized checks if ccp has been initialized (hub directory exists)
 func (p *Paths) IsInitialized() bool {
 	info, err := os.Stat(p.HubDir)

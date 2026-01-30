@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.8.5
-**Date:** 2026-01-29
+**Version:** 0.9.0
+**Date:** 2026-01-30
 **Status:** Draft
 
 ---
@@ -652,6 +652,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp hub list [type]` | List hub contents | `ccp hub list skills` |
+| `ccp hub update [type/name]` | Update hub items from GitHub source | `ccp hub update --all` |
 | `ccp hub add <type> <path>` | Add item to hub | `ccp hub add skills ./my-skill.md` |
 | `ccp hub add <type> <name> --from-profile` | Promote profile item to hub | `ccp hub add skills my-skill --from-profile=default` |
 | `ccp hub extract-fragments` | Extract setting fragments from profile | `ccp hub extract-fragments --from=default` |
@@ -659,6 +660,22 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp hub edit <type>/<name>` | Edit hub item in $EDITOR | `ccp hub edit hooks/pre-commit.sh` |
 | `ccp hub remove <type>/<name>` | Remove item from hub | `ccp hub remove skills/old-skill` |
 | `ccp hub rename <type>/<name> <new>` | Rename hub item | `ccp hub rename skills/old new` |
+
+### Skills Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp skills find <query>` | Search skills.sh for installable skills | `ccp skills find debugging` |
+| `ccp skills add <source>` | Install skill from GitHub | `ccp skills add vercel-labs/agent-skills@debugging` |
+| `ccp skills update [name]` | Update installed skills from GitHub | `ccp skills update --all` |
+
+### Plugin Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp plugin list <owner/repo>` | List plugins from a marketplace | `ccp plugin list EveryInc/compound-engineering-plugin` |
+| `ccp plugin add <source>` | Install plugin from marketplace | `ccp plugin add owner/repo@plugin-name` |
+| `ccp plugin update [name]` | Update installed plugins | `ccp plugin update --all` |
 
 ### Link Commands
 
@@ -730,6 +747,24 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 **`ccp hub remove`**
 - `--force` — Skip confirmation and usage check
 
+**`ccp hub update`**
+- `--all` — Update all items without prompting
+- `--force` — Force update even if local changes detected
+- `--dry-run` — Show what would be updated without making changes
+
+**`ccp skills update`**
+- `--all` — Update all skills without prompting
+- `--force` — Force update even if local changes detected
+- `--dry-run` — Show what would be updated
+
+**`ccp plugin add`**
+- `--select` — Interactively select which components to install
+
+**`ccp plugin update`**
+- `--all` — Update all plugins without prompting
+- `--force` — Force update even if local changes detected
+- `--dry-run` — Show what would be updated
+
 ---
 
 ## Assumptions & Dependencies
@@ -781,6 +816,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.9.0 | 2026-01-30 | — | Added: GitHub source tracking for skills and plugins (source.yaml manifest). New update commands: `ccp hub update`, `ccp skills update`, `ccp plugin update` to pull latest from GitHub. Plugin add --select flag for interactive component selection. Hooks are now treated as a single folder unit (detected via hooks/hooks.json) and installed with plugin-prefixed name. |
 | 0.8.5 | 2026-01-29 | — | Added: `ccp hub prune` to remove unused hub items not linked to any profile. Supports interactive selection (-i), force removal (-f), and type filtering (--type). |
 | 0.8.4 | 2026-01-29 | — | Added: `ccp plugin list <owner/repo>` to list plugins from a Claude Code marketplace, `ccp plugin add <owner/repo@plugin>` to install plugins (agents, commands, skills, rules) from marketplace repositories into the hub. |
 | 0.8.3 | 2026-01-29 | — | Added: `ccp skills find <query>` to search skills.sh for installable skills, `ccp skills add <owner/repo@skill>` to download and install skills from GitHub into the hub. |

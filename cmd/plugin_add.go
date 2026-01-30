@@ -12,6 +12,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/hub"
+	"github.com/samhoang/ccp/internal/picker"
 )
 
 type pluginJSON struct {
@@ -21,6 +23,10 @@ type pluginJSON struct {
 	Keywords    []string `json:"keywords"`
 }
 
+var (
+	pluginAddSelect bool
+)
+
 var pluginAddCmd = &cobra.Command{
 	Use:   "add <owner/repo@plugin>",
 	Short: "Install a plugin from a marketplace",
@@ -28,9 +34,11 @@ var pluginAddCmd = &cobra.Command{
 
 The plugin's agents, commands, skills, and rules are copied to your hub.
 
+Use --select to interactively choose which components to install.
+
 Examples:
   ccp plugin add EveryInc/compound-engineering-plugin@compound-engineering
-  ccp plugin add EveryInc/compound-engineering-plugin@coding-tutor
+  ccp plugin add EveryInc/compound-engineering-plugin@coding-tutor --select
 
 After installing, link the components to your profile:
   ccp link <profile> skills/<skill-name>
@@ -40,6 +48,7 @@ After installing, link the components to your profile:
 }
 
 func init() {
+	pluginAddCmd.Flags().BoolVarP(&pluginAddSelect, "select", "s", false, "Interactively select which components to install")
 	pluginCmd.AddCommand(pluginAddCmd)
 }
 
@@ -115,69 +124,112 @@ func runPluginAdd(cmd *cobra.Command, args []string) error {
 		json.Unmarshal(data, &pj)
 	}
 
-	// Copy components to hub
+	// Discover available components
+	available := discoverPluginComponents(pluginDir)
+
+	if len(available) == 0 {
+		return fmt.Errorf("no components found in plugin")
+	}
+
+	// Determine which components to install
+	toInstall := available
+	if pluginAddSelect {
+		// Build picker items
+		var items []picker.Item
+		for _, comp := range available {
+			items = append(items, picker.Item{
+				ID:       comp.Type + "/" + comp.Name,
+				Label:    fmt.Sprintf("[%s] %s", comp.Type, comp.Name),
+				Selected: true, // default all selected
+			})
+		}
+
+		fmt.Printf("\nFound %d components in plugin '%s':\n", len(items), pluginName)
+		selected, err := picker.Run("Select components to install", items)
+		if err != nil {
+			return fmt.Errorf("picker error: %w", err)
+		}
+		if selected == nil {
+			fmt.Println("Installation cancelled")
+			return nil
+		}
+
+		// Filter to selected only
+		selectedSet := make(map[string]bool)
+		for _, s := range selected {
+			selectedSet[s] = true
+		}
+		toInstall = nil
+		for _, comp := range available {
+			if selectedSet[comp.Type+"/"+comp.Name] {
+				toInstall = append(toInstall, comp)
+			}
+		}
+
+		if len(toInstall) == 0 {
+			fmt.Println("No components selected")
+			return nil
+		}
+	}
+
+	// Copy selected components to hub
 	installed := make(map[string][]string)
+	for _, comp := range toInstall {
+		var src, dst string
+		var installName string
 
-	// Copy skills
-	skillsDir := filepath.Join(pluginDir, "skills")
-	if entries, err := os.ReadDir(skillsDir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				src := filepath.Join(skillsDir, e.Name())
-				dst := filepath.Join(paths.HubDir, "skills", e.Name())
-				if err := copyPluginDir(src, dst); err != nil {
-					fmt.Printf("  Warning: failed to copy skill %s: %v\n", e.Name(), err)
-				} else {
-					installed["skills"] = append(installed["skills"], e.Name())
-				}
-			}
+		if comp.IsHook {
+			// Hooks: copy entire hooks folder with plugin-prefixed name
+			src = filepath.Join(pluginDir, "hooks")
+			installName = pluginName + "-hooks"
+			dst = filepath.Join(paths.HubDir, "hooks", installName)
+		} else {
+			// Standard components: copy subdirectory
+			src = filepath.Join(pluginDir, comp.Type, comp.Name)
+			installName = comp.Name
+			dst = filepath.Join(paths.HubDir, comp.Type, installName)
+		}
+
+		if err := copyPluginDir(src, dst); err != nil {
+			fmt.Printf("  Warning: failed to copy %s %s: %v\n", comp.Type, comp.Name, err)
+		} else {
+			installed[comp.Type] = append(installed[comp.Type], installName)
 		}
 	}
 
-	// Copy agents
-	agentsDir := filepath.Join(pluginDir, "agents")
-	if entries, err := os.ReadDir(agentsDir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				src := filepath.Join(agentsDir, e.Name())
-				dst := filepath.Join(paths.HubDir, "agents", e.Name())
-				if err := copyPluginDir(src, dst); err != nil {
-					fmt.Printf("  Warning: failed to copy agent %s: %v\n", e.Name(), err)
-				} else {
-					installed["agents"] = append(installed["agents"], e.Name())
-				}
-			}
-		}
+	// Get commit SHA for source tracking
+	commit := getPluginGitCommit(tempDir)
+
+	// Create plugin manifest for tracking
+	pluginManifest := hub.NewPluginManifest(
+		pluginName,
+		pj.Description,
+		pluginInfo.Version,
+		hub.GitHubSource{
+			Owner:  owner,
+			Repo:   repo,
+			Commit: commit,
+			Path:   pluginInfo.Source,
+		},
+		hub.ComponentList{
+			Skills:   installed["skills"],
+			Agents:   installed["agents"],
+			Commands: installed["commands"],
+			Rules:    installed["rules"],
+			Hooks:    installed["hooks"],
+		},
+	)
+	if err := pluginManifest.Save(paths.PluginsDir()); err != nil {
+		fmt.Printf("Warning: failed to save plugin manifest: %v\n", err)
 	}
 
-	// Copy commands
-	commandsDir := filepath.Join(pluginDir, "commands")
-	if entries, err := os.ReadDir(commandsDir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				src := filepath.Join(commandsDir, e.Name())
-				dst := filepath.Join(paths.HubDir, "commands", e.Name())
-				if err := copyPluginDir(src, dst); err != nil {
-					fmt.Printf("  Warning: failed to copy command %s: %v\n", e.Name(), err)
-				} else {
-					installed["commands"] = append(installed["commands"], e.Name())
-				}
-			}
-		}
-	}
-
-	// Copy rules if present
-	rulesDir := filepath.Join(pluginDir, "rules")
-	if entries, err := os.ReadDir(rulesDir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				src := filepath.Join(rulesDir, e.Name())
-				dst := filepath.Join(paths.HubDir, "rules", e.Name())
-				if err := copyPluginDir(src, dst); err != nil {
-					fmt.Printf("  Warning: failed to copy rule %s: %v\n", e.Name(), err)
-				} else {
-					installed["rules"] = append(installed["rules"], e.Name())
-				}
+	// Create source.yaml for each installed component
+	for componentType, names := range installed {
+		for _, name := range names {
+			componentPath := filepath.Join(paths.HubDir, componentType, name)
+			sourceManifest := hub.NewPluginSource(pluginName, owner, repo, pluginInfo.Version)
+			if err := sourceManifest.Save(componentPath); err != nil {
+				fmt.Printf("Warning: failed to save source for %s/%s: %v\n", componentType, name, err)
 			}
 		}
 	}
@@ -286,4 +338,58 @@ func copyPluginFile(src, dst string) error {
 
 	_, err = io.Copy(dstFile, srcFile)
 	return err
+}
+
+// getPluginGitCommit returns the current commit SHA from a git repository
+func getPluginGitCommit(repoDir string) string {
+	cmd := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// pluginComponent represents a component found in a plugin
+type pluginComponent struct {
+	Type   string // skills, agents, commands, rules, hooks
+	Name   string
+	IsHook bool // true if this is the entire hooks folder
+}
+
+// discoverPluginComponents scans a plugin directory for available components
+func discoverPluginComponents(pluginDir string) []pluginComponent {
+	var components []pluginComponent
+
+	// Standard component types with subdirectories
+	componentTypes := []string{"skills", "agents", "commands", "rules"}
+	for _, compType := range componentTypes {
+		dir := filepath.Join(pluginDir, compType)
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				components = append(components, pluginComponent{
+					Type: compType,
+					Name: e.Name(),
+				})
+			}
+		}
+	}
+
+	// Hooks are treated as a single unit - check for hooks/hooks.json
+	hooksDir := filepath.Join(pluginDir, "hooks")
+	hooksJSON := filepath.Join(hooksDir, "hooks.json")
+	if _, err := os.Stat(hooksJSON); err == nil {
+		// hooks.json exists, treat entire hooks folder as one component
+		components = append(components, pluginComponent{
+			Type:   "hooks",
+			Name:   "hooks", // the folder name
+			IsHook: true,
+		})
+	}
+
+	return components
 }

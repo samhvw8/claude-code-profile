@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/hub"
 )
 
 var (
@@ -98,6 +99,18 @@ func runSkillsAdd(cmd *cobra.Command, args []string) error {
 	// Copy skill to hub
 	if err := copyDir(skillSourceDir, targetDir); err != nil {
 		return fmt.Errorf("failed to copy skill: %w", err)
+	}
+
+	// Get commit SHA for source tracking
+	commit := getGitCommit(tempDir)
+
+	// Determine relative path within repo
+	relPath, _ := filepath.Rel(tempDir, skillSourceDir)
+
+	// Create source manifest for tracking
+	sourceManifest := hub.NewGitHubSource(owner, repo, "HEAD", commit, relPath)
+	if err := sourceManifest.Save(targetDir); err != nil {
+		fmt.Printf("Warning: failed to save source tracking: %v\n", err)
 	}
 
 	fmt.Printf("Installed skill: %s\n", skillName)
@@ -285,4 +298,14 @@ func fetchSkillInfo(owner, repo, skill string) (map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+// getGitCommit returns the current commit SHA from a git repository
+func getGitCommit(repoDir string) string {
+	cmd := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }

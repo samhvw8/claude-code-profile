@@ -98,6 +98,13 @@ func (s *Scanner) scanItemDir(dir string, itemType config.HubItemType) ([]Item, 
 			IsDir: entry.IsDir(),
 		}
 
+		// Try to load source manifest for directory items
+		if entry.IsDir() {
+			if source, err := LoadSourceManifest(item.Path); err == nil {
+				item.Source = source
+			}
+		}
+
 		items = append(items, item)
 	}
 
