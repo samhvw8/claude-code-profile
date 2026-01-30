@@ -102,10 +102,17 @@ func runHubPrune(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Find orphans
+	// Find orphans (excluding protected items)
+	protected, _ := loadProtectedItems(paths)
 	var orphans []string
+	var protectedCount int
 	for key, profiles := range usage {
 		if len(profiles) == 0 {
+			// Skip protected items
+			if protected[key] {
+				protectedCount++
+				continue
+			}
 			// Filter by type if specified
 			if pruneType != "" {
 				parts := strings.SplitN(key, "/", 2)
@@ -120,11 +127,20 @@ func runHubPrune(cmd *cobra.Command, args []string) error {
 	sort.Strings(orphans)
 
 	if len(orphans) == 0 {
-		fmt.Println("No orphaned hub items found - nothing to prune")
+		if protectedCount > 0 {
+			fmt.Printf("No orphaned hub items found (%d protected items skipped)\n", protectedCount)
+		} else {
+			fmt.Println("No orphaned hub items found - nothing to prune")
+		}
 		return nil
 	}
 
-	fmt.Printf("Found %d orphaned hub items:\n\n", len(orphans))
+	fmt.Printf("Found %d orphaned hub items", len(orphans))
+	if protectedCount > 0 {
+		fmt.Printf(" (%d protected items skipped)", protectedCount)
+	}
+	fmt.Println(":")
+	fmt.Println()
 
 	var toRemove []string
 

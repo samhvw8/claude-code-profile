@@ -687,6 +687,8 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp hub edit <type>/<name>` | Edit hub item in $EDITOR | `ccp hub edit hooks/pre-commit.sh` |
 | `ccp hub remove <type>/<name>` | Remove item from hub | `ccp hub remove skills/old-skill` |
 | `ccp hub rename <type>/<name> <new>` | Rename hub item | `ccp hub rename skills/old new` |
+| `ccp hub protect [type/name...]` | Protect items from pruning | `ccp hub protect skills/debug` |
+| `ccp hub unprotect [type/name...]` | Remove protection | `ccp hub unprotect skills/debug` |
 
 ### Skills Commands
 
@@ -780,6 +782,16 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 **`ccp hub remove`**
 - `--force` — Skip confirmation and usage check
+
+**`ccp hub protect`**
+- `-i, --interactive` — Interactive selection
+- `-l, --list` — List protected items
+
+**`ccp hub prune`**
+- `-f, --force` — Remove all orphans without confirmation
+- `-i, --interactive` — Interactive selection
+- `--type=<type>` — Only prune specific type
+- Note: Protected items are automatically skipped
 
 **`ccp hub update`**
 - `--all` — Update all items without prompting
