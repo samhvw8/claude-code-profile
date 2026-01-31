@@ -34,16 +34,15 @@ func (r *GitHubRegistry) CanHandle(identifier string) bool {
 }
 
 func (r *GitHubRegistry) Search(ctx context.Context, query string, opts SearchOptions) ([]PackageInfo, error) {
-	// Search repos with claude/skills keywords
-	searchQuery := fmt.Sprintf("%s claude skills", query)
-
+	// Pass query directly - user can use full GitHub search syntax
+	// e.g. "react stars:>100 language:typescript"
 	perPage := 20
 	if opts.Limit > 0 && opts.Limit < perPage {
 		perPage = opts.Limit
 	}
 
 	u := fmt.Sprintf("%s/search/repositories?q=%s&sort=stars&per_page=%d",
-		r.baseURL, url.QueryEscape(searchQuery), perPage)
+		r.baseURL, url.QueryEscape(query), perPage)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
