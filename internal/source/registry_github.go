@@ -34,11 +34,10 @@ func (r *GitHubRegistry) CanHandle(identifier string) bool {
 }
 
 func (r *GitHubRegistry) Search(ctx context.Context, query string, opts SearchOptions) ([]PackageInfo, error) {
-	// Add agent-skills topic by default (most common for claude skills repos)
-	// User can override with their own topic: filter
+	// Add skills-related keywords if user doesn't specify topic
 	searchQuery := query
 	if !strings.Contains(query, "topic:") {
-		searchQuery = query + " topic:agent-skills"
+		searchQuery = query + " claude skills agent"
 	}
 
 	perPage := 20
