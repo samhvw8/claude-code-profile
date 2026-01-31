@@ -20,6 +20,7 @@ var (
 	createSettingFragments []string
 	createFrom             string
 	createInteractive      bool
+	createEmpty            bool
 	createDescription      string
 )
 
@@ -31,7 +32,8 @@ var profileCreateCmd = &cobra.Command{
 Examples:
   ccp profile create quickfix --skills=debugging-core,git-basics
   ccp profile create dev --interactive
-  ccp profile create minimal --from=default`,
+  ccp profile create minimal --from=default
+  ccp profile create empty-profile --empty`,
 	Args: cobra.ExactArgs(1),
 	RunE: runProfileCreate,
 }
@@ -44,6 +46,7 @@ func init() {
 	profileCreateCmd.Flags().StringSliceVar(&createSettingFragments, "setting-fragments", nil, "Setting fragments to include")
 	profileCreateCmd.Flags().StringVar(&createFrom, "from", "", "Copy configuration from existing profile")
 	profileCreateCmd.Flags().BoolVarP(&createInteractive, "interactive", "i", false, "Interactive picker mode")
+	profileCreateCmd.Flags().BoolVarP(&createEmpty, "empty", "e", false, "Create empty profile without hub items")
 	profileCreateCmd.Flags().StringVarP(&createDescription, "description", "d", "", "Profile description")
 	profileCmd.AddCommand(profileCreateCmd)
 }
@@ -112,7 +115,7 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 
 	// Interactive mode
 	hasAnyFlags := len(createSkills) > 0 || len(createHooks) > 0 || len(createRules) > 0 ||
-		len(createCommands) > 0 || len(createSettingFragments) > 0 || createFrom != ""
+		len(createCommands) > 0 || len(createSettingFragments) > 0 || createFrom != "" || createEmpty
 
 	if createInteractive || !hasAnyFlags {
 		// Scan hub for available items

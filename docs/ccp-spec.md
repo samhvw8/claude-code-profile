@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.16.0
+**Version:** 0.17.0
 **Date:** 2026-01-31
 **Status:** Draft
 
@@ -681,6 +681,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp profile check <name>` | Validate profile against manifest | `ccp profile check quickfix` |
 | `ccp profile fix <name>` | Reconcile profile to match manifest | `ccp profile fix quickfix --dry-run` |
 | `ccp profile delete <name>` | Delete a profile | `ccp profile delete quickfix` |
+| `ccp profile rename <old> <new>` | Rename a profile | `ccp profile rename dev development` |
 | `ccp profile clone <src> <new>` | Clone an existing profile | `ccp profile clone default dev` |
 | `ccp profile diff <a> [b]` | Compare two profiles | `ccp profile diff dev prod` |
 | `ccp profile sync [name]` | Regenerate symlinks and settings.json | `ccp profile sync --all` |
@@ -722,6 +723,8 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Command | Description | Example |
 |---------|-------------|---------|
+| `ccp link` | Interactive hub item selection for active profile | `ccp link` |
+| `ccp link <profile>` | Interactive hub item selection for profile | `ccp link quickfix` |
 | `ccp link <profile> <path>` | Add hub item to profile | `ccp link quickfix skills/vue-dev` |
 | `ccp unlink <profile> <path>` | Remove hub item from profile | `ccp unlink quickfix skills/vue-dev` |
 
@@ -767,7 +770,8 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--rules=p,q` — Rules to include
 - `--setting-fragments=s,t` — Setting fragments to include
 - `--from=<profile>` — Copy configuration from existing profile
-- `--interactive` — Interactive picker mode (default if no flags)
+- `-e, --empty` — Create empty profile without hub items
+- `-i, --interactive` — Interactive picker mode (default if no flags)
 
 **`ccp profile fix`**
 - `--dry-run` — Show changes without executing
@@ -877,6 +881,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.17.0 | 2026-01-31 | — | Added: `profile rename` command, `--empty` flag for `profile create` to skip interactive selection, enhanced `link` command with interactive mode (no args = active profile, one arg = specified profile). |
 | 0.16.0 | 2026-01-31 | — | Added shared plugin store at `~/.ccp/store/plugins/`. Plugin caches (marketplaces, known_marketplaces.json) are now shared across profiles via symlinks, reducing duplication. New `ccp migrate` step moves existing plugin caches to store. Profile creation automatically symlinks to store. |
 | 0.14.0 | 2026-01-31 | — | Symlinks now use relative paths for cross-computer portability. `ccp migrate` converts existing absolute symlinks to relative. Profiles and ~/.claude can be synced between machines. |
 | 0.13.0 | 2026-01-31 | — | Added: `owner/repo@ref` format for direct GitHub source add. Plugin discovery now scans `plugins/` and `external_plugins/` directories. `source install -i` interactive item selection. Smart naming avoids duplicates when plugin name equals item name. |
