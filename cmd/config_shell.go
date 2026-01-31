@@ -20,7 +20,11 @@ Add the output to your shell configuration file (.bashrc, .zshrc, etc.):
 
 This configures:
   - claude alias: Loads profile's CLAUDE.md and rules via --add-dir
-  - Automatic CLAUDE_CONFIG_DIR from ccp which --path`,
+  - ccp-use function: Quick profile switching with mise env reload
+  - Automatic CLAUDE_CONFIG_DIR from ccp which --path
+
+The output is wrapped in a ccp existence check, making it safe for
+synced shell configs across machines where ccp may not be installed.`,
 	RunE: runConfigShell,
 }
 
@@ -36,20 +40,25 @@ func runConfigShell(cmd *cobra.Command, args []string) error {
 	fmt.Println("# Add this to your shell config file")
 	fmt.Println()
 
+	// Wrap in ccp existence check for synced shell configs
+	fmt.Println("# Only load if ccp is installed")
+	fmt.Println("if command -v ccp &> /dev/null; then")
+
 	// Claude alias with --add-dir for loading profile CLAUDE.md/rules
-	fmt.Println("# Claude alias - loads profile's CLAUDE.md and rules")
-	fmt.Println(`alias claude='CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 command claude --add-dir "${CLAUDE_CONFIG_DIR:-$(ccp which --path 2>/dev/null)}"'`)
+	fmt.Println("  # Claude alias - loads profile's CLAUDE.md and rules")
+	fmt.Println(`  alias claude='CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 command claude --add-dir "${CLAUDE_CONFIG_DIR:-$(ccp which --path 2>/dev/null)}"'`)
 	fmt.Println()
 
 	// Optional: ccp cd function
-	fmt.Println("# Quick profile switch (optional)")
-	fmt.Println("ccp-use() {")
-	fmt.Println(`  ccp use "$@"`)
-	fmt.Println("  # Reload mise env if available")
-	fmt.Println("  if command -v mise &> /dev/null && [[ -f mise.toml ]]; then")
-	fmt.Println("    eval \"$(mise env)\"")
-	fmt.Println("  fi")
-	fmt.Println("}")
+	fmt.Println("  # Quick profile switch (optional)")
+	fmt.Println("  ccp-use() {")
+	fmt.Println(`    ccp use "$@"`)
+	fmt.Println("    # Reload mise env if available")
+	fmt.Println("    if command -v mise &> /dev/null && [[ -f mise.toml ]]; then")
+	fmt.Println("      eval \"$(mise env)\"")
+	fmt.Println("    fi")
+	fmt.Println("  }")
+	fmt.Println("fi")
 	fmt.Println()
 
 	return nil
