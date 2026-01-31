@@ -104,3 +104,46 @@ func TestPathsIsInitialized(t *testing.T) {
 		t.Error("IsInitialized() = false, want true")
 	}
 }
+
+func TestToPortablePath(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot get home dir")
+	}
+
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{
+			name: "path under home",
+			path: filepath.Join(home, ".ccp", "hooks", "test"),
+			want: "$HOME/.ccp/hooks/test",
+		},
+		{
+			name: "path not under home",
+			path: "/usr/local/bin/script.sh",
+			want: "/usr/local/bin/script.sh",
+		},
+		{
+			name: "empty path",
+			path: "",
+			want: "",
+		},
+		{
+			name: "home path exactly",
+			path: home,
+			want: "$HOME",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ToPortablePath(tt.path)
+			if got != tt.want {
+				t.Errorf("ToPortablePath(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}

@@ -15,9 +15,8 @@ import (
 
 // GenerateSettingsHooks generates the hooks section for settings.json from linked hub hooks
 // Uses $HOME-based absolute paths for portability
-func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Manifest) (map[string][]map[string]interface{}, error) {
-	hooks := make(map[string][]map[string]interface{})
-	home, _ := os.UserHomeDir()
+func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Manifest) (map[config.HookType][]config.SettingsHookEntry, error) {
+	hooks := make(map[config.HookType][]config.SettingsHookEntry)
 	profileHooksDir := filepath.Join(profileDir, "hooks")
 
 	for _, hookName := range manifest.Hub.Hooks {
@@ -26,40 +25,7 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 		// Try hooks.json first (official format)
 		hooksJSON, err := hub.GetHooksJSON(hookDir)
 		if err == nil && hooksJSON != nil {
-			// Use hooks.json entries directly
-			for hookType, entries := range hooksJSON.Hooks {
-				for _, hookEntry := range entries {
-					for _, cmd := range hookEntry.Hooks {
-						// Replace ${CLAUDE_PLUGIN_ROOT} with actual path
-						command := cmd.Command
-						if strings.Contains(command, "${CLAUDE_PLUGIN_ROOT}") {
-							absPath := hookDir
-							if home != "" && strings.HasPrefix(absPath, home) {
-								absPath = "$HOME" + absPath[len(home):]
-							}
-							command = strings.ReplaceAll(command, "${CLAUDE_PLUGIN_ROOT}", absPath)
-						}
-
-						timeout := cmd.Timeout
-						if timeout == 0 {
-							timeout = config.DefaultHookTimeout()
-						}
-
-						entry := map[string]interface{}{
-							"hooks": []map[string]interface{}{{
-								"command": command,
-								"timeout": timeout,
-								"type":    cmd.Type,
-							}},
-						}
-						if hookEntry.Matcher != "" {
-							entry["matcher"] = hookEntry.Matcher
-						}
-
-						hooks[string(hookType)] = append(hooks[string(hookType)], entry)
-					}
-				}
-			}
+			processHooksJSON(hooksJSON, hookDir, hooks)
 			continue
 		}
 
@@ -70,50 +36,74 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 			continue
 		}
 
-		// Build the command path
-		var command string
-		if hookManifest.Inline != "" {
-			command = hookManifest.Inline
-		} else if len(hookManifest.Command) > 0 && hookManifest.Command[0] == '/' {
-			// Absolute path - use as-is
-			command = hookManifest.Command
-		} else {
-			// Build absolute path using profile's hooks directory
-			absPath := filepath.Join(profileHooksDir, hookName, hookManifest.Command)
-			// Replace home dir with $HOME for portability
-			if home != "" && strings.HasPrefix(absPath, home) {
-				command = "$HOME" + absPath[len(home):]
-			} else {
-				command = absPath
-			}
-		}
-
-		// Prepend interpreter if specified
-		if hookManifest.Interpreter != "" && hookManifest.Inline == "" {
-			command = hookManifest.Interpreter + " " + command
-		}
-
-		timeout := hookManifest.Timeout
-		if timeout == 0 {
-			timeout = config.DefaultHookTimeout()
-		}
-
-		entry := map[string]interface{}{
-			"hooks": []map[string]interface{}{{
-				"command": command,
-				"timeout": timeout,
-				"type":    "command",
-			}},
-		}
-		if hookManifest.Matcher != "" {
-			entry["matcher"] = hookManifest.Matcher
-		}
-
-		hookType := string(hookManifest.Type)
-		hooks[hookType] = append(hooks[hookType], entry)
+		processLegacyHook(hookManifest, profileHooksDir, hookName, hooks)
 	}
 
 	return hooks, nil
+}
+
+// processHooksJSON processes hooks.json format entries
+func processHooksJSON(hooksJSON *config.HooksJSON, hookDir string, hooks map[config.HookType][]config.SettingsHookEntry) {
+	for hookType, entries := range hooksJSON.Hooks {
+		for _, hookEntry := range entries {
+			for _, cmd := range hookEntry.Hooks {
+				command := resolvePluginRootPath(cmd.Command, hookDir)
+				timeout := cmd.Timeout
+				if timeout == 0 {
+					timeout = config.DefaultHookTimeout()
+				}
+
+				entry := config.NewSettingsHookEntry(hookEntry.Matcher, command, timeout)
+				// Preserve the original type if specified
+				if cmd.Type != "" {
+					entry.Hooks[0].Type = cmd.Type
+				}
+				hooks[hookType] = append(hooks[hookType], entry)
+			}
+		}
+	}
+}
+
+// processLegacyHook processes legacy hook.yaml format
+func processLegacyHook(hookManifest *hub.HookManifest, profileHooksDir, hookName string, hooks map[config.HookType][]config.SettingsHookEntry) {
+	command := buildLegacyCommand(hookManifest, profileHooksDir, hookName)
+
+	// Prepend interpreter if specified
+	if hookManifest.Interpreter != "" && hookManifest.Inline == "" {
+		command = hookManifest.Interpreter + " " + command
+	}
+
+	timeout := hookManifest.Timeout
+	if timeout == 0 {
+		timeout = config.DefaultHookTimeout()
+	}
+
+	entry := config.NewSettingsHookEntry(hookManifest.Matcher, command, timeout)
+	hookType := hookManifest.Type
+	hooks[hookType] = append(hooks[hookType], entry)
+}
+
+// resolvePluginRootPath replaces ${CLAUDE_PLUGIN_ROOT} with the portable hook directory path
+func resolvePluginRootPath(command, hookDir string) string {
+	if !strings.Contains(command, "${CLAUDE_PLUGIN_ROOT}") {
+		return command
+	}
+	portablePath := config.ToPortablePath(hookDir)
+	return strings.ReplaceAll(command, "${CLAUDE_PLUGIN_ROOT}", portablePath)
+}
+
+// buildLegacyCommand builds the command string for legacy hook.yaml format
+func buildLegacyCommand(hookManifest *hub.HookManifest, profileHooksDir, hookName string) string {
+	if hookManifest.Inline != "" {
+		return hookManifest.Inline
+	}
+	if len(hookManifest.Command) > 0 && hookManifest.Command[0] == '/' {
+		// Absolute path - use as-is
+		return hookManifest.Command
+	}
+	// Build portable path using profile's hooks directory
+	absPath := filepath.Join(profileHooksDir, hookName, hookManifest.Command)
+	return config.ToPortablePath(absPath)
 }
 
 // RegenerateSettings regenerates settings.json with updated hook paths and setting fragments

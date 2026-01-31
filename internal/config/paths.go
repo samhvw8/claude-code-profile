@@ -228,3 +228,15 @@ func IsPluginStoreItem(name string) bool {
 	}
 	return false
 }
+
+// ToPortablePath converts an absolute path to use $HOME for portability
+func ToPortablePath(absPath string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return absPath
+	}
+	if strings.HasPrefix(absPath, home) {
+		return "$HOME" + absPath[len(home):]
+	}
+	return absPath
+}
