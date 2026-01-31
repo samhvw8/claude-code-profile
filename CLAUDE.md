@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.15.0**
+**Current version: v0.16.0**
 
 ## Project Context
 
@@ -67,11 +67,13 @@ type Paths struct {
     HubDir      string // ~/.ccp/hub
     ProfilesDir string // ~/.ccp/profiles
     SharedDir   string // ~/.ccp/profiles/shared
+    StoreDir    string // ~/.ccp/store (shared downloadable resources)
 }
 
-type HubItemType string    // skills, agents, hooks, rules, commands, setting-fragments
-type DataItemType string   // tasks, todos, history, etc.
-type ShareMode string      // shared, isolated
+type HubItemType string      // skills, agents, hooks, rules, commands, setting-fragments
+type DataItemType string     // tasks, todos, history, etc.
+type ShareMode string        // shared, isolated
+type PluginStoreItem string  // marketplaces, cache, known_marketplaces.json
 
 // internal/profile/manifest.go
 type Manifest struct {
@@ -197,6 +199,52 @@ limit = 10
 ```
 
 Generate default config: `ccp config init`
+
+## Directory Structure
+
+```
+~/.ccp/
+├── hub/                        # Human-configurable (ccp-managed)
+│   ├── skills/
+│   ├── agents/
+│   ├── hooks/
+│   ├── rules/
+│   ├── commands/
+│   └── setting-fragments/
+├── store/                      # Shared downloadable resources
+│   └── plugins/
+│       ├── marketplaces/       # Downloaded marketplace repos
+│       ├── cache/              # Plugin cache
+│       ├── known_marketplaces.json
+│       └── install-counts-cache.json
+├── sources/                    # Cloned source repositories
+├── profiles/
+│   ├── shared/                 # Shared runtime data
+│   │   ├── tasks/
+│   │   ├── todos/
+│   │   ├── paste-cache/
+│   │   └── projects/
+│   └── {name}/                 # Individual profile
+│       ├── profile.toml        # Profile manifest
+│       ├── skills/ → hub/skills/{linked}
+│       ├── agents/ → hub/agents/{linked}
+│       ├── plugins/
+│       │   ├── marketplaces → store/plugins/marketplaces
+│       │   ├── cache → store/plugins/cache
+│       │   └── installed_plugins.json  # Profile-specific
+│       └── ...
+├── registry.toml               # Installed sources registry
+└── ccp.toml                    # Config
+```
+
+### Data Classification
+
+| Type | Category | Location | Sharing |
+|------|----------|----------|---------|
+| Hub items (skills, agents, hooks) | Human-config | `~/.ccp/hub/` | Linked per profile |
+| Plugin cache (marketplaces, cache) | Human-config | `~/.ccp/store/plugins/` | Shared via symlinks |
+| Runtime data (tasks, todos, history) | Runtime | `~/.ccp/profiles/shared/` or profile | Configurable |
+| Plugin state (installed_plugins.json) | Runtime | Profile `plugins/` | Isolated |
 
 ## Before Making Changes
 

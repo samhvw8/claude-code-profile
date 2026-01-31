@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.14.0
+**Version:** 0.16.0
 **Date:** 2026-01-31
 **Status:** Draft
 
@@ -35,6 +35,13 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 │   ├── commands/
 │   └── setting-fragments/            # Settings.json key-value fragments
 │
+├── store/                            # Shared downloadable resources
+│   └── plugins/
+│       ├── marketplaces/             # Downloaded marketplace repos
+│       ├── cache/                    # Plugin cache
+│       ├── known_marketplaces.json
+│       └── install-counts-cache.json
+│
 ├── profiles/
 │   ├── default/                      # Migrated from original ~/.claude
 │   │   ├── CLAUDE.md
@@ -43,6 +50,10 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 │   │   ├── agents/                   # Symlinks → hub/agents/*
 │   │   ├── hooks/                    # Symlinks → hub/hooks/*
 │   │   ├── rules/                    # Symlinks → hub/rules/*
+│   │   ├── plugins/
+│   │   │   ├── marketplaces → store/plugins/marketplaces
+│   │   │   ├── cache → store/plugins/cache
+│   │   │   └── installed_plugins.json  # Profile-specific
 │   │   ├── tasks/                    # Local OR symlink → shared/tasks
 │   │   ├── todos/
 │   │   ├── history.jsonl
@@ -866,6 +877,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.16.0 | 2026-01-31 | — | Added shared plugin store at `~/.ccp/store/plugins/`. Plugin caches (marketplaces, known_marketplaces.json) are now shared across profiles via symlinks, reducing duplication. New `ccp migrate` step moves existing plugin caches to store. Profile creation automatically symlinks to store. |
 | 0.14.0 | 2026-01-31 | — | Symlinks now use relative paths for cross-computer portability. `ccp migrate` converts existing absolute symlinks to relative. Profiles and ~/.claude can be synced between machines. |
 | 0.13.0 | 2026-01-31 | — | Added: `owner/repo@ref` format for direct GitHub source add. Plugin discovery now scans `plugins/` and `external_plugins/` directories. `source install -i` interactive item selection. Smart naming avoids duplicates when plugin name equals item name. |
 | 0.12.0 | 2026-01-31 | — | Added: `ccp migrate` command for running migrations from older ccp versions (profile.yaml → profile.toml, source.yaml → registry.toml). `ccp init` now auto-generates ccp.toml config file. |

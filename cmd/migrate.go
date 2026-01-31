@@ -23,6 +23,7 @@ This command:
 2. Migrates source.yaml files to the unified registry.toml
 3. Converts absolute symlinks to relative (for cross-computer portability)
 4. Converts hook.yaml to hooks.json (official Claude Code format)
+5. Moves plugin caches to shared store (marketplaces, known_marketplaces.json)
 
 Migrations are idempotent and safe to run multiple times.`,
 	RunE: runMigrate,
@@ -47,13 +48,15 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	sourceMigrator := migration.NewSourceMigrator(paths)
 	symlinkMigrator := migration.NewSymlinkMigrator(paths)
 	hookFormatMigrator := migration.NewHookFormatMigrator(paths)
+	pluginStoreMigrator := migration.NewPluginStoreMigrator(paths)
 
 	needsTOML := tomlMigrator.NeedsMigration()
 	needsSource := sourceMigrator.NeedsMigration()
 	needsSymlink := symlinkMigrator.NeedsMigration()
 	needsHookFormat := hookFormatMigrator.NeedsMigration()
+	needsPluginStore := pluginStoreMigrator.NeedsMigration()
 
-	if !needsTOML && !needsSource && !needsSymlink && !needsHookFormat {
+	if !needsTOML && !needsSource && !needsSymlink && !needsHookFormat && !needsPluginStore {
 		fmt.Println("No migrations needed - everything is up to date.")
 		return nil
 	}
@@ -71,6 +74,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if needsHookFormat {
 			fmt.Println("  - hook.yaml → hooks.json format migration")
+		}
+		if needsPluginStore {
+			fmt.Println("  - Plugin cache → shared store migration")
 		}
 		fmt.Println()
 		fmt.Println("Run without --dry-run to apply migrations.")
@@ -122,6 +128,18 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if count > 0 {
 			fmt.Printf("  Converted %d hook(s) to hooks.json format\n", count)
+		}
+	}
+
+	// Run plugin store migration
+	if needsPluginStore {
+		fmt.Println("Moving plugin caches to shared store...")
+		count, err := pluginStoreMigrator.Migrate()
+		if err != nil {
+			return fmt.Errorf("plugin store migration failed: %w", err)
+		}
+		if count > 0 {
+			fmt.Printf("  Moved %d plugin item(s) to shared store\n", count)
 		}
 	}
 

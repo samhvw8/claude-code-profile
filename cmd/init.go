@@ -156,6 +156,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("migration failed: %w", err)
 	}
 
+	// Create store structure
+	pluginStoreMigrator := migration.NewPluginStoreMigrator(paths)
+	if err := pluginStoreMigrator.CreateStoreStructure(); err != nil {
+		fmt.Printf("Warning: could not create store structure: %v\n", err)
+	}
+
 	fmt.Println()
 	fmt.Println("Migration complete!")
 

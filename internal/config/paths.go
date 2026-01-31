@@ -13,6 +13,7 @@ type Paths struct {
 	HubDir      string // ~/.ccp/hub
 	ProfilesDir string // ~/.ccp/profiles
 	SharedDir   string // ~/.ccp/profiles/shared
+	StoreDir    string // ~/.ccp/store (shared downloadable resources)
 }
 
 // HubItemType represents the type of item in the hub
@@ -76,6 +77,26 @@ const (
 	ShareModeIsolated ShareMode = "isolated"
 )
 
+// PluginStoreItem represents items in the plugin store
+type PluginStoreItem string
+
+const (
+	PluginStoreMarketplaces       PluginStoreItem = "marketplaces"
+	PluginStoreCache              PluginStoreItem = "cache"
+	PluginStoreKnownMarketplaces  PluginStoreItem = "known_marketplaces.json"
+	PluginStoreInstallCountsCache PluginStoreItem = "install-counts-cache.json"
+)
+
+// SharedPluginStoreItems returns items that should be shared across profiles
+func SharedPluginStoreItems() []PluginStoreItem {
+	return []PluginStoreItem{
+		PluginStoreMarketplaces,
+		PluginStoreCache,
+		PluginStoreKnownMarketplaces,
+		PluginStoreInstallCountsCache,
+	}
+}
+
 // ResolvePaths resolves all paths based on environment and defaults
 func ResolvePaths() (*Paths, error) {
 	home, err := os.UserHomeDir()
@@ -101,6 +122,7 @@ func ResolvePaths() (*Paths, error) {
 		HubDir:      filepath.Join(ccpDir, "hub"),
 		ProfilesDir: filepath.Join(ccpDir, "profiles"),
 		SharedDir:   filepath.Join(ccpDir, "profiles", "shared"),
+		StoreDir:    filepath.Join(ccpDir, "store"),
 	}, nil
 }
 
@@ -185,4 +207,24 @@ func (p *Paths) RegistryPath() string {
 func (p *Paths) SourceDir(sourceID string) string {
 	safeName := strings.ReplaceAll(sourceID, "/", "--")
 	return filepath.Join(p.SourcesDir(), safeName)
+}
+
+// StorePluginsDir returns the shared plugins store directory
+func (p *Paths) StorePluginsDir() string {
+	return filepath.Join(p.StoreDir, "plugins")
+}
+
+// StorePluginItemPath returns the path to a specific plugin store item
+func (p *Paths) StorePluginItemPath(item PluginStoreItem) string {
+	return filepath.Join(p.StorePluginsDir(), string(item))
+}
+
+// IsPluginStoreItem checks if a filename is a shared plugin store item
+func IsPluginStoreItem(name string) bool {
+	for _, item := range SharedPluginStoreItems() {
+		if string(item) == name {
+			return true
+		}
+	}
+	return false
 }

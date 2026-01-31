@@ -162,6 +162,22 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		}
 	}
 
+	// Create plugins directory and symlink shared items to store
+	pluginsDir := filepath.Join(profileDir, "plugins")
+	if err := os.MkdirAll(pluginsDir, defaultPerm); err != nil {
+		return nil, err
+	}
+	for _, item := range config.SharedPluginStoreItems() {
+		storeItemPath := m.paths.StorePluginItemPath(item)
+		profileItemPath := filepath.Join(pluginsDir, string(item))
+		// Only create symlink if store item exists
+		if _, err := os.Stat(storeItemPath); err == nil {
+			if err := m.symMgr.Create(profileItemPath, storeItemPath); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	// Create symlinks for hub items
 	for _, itemType := range config.AllHubItemTypes() {
 		for _, itemName := range manifest.GetHubItems(itemType) {
