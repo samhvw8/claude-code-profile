@@ -33,3 +33,6 @@ __debug_bin*
 # Coverage
 coverage.out
 coverage.html
+
+# Claude Code plans
+.claude/plans/
