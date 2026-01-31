@@ -21,6 +21,49 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 	profileHooksDir := filepath.Join(profileDir, "hooks")
 
 	for _, hookName := range manifest.Hub.Hooks {
+		hookDir := filepath.Join(profileHooksDir, hookName)
+
+		// Try hooks.json first (official format)
+		hooksJSON, err := hub.GetHooksJSON(hookDir)
+		if err == nil && hooksJSON != nil {
+			// Use hooks.json entries directly
+			for hookType, entries := range hooksJSON.Hooks {
+				for _, hookEntry := range entries {
+					for _, cmd := range hookEntry.Hooks {
+						// Replace ${CLAUDE_PLUGIN_ROOT} with actual path
+						command := cmd.Command
+						if strings.Contains(command, "${CLAUDE_PLUGIN_ROOT}") {
+							absPath := hookDir
+							if home != "" && strings.HasPrefix(absPath, home) {
+								absPath = "$HOME" + absPath[len(home):]
+							}
+							command = strings.ReplaceAll(command, "${CLAUDE_PLUGIN_ROOT}", absPath)
+						}
+
+						timeout := cmd.Timeout
+						if timeout == 0 {
+							timeout = config.DefaultHookTimeout()
+						}
+
+						entry := map[string]interface{}{
+							"hooks": []map[string]interface{}{{
+								"command": command,
+								"timeout": timeout,
+								"type":    cmd.Type,
+							}},
+						}
+						if hookEntry.Matcher != "" {
+							entry["matcher"] = hookEntry.Matcher
+						}
+
+						hooks[string(hookType)] = append(hooks[string(hookType)], entry)
+					}
+				}
+			}
+			continue
+		}
+
+		// Fall back to hook.yaml (legacy format via GetHookManifest)
 		hookManifest, err := hub.GetHookManifest(paths.HubDir, hookName)
 		if err != nil {
 			// Skip hooks that don't have a manifest

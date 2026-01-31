@@ -97,16 +97,26 @@ func TestHookMigrator_MigrateInlineHook(t *testing.T) {
 		t.Fatalf("expected 1 migrated hook, got %d", len(migrated))
 	}
 
-	// Verify hook.yaml was created
+	// Verify hooks.json was created (official format)
 	hookDir := migrated[0].HubPath
-	manifestPath := filepath.Join(hookDir, "hook.yaml")
-	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-		t.Error("hook.yaml should exist")
+	hooksJSONPath := filepath.Join(hookDir, "hooks.json")
+	if _, err := os.Stat(hooksJSONPath); os.IsNotExist(err) {
+		t.Error("hooks.json should exist")
 	}
 
-	// Verify manifest content
-	if migrated[0].Manifest.Inline != "echo 'Hello World'" {
-		t.Errorf("Inline = %q, want 'echo 'Hello World''", migrated[0].Manifest.Inline)
+	// Verify HooksJSON content
+	if migrated[0].HooksJSON == nil {
+		t.Fatal("HooksJSON should not be nil")
+	}
+	entries := migrated[0].HooksJSON.GetHooks(config.HookSessionStart)
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 hook entry, got %d", len(entries))
+	}
+	if len(entries[0].Hooks) != 1 {
+		t.Fatalf("expected 1 hook command, got %d", len(entries[0].Hooks))
+	}
+	if entries[0].Hooks[0].Command != "echo 'Hello World'" {
+		t.Errorf("Command = %q, want \"echo 'Hello World'\"", entries[0].Hooks[0].Command)
 	}
 }
 
@@ -162,10 +172,10 @@ func TestHookMigrator_MigrateInsideHook(t *testing.T) {
 		t.Fatalf("expected 1 migrated hook, got %d", len(migrated))
 	}
 
-	// Verify script was moved to hub
-	hubHookScript := filepath.Join(migrated[0].HubPath, "test-hook.sh")
+	// Verify script was moved to hub scripts subdirectory
+	hubHookScript := filepath.Join(migrated[0].HubPath, "scripts", "test-hook.sh")
 	if _, err := os.Stat(hubHookScript); os.IsNotExist(err) {
-		t.Error("script should be moved to hub")
+		t.Error("script should be moved to hub scripts subdirectory")
 	}
 
 	// Verify original was removed (moved, not copied for inside hooks)
@@ -226,10 +236,10 @@ func TestHookMigrator_MigrateOutsideHook_Copy(t *testing.T) {
 		t.Fatalf("expected 1 migrated hook, got %d", len(migrated))
 	}
 
-	// Verify script was copied to hub (not moved)
-	hubHookScript := filepath.Join(migrated[0].HubPath, "external.sh")
+	// Verify script was copied to hub scripts subdirectory (not moved)
+	hubHookScript := filepath.Join(migrated[0].HubPath, "scripts", "external.sh")
 	if _, err := os.Stat(hubHookScript); os.IsNotExist(err) {
-		t.Error("script should be copied to hub")
+		t.Error("script should be copied to hub scripts subdirectory")
 	}
 
 	// Verify original still exists (copied, not moved)

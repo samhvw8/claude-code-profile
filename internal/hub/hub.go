@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 
@@ -79,7 +80,7 @@ func (h *Hub) ItemCountByType() map[config.HubItemType]int {
 	return counts
 }
 
-// HookManifest represents the hook.yaml file in hub
+// HookManifest represents the hook.yaml file in hub (legacy format)
 type HookManifest struct {
 	Name        string          `yaml:"name"`
 	Type        config.HookType `yaml:"type"`
@@ -90,9 +91,20 @@ type HookManifest struct {
 	Inline      string          `yaml:"inline,omitempty"` // For inline hooks
 }
 
-// GetHookManifest reads the hook.yaml manifest from a hook folder
+// GetHookManifest reads the hook manifest from a hook folder
+// Tries hooks.json (official format) first, falls back to hook.yaml (legacy)
 func GetHookManifest(hubDir, hookName string) (*HookManifest, error) {
-	manifestPath := filepath.Join(hubDir, string(config.HubHooks), hookName, "hook.yaml")
+	hookDir := filepath.Join(hubDir, string(config.HubHooks), hookName)
+
+	// Try hooks.json first (official format)
+	hooksJSON, err := GetHooksJSON(hookDir)
+	if err == nil && hooksJSON != nil {
+		// Convert HooksJSON to HookManifest for compatibility
+		return hooksJSONToManifest(hooksJSON, hookName)
+	}
+
+	// Fall back to hook.yaml (legacy format)
+	manifestPath := filepath.Join(hookDir, "hook.yaml")
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return nil, err
@@ -104,6 +116,52 @@ func GetHookManifest(hubDir, hookName string) (*HookManifest, error) {
 	}
 
 	return &manifest, nil
+}
+
+// GetHooksJSON reads the hooks.json file from a hook folder (official Claude Code format)
+func GetHooksJSON(hookDir string) (*config.HooksJSON, error) {
+	hooksPath := filepath.Join(hookDir, "hooks.json")
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var hooksJSON config.HooksJSON
+	if err := json.Unmarshal(data, &hooksJSON); err != nil {
+		return nil, err
+	}
+
+	return &hooksJSON, nil
+}
+
+// SaveHooksJSON writes a hooks.json file to the specified hook folder
+func SaveHooksJSON(hookDir string, hooksJSON *config.HooksJSON) error {
+	hooksPath := filepath.Join(hookDir, "hooks.json")
+	data, err := json.MarshalIndent(hooksJSON, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(hooksPath, data, 0644)
+}
+
+// hooksJSONToManifest converts the first hook entry from HooksJSON to HookManifest
+// This provides backward compatibility when reading hooks.json as HookManifest
+func hooksJSONToManifest(hooksJSON *config.HooksJSON, hookName string) (*HookManifest, error) {
+	// Find the first hook entry
+	for hookType, entries := range hooksJSON.Hooks {
+		if len(entries) > 0 && len(entries[0].Hooks) > 0 {
+			cmd := entries[0].Hooks[0]
+			return &HookManifest{
+				Name:    hookName,
+				Type:    hookType,
+				Timeout: cmd.Timeout,
+				Command: cmd.Command,
+				Matcher: entries[0].Matcher,
+			}, nil
+		}
+	}
+
+	return &HookManifest{Name: hookName}, nil
 }
 
 // GetHookCommand returns the command to execute for a hook

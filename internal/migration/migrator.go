@@ -569,7 +569,7 @@ func copyDir(src, dst string) error {
 }
 
 // rewriteSettingsHooks rewrites the hooks section in settings.json with new paths
-func (m *Migrator) rewriteSettingsHooks(settingsPath string, profileHooksDir string, migrated []MigratedHook, plan *HookMigrationPlan) error {
+func (m *Migrator) rewriteSettingsHooks(settingsPath string, _ string, migrated []MigratedHook, plan *HookMigrationPlan) error {
 	data, err := os.ReadFile(settingsPath)
 	if err != nil {
 		// No settings.json, nothing to rewrite
@@ -589,21 +589,30 @@ func (m *Migrator) rewriteSettingsHooks(settingsPath string, profileHooksDir str
 	newHooks := make(map[string][]map[string]interface{})
 
 	for _, hook := range migrated {
-		hookType := string(hook.HookType)
-
-		entry := map[string]interface{}{
-			"hooks": []map[string]interface{}{{
-				"command": BuildSettingsCommand(hook.Manifest, profileHooksDir),
-				"timeout": hook.Manifest.Timeout,
-				"type":    "command",
-			}},
+		// Get hook entries from HooksJSON
+		if hook.HooksJSON == nil {
+			continue
 		}
 
-		if hook.Manifest.Matcher != "" {
-			entry["matcher"] = hook.Manifest.Matcher
-		}
+		for hookType, entries := range hook.HooksJSON.Hooks {
+			for _, hookEntry := range entries {
+				for _, cmd := range hookEntry.Hooks {
+					entry := map[string]interface{}{
+						"hooks": []map[string]interface{}{{
+							"command": BuildSettingsCommandFromHooksJSON(cmd.Command, hook.HubPath),
+							"timeout": cmd.Timeout,
+							"type":    cmd.Type,
+						}},
+					}
 
-		newHooks[hookType] = append(newHooks[hookType], entry)
+					if hookEntry.Matcher != "" {
+						entry["matcher"] = hookEntry.Matcher
+					}
+
+					newHooks[string(hookType)] = append(newHooks[string(hookType)], entry)
+				}
+			}
+		}
 	}
 
 	// Add hooks that are kept as external references

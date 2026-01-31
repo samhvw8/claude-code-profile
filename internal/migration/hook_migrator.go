@@ -1,12 +1,11 @@
 package migration
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/symlink"
@@ -30,11 +29,11 @@ func NewHookMigrator(paths *config.Paths, rollback *Rollback) *HookMigrator {
 
 // MigratedHook represents a successfully migrated hook
 type MigratedHook struct {
-	Name         string          // Hook folder name in hub
-	HubPath      string          // Full path to hook folder in hub
-	OriginalPath string          // Original file path
-	Manifest     *HookManifest   // The hook.yaml manifest
-	HookType     config.HookType // Hook event type
+	Name         string           // Hook folder name in hub
+	HubPath      string           // Full path to hook folder in hub
+	OriginalPath string           // Original file path
+	HooksJSON    *config.HooksJSON // The hooks.json manifest (official format)
+	HookType     config.HookType  // Hook event type
 }
 
 // MigrateHooks migrates all hooks according to the plan
@@ -101,7 +100,9 @@ func (m *HookMigrator) migrateHook(hook ClassifiedHook, usedNames map[string]int
 	name := m.uniqueName(GenerateHookName(hook.ExtractedHook), usedNames)
 	hookDir := filepath.Join(hooksHubDir, name)
 
-	if err := os.MkdirAll(hookDir, 0755); err != nil {
+	// Create hook directory and scripts subdirectory
+	scriptsDir := filepath.Join(hookDir, "scripts")
+	if err := os.MkdirAll(scriptsDir, 0755); err != nil {
 		return nil, err
 	}
 	m.rollback.AddDir(hookDir)
@@ -109,7 +110,7 @@ func (m *HookMigrator) migrateHook(hook ClassifiedHook, usedNames map[string]int
 	// Determine the script file name
 	scriptName := filepath.Base(hook.FilePath)
 	srcPath := expandHome(hook.FilePath)
-	dstPath := filepath.Join(hookDir, scriptName)
+	dstPath := filepath.Join(scriptsDir, scriptName)
 
 	// Copy the script file (or move if inside)
 	if hook.Location == HookLocationInside {
@@ -123,22 +124,22 @@ func (m *HookMigrator) migrateHook(hook ClassifiedHook, usedNames map[string]int
 		}
 	}
 
-	// Create hook.yaml manifest
-	manifest := &HookManifest{
-		Name:        name,
-		Type:        hook.HookType,
-		Timeout:     hook.Timeout,
-		Command:     scriptName, // Relative to hook folder
-		Interpreter: hook.Interpreter,
-		Matcher:     hook.Matcher,
+	// Build command path using CLAUDE_PLUGIN_ROOT for portability
+	commandPath := "${CLAUDE_PLUGIN_ROOT}/scripts/" + scriptName
+	if hook.Interpreter != "" {
+		commandPath = hook.Interpreter + " " + commandPath
 	}
 
-	if manifest.Timeout == 0 {
-		manifest.Timeout = config.DefaultHookTimeout()
+	// Create hooks.json manifest (official format)
+	timeout := hook.Timeout
+	if timeout == 0 {
+		timeout = config.DefaultHookTimeout()
 	}
 
-	manifestPath := filepath.Join(hookDir, "hook.yaml")
-	if err := m.saveManifest(manifest, manifestPath); err != nil {
+	hooksJSON := config.NewHooksJSON()
+	hooksJSON.AddHook(hook.HookType, hook.Matcher, commandPath, timeout)
+
+	if err := m.saveHooksJSON(hooksJSON, hookDir); err != nil {
 		return nil, err
 	}
 
@@ -146,7 +147,7 @@ func (m *HookMigrator) migrateHook(hook ClassifiedHook, usedNames map[string]int
 		Name:         name,
 		HubPath:      hookDir,
 		OriginalPath: hook.FilePath,
-		Manifest:     manifest,
+		HooksJSON:    hooksJSON,
 		HookType:     hook.HookType,
 	}, nil
 }
@@ -161,21 +162,16 @@ func (m *HookMigrator) migrateInlineHook(hook ClassifiedHook, usedNames map[stri
 	}
 	m.rollback.AddDir(hookDir)
 
-	// Create hook.yaml manifest with inline command
-	manifest := &HookManifest{
-		Name:    name,
-		Type:    hook.HookType,
-		Timeout: hook.Timeout,
-		Inline:  hook.Command, // Store the inline command
-		Matcher: hook.Matcher,
+	// Create hooks.json manifest with inline command
+	timeout := hook.Timeout
+	if timeout == 0 {
+		timeout = config.DefaultHookTimeout()
 	}
 
-	if manifest.Timeout == 0 {
-		manifest.Timeout = config.DefaultHookTimeout()
-	}
+	hooksJSON := config.NewHooksJSON()
+	hooksJSON.AddHook(hook.HookType, hook.Matcher, hook.Command, timeout)
 
-	manifestPath := filepath.Join(hookDir, "hook.yaml")
-	if err := m.saveManifest(manifest, manifestPath); err != nil {
+	if err := m.saveHooksJSON(hooksJSON, hookDir); err != nil {
 		return nil, err
 	}
 
@@ -183,7 +179,7 @@ func (m *HookMigrator) migrateInlineHook(hook ClassifiedHook, usedNames map[stri
 		Name:         name,
 		HubPath:      hookDir,
 		OriginalPath: "",
-		Manifest:     manifest,
+		HooksJSON:    hooksJSON,
 		HookType:     hook.HookType,
 	}, nil
 }
@@ -198,21 +194,16 @@ func (m *HookMigrator) migrateExternalHook(hook ClassifiedHook, usedNames map[st
 	}
 	m.rollback.AddDir(hookDir)
 
-	// Create hook.yaml manifest with absolute path
-	manifest := &HookManifest{
-		Name:    name,
-		Type:    hook.HookType,
-		Timeout: hook.Timeout,
-		Command: expandHome(hook.FilePath), // Keep absolute path
-		Matcher: hook.Matcher,
+	// Create hooks.json manifest with absolute path to external file
+	timeout := hook.Timeout
+	if timeout == 0 {
+		timeout = config.DefaultHookTimeout()
 	}
 
-	if manifest.Timeout == 0 {
-		manifest.Timeout = config.DefaultHookTimeout()
-	}
+	hooksJSON := config.NewHooksJSON()
+	hooksJSON.AddHook(hook.HookType, hook.Matcher, expandHome(hook.FilePath), timeout)
 
-	manifestPath := filepath.Join(hookDir, "hook.yaml")
-	if err := m.saveManifest(manifest, manifestPath); err != nil {
+	if err := m.saveHooksJSON(hooksJSON, hookDir); err != nil {
 		return nil, err
 	}
 
@@ -220,7 +211,7 @@ func (m *HookMigrator) migrateExternalHook(hook ClassifiedHook, usedNames map[st
 		Name:         name,
 		HubPath:      hookDir,
 		OriginalPath: hook.FilePath,
-		Manifest:     manifest,
+		HooksJSON:    hooksJSON,
 		HookType:     hook.HookType,
 	}, nil
 }
@@ -242,14 +233,15 @@ func (m *HookMigrator) createProfileSymlinks(migrated []MigratedHook, profileDir
 	return nil
 }
 
-// saveManifest saves a hook manifest to the given path
-func (m *HookMigrator) saveManifest(manifest *HookManifest, path string) error {
-	data, err := yaml.Marshal(manifest)
+// saveHooksJSON saves a hooks.json file to the specified hook directory
+func (m *HookMigrator) saveHooksJSON(hooksJSON *config.HooksJSON, hookDir string) error {
+	hooksPath := filepath.Join(hookDir, "hooks.json")
+	data, err := json.MarshalIndent(hooksJSON, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal hook manifest: %w", err)
+		return fmt.Errorf("failed to marshal hooks.json: %w", err)
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(hooksPath, data, 0644)
 }
 
 // uniqueName generates a unique name by appending a suffix if needed
@@ -277,7 +269,32 @@ func moveItem(src, dst string) error {
 	return os.RemoveAll(src)
 }
 
-// BuildSettingsCommand builds the command string for settings.json
+// BuildSettingsCommandFromHooksJSON builds the command string for settings.json from HooksJSON
+// Replaces ${CLAUDE_PLUGIN_ROOT} with actual path for settings.json
+func BuildSettingsCommandFromHooksJSON(command string, hookDir string) string {
+	// If command uses CLAUDE_PLUGIN_ROOT, replace with actual path
+	if strings.Contains(command, "${CLAUDE_PLUGIN_ROOT}") {
+		home, _ := os.UserHomeDir()
+		absPath := hookDir
+
+		// Replace home directory with $HOME for portability
+		if home != "" && strings.HasPrefix(absPath, home) {
+			absPath = "$HOME" + absPath[len(home):]
+		}
+
+		return strings.ReplaceAll(command, "${CLAUDE_PLUGIN_ROOT}", absPath)
+	}
+
+	// If command is absolute path (external reference), use as-is
+	if strings.HasPrefix(command, "/") {
+		return command
+	}
+
+	// Otherwise it's a relative command or inline
+	return command
+}
+
+// BuildSettingsCommand builds the command string for settings.json (legacy HookManifest support)
 // Uses $HOME-based absolute path for portability across machines
 // Works with both ~/.claude symlink and direct CLAUDE_CONFIG_DIR usage
 func BuildSettingsCommand(manifest *HookManifest, profileHooksDir string) string {
