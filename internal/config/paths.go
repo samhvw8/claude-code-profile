@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Paths holds all resolved paths for ccp operations
@@ -168,4 +169,20 @@ func (p *Paths) ClaudeDirIsSymlink() bool {
 		return false
 	}
 	return info.Mode()&os.ModeSymlink != 0
+}
+
+// SourcesDir returns the directory for cloned sources
+func (p *Paths) SourcesDir() string {
+	return filepath.Join(p.CcpDir, "sources")
+}
+
+// RegistryPath returns the path to registry.toml
+func (p *Paths) RegistryPath() string {
+	return filepath.Join(p.CcpDir, "registry.toml")
+}
+
+// SourceDir returns the directory for a specific source
+func (p *Paths) SourceDir(sourceID string) string {
+	safeName := strings.ReplaceAll(sourceID, "/", "--")
+	return filepath.Join(p.SourcesDir(), safeName)
 }
