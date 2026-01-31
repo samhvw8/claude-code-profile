@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.17.0**
+**Current version: v0.18.0**
 
 ## Project Context
 
@@ -105,14 +105,21 @@ type CcpConfig struct {
 Unified source management for skills, agents, and plugins:
 
 ```bash
-ccp source find <query>              # Search skills.sh (default)
+ccp source find <query>              # Search skills.sh (shows PACKAGE + SKILL columns)
 ccp source find -r github <query>    # Search GitHub repos
-ccp source add <owner/repo>          # Add from GitHub
-ccp source add <url>                 # Add from URL
+ccp source install <owner/repo>      # Auto-add + interactive install (recommended)
+ccp source install <owner/repo> -a   # Auto-add + install all items
+ccp source add <owner/repo>          # Add source only (falls back to GitHub if not on skills.sh)
 ccp source list                      # List installed sources
 ccp source update [name]             # Update sources
 ccp source remove <name>             # Remove source
 ```
+
+### Source Workflow
+
+1. `find` searches skills.sh by default, shows PACKAGE and SKILL separately
+2. `install` auto-adds source if not found, then shows interactive picker
+3. `add` tries skills.sh first, falls back to GitHub with default branch
 
 ## Hooks Format
 

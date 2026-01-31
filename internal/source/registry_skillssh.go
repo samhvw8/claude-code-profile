@@ -102,8 +102,8 @@ func (r *SkillsShRegistry) Search(ctx context.Context, query string, opts Search
 			pkg = s.Slug
 		}
 		packages[i] = PackageInfo{
-			ID:          fmt.Sprintf("%s@%s", pkg, s.Name),
-			Name:        s.Name,
+			ID:          pkg,
+			Name:        s.Name, // skill name (e.g., "playwriter")
 			Description: fmt.Sprintf("%d installs", s.Installs),
 			Registry:    "skills.sh",
 		}

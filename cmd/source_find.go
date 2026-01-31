@@ -61,19 +61,42 @@ func runSourceFind(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "PACKAGE\tDESCRIPTION\tVERSION\n")
 
+	// Show different columns based on registry
+	hasSkillName := false
 	for _, pkg := range packages {
-		desc := pkg.Description
-		if len(desc) > 50 {
-			desc = desc[:47] + "..."
+		if pkg.Name != "" && pkg.Name != pkg.ID {
+			hasSkillName = true
+			break
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\n", pkg.ID, desc, pkg.Version)
+	}
+
+	if hasSkillName {
+		fmt.Fprintf(w, "PACKAGE\tSKILL\tDESCRIPTION\n")
+		for _, pkg := range packages {
+			desc := pkg.Description
+			if len(desc) > 40 {
+				desc = desc[:37] + "..."
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\n", pkg.ID, pkg.Name, desc)
+		}
+	} else {
+		fmt.Fprintf(w, "PACKAGE\tDESCRIPTION\tVERSION\n")
+		for _, pkg := range packages {
+			desc := pkg.Description
+			if len(desc) > 50 {
+				desc = desc[:47] + "..."
+			}
+			fmt.Fprintf(w, "%s\t%s\t%s\n", pkg.ID, desc, pkg.Version)
+		}
 	}
 	w.Flush()
 
 	fmt.Println()
-	fmt.Println("Install with: ccp source add <package>")
+	fmt.Println("Install with: ccp source install <package>")
+	if hasSkillName {
+		fmt.Println("  (skill name is informational - use PACKAGE column)")
+	}
 
 	return nil
 }

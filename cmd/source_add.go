@@ -23,15 +23,19 @@ var sourceAddCmd = &cobra.Command{
 	Long: `Add a source by downloading/cloning it to the sources directory.
 
 The source can be:
-  - A package ID (samhoang/debugging) - fetches from skills.sh
+  - A package ID (owner/repo) - looks up skills.sh, falls back to GitHub
   - A GitHub URL (github.com/user/repo)
   - A direct download URL (https://example.com/package.tar.gz)
 
+When using owner/repo format without @ref:
+  - First tries skills.sh registry
+  - Falls back to GitHub with default branch if not found
+
 Examples:
-  ccp source add samhoang/debugging
-  ccp source add github.com/user/repo --ref=v1.0
+  ccp source add remorses/playwriter          # Auto-fallback to GitHub
+  ccp source add owner/repo --ref=v1.0
   ccp source add https://example.com/tool.tar.gz
-  ccp source add samhoang/debugging --install  # Add and install all items`,
+  ccp source add owner/repo --install         # Add and install all items`,
 	Args: cobra.ExactArgs(1),
 	RunE: runSourceAdd,
 }
@@ -86,7 +90,21 @@ func runSourceAdd(cmd *cobra.Command, args []string) error {
 
 		details, err = reg.Get(ctx, identifier)
 		if err != nil {
-			return fmt.Errorf("package not found: %w", err)
+			// If skills.sh fails for owner/repo format, try GitHub as fallback
+			if reg.Name() == "skills.sh" && strings.Contains(identifier, "/") && !strings.Contains(identifier, "@") {
+				githubReg := source.GetRegistryProvider("github")
+				if githubReg != nil {
+					fmt.Printf("Not found in skills.sh, trying GitHub...\n")
+					// Add @main to use default branch
+					details, err = githubReg.Get(ctx, identifier)
+					if err != nil {
+						return fmt.Errorf("package not found in skills.sh or GitHub: %s", identifier)
+					}
+				}
+			}
+			if details == nil {
+				return fmt.Errorf("package not found: %w", err)
+			}
 		}
 
 		url = details.DownloadURL
