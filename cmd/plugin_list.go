@@ -55,6 +55,10 @@ func init() {
 func runPluginList(cmd *cobra.Command, args []string) error {
 	source := args[0]
 
+	// Show migration hint
+	fmt.Println("Hint: ccp source list")
+	fmt.Println()
+
 	// Parse source to owner/repo
 	owner, repo, err := parseMarketplaceSource(source)
 	if err != nil {

@@ -50,6 +50,9 @@ func init() {
 func runSkillsFind(cmd *cobra.Command, args []string) error {
 	query := strings.Join(args, " ")
 
+	// Show migration hint
+	fmt.Printf("Hint: ccp source find %s\n\n", query)
+
 	results, err := searchSkillsAPI(query)
 	if err != nil {
 		return fmt.Errorf("failed to search skills: %w", err)

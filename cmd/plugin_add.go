@@ -55,6 +55,9 @@ func init() {
 func runPluginAdd(cmd *cobra.Command, args []string) error {
 	source := args[0]
 
+	// Show migration hint
+	fmt.Printf("Hint: ccp source add %s\n\n", source)
+
 	// Parse source: owner/repo@plugin
 	owner, repo, pluginName, err := parsePluginSource(source)
 	if err != nil {

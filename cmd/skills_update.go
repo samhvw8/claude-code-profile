@@ -46,6 +46,14 @@ func init() {
 }
 
 func runSkillsUpdate(cmd *cobra.Command, args []string) error {
+	// Show migration hint
+	if len(args) > 0 {
+		fmt.Printf("Hint: ccp source update %s\n\n", args[0])
+	} else {
+		fmt.Println("Hint: ccp source update")
+		fmt.Println()
+	}
+
 	paths, err := config.ResolvePaths()
 	if err != nil {
 		return err

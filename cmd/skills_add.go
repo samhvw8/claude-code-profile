@@ -51,6 +51,9 @@ func init() {
 func runSkillsAdd(cmd *cobra.Command, args []string) error {
 	source := args[0]
 
+	// Show migration hint
+	fmt.Printf("Hint: ccp source add %s\n\n", source)
+
 	// Parse source
 	owner, repo, skillName, err := parseSkillSource(source)
 	if err != nil {
