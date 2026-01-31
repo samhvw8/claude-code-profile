@@ -110,6 +110,69 @@ ccp source update [name]             # Update sources
 ccp source remove <name>             # Remove source
 ```
 
+## Hooks Format
+
+Hooks use the official Claude Code `hooks.json` format for plugin compatibility:
+
+```
+~/.ccp/hub/hooks/{name}/
+├── hooks.json         # Official format
+└── scripts/           # Scripts directory
+    └── script.sh
+```
+
+### hooks.json Structure
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-start.sh",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Key Types
+
+```go
+// internal/config/hooks.go
+type HooksJSON struct {
+    Hooks map[HookType][]HookEntry `json:"hooks"`
+}
+
+type HookEntry struct {
+    Matcher string        `json:"matcher,omitempty"`
+    Hooks   []HookCommand `json:"hooks"`
+}
+
+type HookCommand struct {
+    Type    string `json:"type"`              // Always "command"
+    Command string `json:"command"`           // Path or ${CLAUDE_PLUGIN_ROOT}/...
+    Timeout int    `json:"timeout,omitempty"`
+}
+```
+
+### Hook Event Types
+
+- `SessionStart` - Session startup, resume, clear, compact
+- `UserPromptSubmit` - User submits a prompt
+- `PreToolUse` / `PostToolUse` - Before/after tool execution (use `matcher`)
+- `Stop` / `SubagentStop` - Session or subagent stops
+
+### Backward Compatibility
+
+Legacy `hook.yaml` format still supported. `GetHookManifest()` tries `hooks.json` first, falls back to `hook.yaml`.
+
 ## Configuration
 
 Global config at `~/.ccp/ccp.toml`:
