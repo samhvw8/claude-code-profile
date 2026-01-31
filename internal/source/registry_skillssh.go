@@ -7,21 +7,27 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-)
 
-const skillsShAPIBase = "https://skills.sh"
+	"github.com/samhoang/ccp/internal/config"
+)
 
 // SkillsShRegistry searches skills.sh for packages
 type SkillsShRegistry struct {
-	baseURL string
-	client  *http.Client
+	client *http.Client
 }
 
 func init() {
 	RegisterRegistryProvider(&SkillsShRegistry{
-		baseURL: skillsShAPIBase,
-		client:  http.DefaultClient,
+		client: http.DefaultClient,
 	})
+}
+
+func (r *SkillsShRegistry) baseURL() string {
+	cfg := config.GetConfig()
+	if cfg.SkillsSh.BaseURL != "" {
+		return cfg.SkillsSh.BaseURL
+	}
+	return "https://skills.sh"
 }
 
 func (r *SkillsShRegistry) Name() string {
@@ -44,11 +50,17 @@ func (r *SkillsShRegistry) CanHandle(identifier string) bool {
 }
 
 func (r *SkillsShRegistry) Search(ctx context.Context, query string, opts SearchOptions) ([]PackageInfo, error) {
-	limit := 10
+	cfg := config.GetConfig()
+
+	limit := cfg.SkillsSh.Limit
 	if opts.Limit > 0 {
 		limit = opts.Limit
 	}
-	u := fmt.Sprintf("%s/api/search?q=%s&limit=%d", r.baseURL, url.QueryEscape(query), limit)
+	if limit == 0 {
+		limit = 10
+	}
+
+	u := fmt.Sprintf("%s/api/search?q=%s&limit=%d", r.baseURL(), url.QueryEscape(query), limit)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
@@ -106,7 +118,7 @@ func (r *SkillsShRegistry) Get(ctx context.Context, packageID string) (*PackageD
 	}
 	owner, name := parts[0], parts[1]
 
-	u := fmt.Sprintf("%s/api/v1/packages/%s/%s", r.baseURL, owner, name)
+	u := fmt.Sprintf("%s/api/v1/packages/%s/%s", r.baseURL(), owner, name)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {

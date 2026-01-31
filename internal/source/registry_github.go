@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/samhoang/ccp/internal/config"
 )
 
 const githubAPIBase = "https://api.github.com"
@@ -34,13 +36,17 @@ func (r *GitHubRegistry) CanHandle(identifier string) bool {
 }
 
 func (r *GitHubRegistry) Search(ctx context.Context, query string, opts SearchOptions) ([]PackageInfo, error) {
-	// Search each topic separately and merge results
-	topics := []string{
-		"agent-skills",
-		"claude-code",
-		"claude-skills",
-		"awesome-skills",
-		"claude-plugin",
+	cfg := config.GetConfig()
+
+	// Use topics from config
+	topics := cfg.GitHub.Topics
+	if len(topics) == 0 {
+		topics = []string{"agent-skills", "claude-code", "claude-skills", "awesome-skills", "claude-plugin"}
+	}
+
+	perPage := cfg.GitHub.PerPage
+	if perPage == 0 {
+		perPage = 10
 	}
 
 	seen := make(map[string]bool)
@@ -48,7 +54,7 @@ func (r *GitHubRegistry) Search(ctx context.Context, query string, opts SearchOp
 
 	for _, topic := range topics {
 		searchQuery := fmt.Sprintf("%s topic:%s", query, topic)
-		results, err := r.doSearch(ctx, searchQuery, 10)
+		results, err := r.doSearch(ctx, searchQuery, perPage)
 		if err != nil {
 			continue
 		}
