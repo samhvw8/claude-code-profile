@@ -21,6 +21,7 @@ var migrateCmd = &cobra.Command{
 This command:
 1. Migrates profile manifests from YAML to TOML (profile.yaml → profile.toml)
 2. Migrates source.yaml files to the unified registry.toml
+3. Converts absolute symlinks to relative (for cross-computer portability)
 
 Migrations are idempotent and safe to run multiple times.`,
 	RunE: runMigrate,
@@ -43,11 +44,13 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 
 	tomlMigrator := migration.NewTOMLMigrator(paths)
 	sourceMigrator := migration.NewSourceMigrator(paths)
+	symlinkMigrator := migration.NewSymlinkMigrator(paths)
 
 	needsTOML := tomlMigrator.NeedsMigration()
 	needsSource := sourceMigrator.NeedsMigration()
+	needsSymlink := symlinkMigrator.NeedsMigration()
 
-	if !needsTOML && !needsSource {
+	if !needsTOML && !needsSource && !needsSymlink {
 		fmt.Println("No migrations needed - everything is up to date.")
 		return nil
 	}
@@ -59,6 +62,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if needsSource {
 			fmt.Println("  - source.yaml → registry.toml migration")
+		}
+		if needsSymlink {
+			fmt.Println("  - Absolute → relative symlink migration")
 		}
 		fmt.Println()
 		fmt.Println("Run without --dry-run to apply migrations.")
@@ -86,6 +92,18 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if count > 0 {
 			fmt.Printf("  Migrated %d source(s) to registry\n", count)
+		}
+	}
+
+	// Run absolute to relative symlink migration
+	if needsSymlink {
+		fmt.Println("Converting absolute symlinks to relative...")
+		count, err := symlinkMigrator.MigrateSymlinks()
+		if err != nil {
+			return fmt.Errorf("symlink migration failed: %w", err)
+		}
+		if count > 0 {
+			fmt.Printf("  Converted %d symlink(s) to relative paths\n", count)
 		}
 	}
 

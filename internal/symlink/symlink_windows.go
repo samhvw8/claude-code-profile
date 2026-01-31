@@ -7,11 +7,12 @@ import (
 	"path/filepath"
 )
 
-// createSymlink creates a symlink on Windows
+// createSymlink creates a symlink on Windows using relative paths
 // On Windows, directory symlinks require special handling
 func createSymlink(source, target string) error {
 	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(source), 0755); err != nil {
+	sourceDir := filepath.Dir(source)
+	if err := os.MkdirAll(sourceDir, 0755); err != nil {
 		return err
 	}
 
@@ -21,14 +22,21 @@ func createSymlink(source, target string) error {
 		return err
 	}
 
+	// Compute relative path from symlink location to target
+	relTarget, err := filepath.Rel(sourceDir, target)
+	if err != nil {
+		// Fall back to absolute path if relative fails
+		relTarget = target
+	}
+
 	// os.Symlink on Windows will create the appropriate type
 	// For directories, it creates a directory symlink
 	// Note: May require elevated privileges or Developer Mode on Windows
 	_ = info // Used for documentation purposes
-	return os.Symlink(target, source)
+	return os.Symlink(relTarget, source)
 }
 
-// swapSymlink swaps a symlink on Windows
+// swapSymlink swaps a symlink on Windows using relative paths
 // Windows doesn't support atomic rename over existing symlinks,
 // so we remove and recreate
 func swapSymlink(path, newTarget string) error {
@@ -38,11 +46,19 @@ func swapSymlink(path, newTarget string) error {
 		return err
 	}
 
+	// Compute relative path from symlink location to target
+	pathDir := filepath.Dir(path)
+	relTarget, err := filepath.Rel(pathDir, newTarget)
+	if err != nil {
+		// Fall back to absolute path if relative fails
+		relTarget = newTarget
+	}
+
 	// Remove existing symlink
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	// Create new symlink
-	return os.Symlink(newTarget, path)
+	return os.Symlink(relTarget, path)
 }

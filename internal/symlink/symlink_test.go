@@ -65,13 +65,20 @@ func TestManager(t *testing.T) {
 		t.Error("Validate(wrong target) = true, want false")
 	}
 
-	// Check ReadLink
+	// Check ReadLink - now returns relative path
 	target, err := mgr.ReadLink(linkPath)
 	if err != nil {
 		t.Fatalf("ReadLink() error: %v", err)
 	}
-	if target != targetFile {
-		t.Errorf("ReadLink() = %q, want %q", target, targetFile)
+	// Resolve relative path and compare
+	resolvedTarget := target
+	if !filepath.IsAbs(target) {
+		resolvedTarget = filepath.Join(filepath.Dir(linkPath), target)
+	}
+	absResolved, _ := filepath.Abs(resolvedTarget)
+	absExpected, _ := filepath.Abs(targetFile)
+	if absResolved != absExpected {
+		t.Errorf("ReadLink() resolved to %q, want %q", absResolved, absExpected)
 	}
 
 	// Remove
