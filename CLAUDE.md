@@ -46,7 +46,7 @@ go mod tidy               # Update dependencies
 
 ### File Organization
 - `cmd/root.go` - Root command, version
-- `cmd/<command>.go` - Top-level commands (init, use, link, unlink)
+- `cmd/<command>.go` - Top-level commands (init, use, link, unlink, migrate)
 - `cmd/<parent>_<child>.go` - Subcommands (profile_create, profile_list)
 - `internal/<domain>/` - Domain logic, keep cmd layer thin
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
@@ -157,6 +158,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	fmt.Println()
 	fmt.Println("Migration complete!")
+
+	// Initialize config file
+	if err := initConfigFile(paths); err != nil {
+		fmt.Printf("Warning: could not create config file: %v\n", err)
+	}
+
 	fmt.Println()
 	fmt.Println("Your Claude Code configuration is now managed by ccp.")
 	fmt.Println()
@@ -168,5 +175,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println("To use a profile per-project, add to your .envrc or .mise.toml:")
 	fmt.Printf("  export CLAUDE_CONFIG_DIR=\"%s/profiles/<name>\"\n", paths.CcpDir)
 
+	return nil
+}
+
+// initConfigFile creates the default ccp.toml if it doesn't exist
+func initConfigFile(paths *config.Paths) error {
+	configPath := paths.CcpDir + "/ccp.toml"
+	if _, err := os.Stat(configPath); err == nil {
+		return nil // Already exists
+	}
+
+	cfg := config.DefaultCcpConfig()
+	if err := cfg.Save(paths.CcpDir); err != nil {
+		return err
+	}
+	fmt.Printf("Created config: %s\n", configPath)
 	return nil
 }

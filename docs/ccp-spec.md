@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.9.0
-**Date:** 2026-01-30
+**Version:** 0.12.0
+**Date:** 2026-01-31
 **Status:** Draft
 
 ---
@@ -648,6 +648,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp init` | Migrate existing ~/.claude to hub + default profile | `ccp init` |
+| `ccp migrate` | Run migrations from older ccp versions | `ccp migrate --dry-run` |
 | `ccp reset` | Undo ccp initialization and restore ~/.claude | `ccp reset` |
 | `ccp use <n>` | Set project profile (auto-detects mise.toml/.envrc) | `ccp use dev` |
 | `ccp use <n> -g` | Set global profile (~/.claude symlink) | `ccp use quickfix -g` |
@@ -727,6 +728,9 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--dry-run` — Show migration plan without executing
 - `--force` — Overwrite existing hub structure
 - `--all-fragments` — Export all setting fragments without interactive selection
+
+**`ccp migrate`**
+- `--dry-run` — Show what would be migrated without making changes
 
 **`ccp doctor`**
 - `--fix` — Automatically fix issues where possible (missing hub dirs, broken symlinks)
@@ -862,6 +866,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.12.0 | 2026-01-31 | — | Added: `ccp migrate` command for running migrations from older ccp versions (profile.yaml → profile.toml, source.yaml → registry.toml). `ccp init` now auto-generates ccp.toml config file. |
 | 0.9.0 | 2026-01-30 | — | Added: GitHub source tracking for skills and plugins (source.yaml manifest). New update commands: `ccp hub update`, `ccp skills update`, `ccp plugin update` to pull latest from GitHub. Plugin add --select flag for interactive component selection. Hooks are now treated as a single folder unit (detected via hooks/hooks.json) and installed with plugin-prefixed name. |
 | 0.8.5 | 2026-01-29 | — | Added: `ccp hub prune` to remove unused hub items not linked to any profile. Supports interactive selection (-i), force removal (-f), and type filtering (--type). |
 | 0.8.4 | 2026-01-29 | — | Added: `ccp plugin list <owner/repo>` to list plugins from a Claude Code marketplace, `ccp plugin add <owner/repo@plugin>` to install plugins (agents, commands, skills, rules) from marketplace repositories into the hub. |
