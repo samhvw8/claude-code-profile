@@ -34,18 +34,45 @@ func (r *GitHubRegistry) CanHandle(identifier string) bool {
 }
 
 func (r *GitHubRegistry) Search(ctx context.Context, query string, opts SearchOptions) ([]PackageInfo, error) {
-	// Add skills-related keywords if user doesn't specify topic
-	searchQuery := query
-	if !strings.Contains(query, "topic:") {
-		searchQuery = query + " claude skills agent"
+	// Search each topic separately and merge results
+	topics := []string{
+		"agent-skills",
+		"claude-code",
+		"claude-skills",
+		"awesome-skills",
+		"claude-plugin",
 	}
 
-	perPage := 20
-	if opts.Limit > 0 && opts.Limit < perPage {
-		perPage = opts.Limit
+	seen := make(map[string]bool)
+	var packages []PackageInfo
+
+	for _, topic := range topics {
+		searchQuery := fmt.Sprintf("%s topic:%s", query, topic)
+		results, err := r.doSearch(ctx, searchQuery, 10)
+		if err != nil {
+			continue
+		}
+		for _, pkg := range results {
+			if !seen[pkg.ID] {
+				seen[pkg.ID] = true
+				packages = append(packages, pkg)
+			}
+		}
 	}
 
-	// Build URL with proper encoding
+	// Limit results
+	limit := 20
+	if opts.Limit > 0 {
+		limit = opts.Limit
+	}
+	if len(packages) > limit {
+		packages = packages[:limit]
+	}
+
+	return packages, nil
+}
+
+func (r *GitHubRegistry) doSearch(ctx context.Context, searchQuery string, perPage int) ([]PackageInfo, error) {
 	baseURL, _ := url.Parse(fmt.Sprintf("%s/search/repositories", r.baseURL))
 	q := baseURL.Query()
 	q.Set("q", searchQuery)
