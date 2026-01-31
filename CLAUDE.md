@@ -2,18 +2,19 @@
 
 ## Project Context
 
-Go CLI tool for managing Claude Code profiles via a central hub. Uses Cobra for CLI, gopkg.in/yaml.v3 for YAML, and Bubble Tea for interactive TUI selection.
+Go CLI tool for managing Claude Code profiles via a central hub. Uses Cobra for CLI, go-toml/v2 for TOML config, gopkg.in/yaml.v3 for YAML, and Bubble Tea for interactive TUI selection.
 
 ## Architecture
 
 ```
 internal/
-├── config/     # Path resolution, types (HubItemType, DataItemType, ShareMode)
+├── config/     # Path resolution, types, CcpConfig (ccp.toml)
 ├── errors/     # Custom error types (ProfileError, HubError, DriftError)
 ├── hub/        # Hub scanning and item management
-├── profile/    # Profile CRUD, manifest (profile.yaml), drift detection
+├── source/     # Unified source system (providers, registries, installer)
+├── profile/    # Profile CRUD, manifest (profile.toml), drift detection
 ├── symlink/    # Platform-specific symlink operations (unix/windows)
-├── migration/  # Init migration with rollback support
+├── migration/  # YAML→TOML migration, source migration, rollback
 └── picker/     # Bubble Tea multi-select TUI
 
 cmd/            # Cobra commands (one file per command/subcommand)
@@ -72,12 +73,60 @@ type ShareMode string      // shared, isolated
 
 // internal/profile/manifest.go
 type Manifest struct {
+    Version           int           // 2 = TOML format
     Name, Description string
     Created, Updated  time.Time
-    Hub               HubLinks    // What hub items to link
-    Data              DataConfig  // Shared vs isolated data dirs
+    Hub               HubLinks      // What hub items to link
+    Data              DataConfig    // Shared vs isolated data dirs
+}
+
+// internal/source/types.go
+type Source struct {
+    Registry, Provider string  // e.g., "github", "git"
+    URL, Path          string  // Clone URL and local path
+    Ref, Commit        string  // Git ref and pinned commit
+    Installed          []string // Installed items (skills/foo, agents/bar)
+}
+
+// internal/config/ccp_config.go
+type CcpConfig struct {
+    DefaultRegistry string         // "skills.sh" or "github"
+    GitHub          GitHubConfig   // topics, per_page
+    SkillsSh        SkillsShConfig // base_url, limit
 }
 ```
+
+## Source System
+
+Unified source management for skills, agents, and plugins:
+
+```bash
+ccp source find <query>              # Search skills.sh (default)
+ccp source find -r github <query>    # Search GitHub repos
+ccp source add <owner/repo>          # Add from GitHub
+ccp source add <url>                 # Add from URL
+ccp source list                      # List installed sources
+ccp source update [name]             # Update sources
+ccp source remove <name>             # Remove source
+```
+
+## Configuration
+
+Global config at `~/.ccp/ccp.toml`:
+
+```toml
+default_registry = "skills.sh"
+
+[github]
+topics = ["agent-skills", "claude-code", "claude-skills"]
+per_page = 10
+
+[skillssh]
+base_url = "https://skills.sh"
+limit = 10
+```
+
+Generate default config: `ccp config init`
 
 ## Before Making Changes
 
