@@ -34,10 +34,11 @@ func (r *GitHubRegistry) CanHandle(identifier string) bool {
 }
 
 func (r *GitHubRegistry) Search(ctx context.Context, query string, opts SearchOptions) ([]PackageInfo, error) {
-	// Add claude-code topic by default unless user specifies their own topic filters
+	// Add agent-skills topic by default (most common for claude skills repos)
+	// User can override with their own topic: filter
 	searchQuery := query
 	if !strings.Contains(query, "topic:") {
-		searchQuery = fmt.Sprintf("%s topic:claude-code", query)
+		searchQuery = query + " topic:agent-skills"
 	}
 
 	perPage := 20
@@ -45,10 +46,15 @@ func (r *GitHubRegistry) Search(ctx context.Context, query string, opts SearchOp
 		perPage = opts.Limit
 	}
 
-	u := fmt.Sprintf("%s/search/repositories?q=%s&sort=stars&per_page=%d",
-		r.baseURL, url.QueryEscape(searchQuery), perPage)
+	// Build URL with proper encoding
+	baseURL, _ := url.Parse(fmt.Sprintf("%s/search/repositories", r.baseURL))
+	q := baseURL.Query()
+	q.Set("q", searchQuery)
+	q.Set("sort", "stars")
+	q.Set("per_page", fmt.Sprintf("%d", perPage))
+	baseURL.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
