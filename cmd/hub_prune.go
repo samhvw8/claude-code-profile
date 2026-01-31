@@ -84,7 +84,8 @@ func runHubPrune(cmd *cobra.Command, args []string) error {
 		}
 
 		profileName := entry.Name()
-		manifestPath := filepath.Join(paths.ProfilesDir, profileName, "profile.yaml")
+		profileDir := filepath.Join(paths.ProfilesDir, profileName)
+		manifestPath := profile.ManifestPath(profileDir)
 
 		manifest, err := profile.LoadManifest(manifestPath)
 		if err != nil {

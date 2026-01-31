@@ -114,7 +114,8 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		if !entry.IsDir() || entry.Name() == "shared" {
 			continue
 		}
-		manifestPath := filepath.Join(paths.ProfilesDir, entry.Name(), "profile.yaml")
+		profileDir := filepath.Join(paths.ProfilesDir, entry.Name())
+		manifestPath := profile.ManifestPath(profileDir)
 		if _, err := profile.LoadManifest(manifestPath); err != nil {
 			profileIssues++
 			fmt.Printf("\n  → Invalid manifest in profile '%s': %v", entry.Name(), err)

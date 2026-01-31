@@ -185,7 +185,7 @@ func runInteractiveEdit(paths *config.Paths, p *profile.Profile) error {
 	}
 
 	// Save manifest
-	manifestPath := filepath.Join(p.Path, "profile.yaml")
+	manifestPath := profile.ManifestPath(p.Path)
 	if err := p.Manifest.Save(manifestPath); err != nil {
 		return fmt.Errorf("failed to save manifest: %w", err)
 	}
@@ -234,7 +234,7 @@ func runFlagEdit(paths *config.Paths, p *profile.Profile) error {
 	}
 
 	// Save manifest
-	manifestPath := filepath.Join(p.Path, "profile.yaml")
+	manifestPath := profile.ManifestPath(p.Path)
 	if err := p.Manifest.Save(manifestPath); err != nil {
 		return fmt.Errorf("failed to save manifest: %w", err)
 	}

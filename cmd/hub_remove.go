@@ -109,7 +109,7 @@ func findProfilesUsingItem(paths *config.Paths, itemType config.HubItemType, ite
 		}
 
 		profileDir := filepath.Join(paths.ProfilesDir, entry.Name())
-		manifestPath := filepath.Join(profileDir, "profile.yaml")
+		manifestPath := profile.ManifestPath(profileDir)
 
 		manifest, err := profile.LoadManifest(manifestPath)
 		if err != nil {

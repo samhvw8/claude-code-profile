@@ -142,7 +142,7 @@ func listAllProfiles(paths *config.Paths) ([]profileInfo, error) {
 		p.brokenLinks = countBrokenLinks(profileDir)
 
 		// Check manifest drift
-		manifestPath := filepath.Join(profileDir, "profile.yaml")
+		manifestPath := profile.ManifestPath(profileDir)
 		if _, err := profile.LoadManifest(manifestPath); err != nil {
 			p.hasDrift = true
 		}

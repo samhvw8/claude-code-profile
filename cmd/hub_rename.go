@@ -81,7 +81,7 @@ func runHubRename(cmd *cobra.Command, args []string) error {
 	symMgr := symlink.New()
 	for _, profileName := range profilesToUpdate {
 		profileDir := paths.ProfileDir(profileName)
-		manifestPath := filepath.Join(profileDir, "profile.yaml")
+		manifestPath := profile.ManifestPath(profileDir)
 
 		// Update symlink
 		oldLink := filepath.Join(profileDir, string(itemType), oldName)
