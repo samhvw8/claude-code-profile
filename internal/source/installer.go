@@ -1,6 +1,7 @@
 package source
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -22,6 +23,17 @@ func NewInstaller(paths *config.Paths, registry *Registry) *Installer {
 		paths:    paths,
 		registry: registry,
 	}
+}
+
+// pluginJSON represents .claude-plugin/plugin.json structure
+type pluginJSON struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Version     string `json:"version"`
+	Skills      any    `json:"skills"`   // string or []string
+	Commands    any    `json:"commands"` // string or []string
+	Agents      any    `json:"agents"`   // string or []string
+	Hooks       any    `json:"hooks"`    // string or object
 }
 
 // Install copies items from a source to the hub
@@ -82,14 +94,32 @@ func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
 }
 
 // resolveItemPaths resolves source path and destination item name
-// Handles both direct items (skills/name) and plugin items (plugins/plugin/skills/name)
+// Handles multiple structures:
+// - Direct items: skills/name -> source/skills/name or source/.claude/skills/name
+// - Plugin items: plugins/plugin/skills/name -> source/plugins/plugin/skills/name
 func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem string, err error) {
 	parts := strings.Split(item, "/")
 
-	// Direct item: skills/name -> source/skills/name -> skills/name
+	// Direct item: skills/name
 	if len(parts) == 2 {
-		srcPath = filepath.Join(sourceDir, parts[0], parts[1])
-		dstItem = item
+		itemType, itemName := parts[0], parts[1]
+
+		// Try root level first
+		srcPath = filepath.Join(sourceDir, itemType, itemName)
+		if _, statErr := os.Stat(srcPath); statErr == nil {
+			dstItem = item
+			return
+		}
+
+		// Try .claude/ folder
+		srcPath = filepath.Join(sourceDir, ".claude", itemType, itemName)
+		if _, statErr := os.Stat(srcPath); statErr == nil {
+			dstItem = item
+			return
+		}
+
+		// Not found in either location
+		err = fmt.Errorf("item not found: %s (checked %s/ and .claude/%s/)", item, itemType, itemType)
 		return
 	}
 
@@ -139,27 +169,44 @@ func (i *Installer) Uninstall(items []string) error {
 }
 
 // DiscoverItems scans a source directory for installable items
+// Supports multiple structures:
+// 1. Root-level: skills/, agents/, commands/, hooks/
+// 2. Claude Code plugin: .claude-plugin/plugin.json with skills/, commands/, agents/
+// 3. .claude folder: .claude/skills/, .claude/commands/
 func (i *Installer) DiscoverItems(sourceDir string) []string {
 	var items []string
+	seen := make(map[string]bool)
 
 	itemTypes := []string{"skills", "agents", "commands", "rules", "hooks", "setting-fragments"}
 
-	// Scan root-level item directories (skills/, agents/, etc.)
-	for _, itemType := range itemTypes {
-		typeDir := filepath.Join(sourceDir, itemType)
-		entries, err := os.ReadDir(typeDir)
-		if err != nil {
-			continue
-		}
-
-		for _, entry := range entries {
-			if entry.IsDir() {
-				items = append(items, fmt.Sprintf("%s/%s", itemType, entry.Name()))
-			}
+	// Helper to add items without duplicates
+	addItem := func(item string) {
+		if !seen[item] {
+			seen[item] = true
+			items = append(items, item)
 		}
 	}
 
-	// Scan plugins/<plugin-name>/<type>/ structure
+	// 1. Scan root-level item directories (skills/, agents/, etc.)
+	for _, itemType := range itemTypes {
+		typeDir := filepath.Join(sourceDir, itemType)
+		i.scanItemDir(typeDir, itemType, addItem)
+	}
+
+	// 2. Scan .claude/ folder (Claude Code standalone config)
+	claudeDir := filepath.Join(sourceDir, ".claude")
+	for _, itemType := range itemTypes {
+		typeDir := filepath.Join(claudeDir, itemType)
+		i.scanItemDir(typeDir, itemType, addItem)
+	}
+
+	// 3. Check for .claude-plugin/plugin.json and parse custom paths
+	pluginJSON := filepath.Join(sourceDir, ".claude-plugin", "plugin.json")
+	if data, err := os.ReadFile(pluginJSON); err == nil {
+		i.discoverFromPluginJSON(sourceDir, data, itemTypes, addItem)
+	}
+
+	// 4. Scan plugins/<plugin-name>/<type>/ structure (legacy/marketplace)
 	pluginDirs := []string{"plugins", "external_plugins"}
 	for _, pluginDir := range pluginDirs {
 		pluginsPath := filepath.Join(sourceDir, pluginDir)
@@ -185,7 +232,7 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 				for _, entry := range entries {
 					if entry.IsDir() {
 						// Use plugin-prefixed name: plugins/<plugin>/<type>/<name>
-						items = append(items, fmt.Sprintf("%s/%s/%s/%s", pluginDir, plugin.Name(), itemType, entry.Name()))
+						addItem(fmt.Sprintf("%s/%s/%s/%s", pluginDir, plugin.Name(), itemType, entry.Name()))
 					}
 				}
 			}
@@ -193,6 +240,74 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 	}
 
 	return items
+}
+
+// scanItemDir scans a directory for item subdirectories
+func (i *Installer) scanItemDir(typeDir, itemType string, addItem func(string)) {
+	entries, err := os.ReadDir(typeDir)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			addItem(fmt.Sprintf("%s/%s", itemType, entry.Name()))
+		}
+	}
+}
+
+// discoverFromPluginJSON parses plugin.json for custom component paths
+func (i *Installer) discoverFromPluginJSON(sourceDir string, data []byte, _ []string, addItem func(string)) {
+	var plugin pluginJSON
+	if err := json.Unmarshal(data, &plugin); err != nil {
+		return
+	}
+
+	// Parse custom paths from plugin.json
+	pathFields := map[string]any{
+		"skills":   plugin.Skills,
+		"commands": plugin.Commands,
+		"agents":   plugin.Agents,
+	}
+
+	for itemType, pathVal := range pathFields {
+		if pathVal == nil {
+			continue
+		}
+
+		var paths []string
+		switch v := pathVal.(type) {
+		case string:
+			paths = []string{v}
+		case []any:
+			for _, p := range v {
+				if s, ok := p.(string); ok {
+					paths = append(paths, s)
+				}
+			}
+		}
+
+		for _, p := range paths {
+			// Clean path: remove ./ prefix
+			p = strings.TrimPrefix(p, "./")
+			fullPath := filepath.Join(sourceDir, p)
+
+			info, err := os.Stat(fullPath)
+			if err != nil {
+				continue
+			}
+
+			if info.IsDir() {
+				// It's a directory - scan for items
+				i.scanItemDir(fullPath, itemType, addItem)
+			} else if strings.HasSuffix(p, ".md") {
+				// It's a markdown file - extract item name from path
+				// e.g., "./custom/cmd.md" -> commands/cmd
+				name := strings.TrimSuffix(filepath.Base(p), ".md")
+				addItem(fmt.Sprintf("%s/%s", itemType, name))
+			}
+		}
+	}
 }
 
 func copyTree(src, dst string) error {
@@ -221,7 +336,13 @@ func copyDir(src, dst string) error {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
-		if entry.IsDir() {
+		// Use os.Stat to resolve symlinks and get actual type
+		info, err := os.Stat(srcPath)
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
 			if err := copyDir(srcPath, dstPath); err != nil {
 				return err
 			}
