@@ -44,10 +44,11 @@ func (r *SkillsShRegistry) CanHandle(identifier string) bool {
 }
 
 func (r *SkillsShRegistry) Search(ctx context.Context, query string, opts SearchOptions) ([]PackageInfo, error) {
-	u := fmt.Sprintf("%s/api/v1/search?q=%s", r.baseURL, url.QueryEscape(query))
+	limit := 10
 	if opts.Limit > 0 {
-		u += fmt.Sprintf("&limit=%d", opts.Limit)
+		limit = opts.Limit
 	}
+	u := fmt.Sprintf("%s/api/search?q=%s&limit=%d", r.baseURL, url.QueryEscape(query), limit)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
@@ -66,29 +67,29 @@ func (r *SkillsShRegistry) Search(ctx context.Context, query string, opts Search
 	}
 
 	var result struct {
-		Packages []struct {
-			Slug        string   `json:"slug"`
-			Name        string   `json:"name"`
-			Description string   `json:"description"`
-			Owner       string   `json:"owner"`
-			Version     string   `json:"version"`
-			Tags        []string `json:"tags"`
-		} `json:"packages"`
+		Skills []struct {
+			Slug     string `json:"id"`
+			Name     string `json:"name"`
+			Source   string `json:"topSource"`
+			Installs int    `json:"installs"`
+		} `json:"skills"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 
-	packages := make([]PackageInfo, len(result.Packages))
-	for i, p := range result.Packages {
+	packages := make([]PackageInfo, len(result.Skills))
+	for i, s := range result.Skills {
+		pkg := s.Source
+		if pkg == "" {
+			pkg = s.Slug
+		}
 		packages[i] = PackageInfo{
-			ID:          fmt.Sprintf("%s/%s", p.Owner, p.Slug),
-			Name:        p.Name,
-			Description: p.Description,
+			ID:          fmt.Sprintf("%s@%s", pkg, s.Name),
+			Name:        s.Name,
+			Description: fmt.Sprintf("%d installs", s.Installs),
 			Registry:    "skills.sh",
-			Version:     p.Version,
-			Tags:        p.Tags,
 		}
 	}
 
