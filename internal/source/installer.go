@@ -41,39 +41,78 @@ func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
 	var installed []string
 
 	for _, item := range items {
-		parts := strings.SplitN(item, "/", 2)
-		if len(parts) != 2 {
-			return installed, &SourceError{Op: "install", Source: sourceID,
-				Err: fmt.Errorf("invalid item format: %s", item)}
+		// Resolve source and destination paths
+		srcPath, dstItem, err := i.resolveItemPaths(sourceDir, item)
+		if err != nil {
+			return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
 		}
-		itemType, itemName := parts[0], parts[1]
 
-		srcPath := filepath.Join(sourceDir, itemType, itemName)
 		if _, err := os.Stat(srcPath); err != nil {
 			return installed, &SourceError{Op: "install", Source: sourceID,
 				Err: fmt.Errorf("item not found: %s", item)}
 		}
 
+		parts := strings.SplitN(dstItem, "/", 2)
+		if len(parts) != 2 {
+			return installed, &SourceError{Op: "install", Source: sourceID,
+				Err: fmt.Errorf("invalid item format: %s", dstItem)}
+		}
+		itemType, itemName := parts[0], parts[1]
+
 		dstPath := filepath.Join(i.paths.HubDir, itemType, itemName)
 
 		if _, err := os.Stat(dstPath); err == nil {
 			return installed, &SourceError{Op: "install", Source: sourceID,
-				Err: fmt.Errorf("item already exists: %s", item)}
+				Err: fmt.Errorf("item already exists: %s", dstItem)}
 		}
 
 		if err := copyTree(srcPath, dstPath); err != nil {
 			return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
 		}
 
-		if err := i.registry.AddInstalled(sourceID, item); err != nil {
+		if err := i.registry.AddInstalled(sourceID, dstItem); err != nil {
 			os.RemoveAll(dstPath)
 			return installed, err
 		}
 
-		installed = append(installed, item)
+		installed = append(installed, dstItem)
 	}
 
 	return installed, nil
+}
+
+// resolveItemPaths resolves source path and destination item name
+// Handles both direct items (skills/name) and plugin items (plugins/plugin/skills/name)
+func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem string, err error) {
+	parts := strings.Split(item, "/")
+
+	// Direct item: skills/name -> source/skills/name -> skills/name
+	if len(parts) == 2 {
+		srcPath = filepath.Join(sourceDir, parts[0], parts[1])
+		dstItem = item
+		return
+	}
+
+	// Plugin item: plugins/plugin/skills/name -> source/plugins/plugin/skills/name -> skills/name or skills/plugin-name
+	if len(parts) == 4 && (parts[0] == "plugins" || parts[0] == "external_plugins") {
+		pluginName := parts[1]
+		itemType := parts[2]
+		itemName := parts[3]
+
+		srcPath = filepath.Join(sourceDir, parts[0], pluginName, itemType, itemName)
+
+		// Avoid duplicate: if item name equals plugin name, just use item name
+		// e.g., plugins/playground/skills/playground -> skills/playground (not skills/playground-playground)
+		if itemName == pluginName {
+			dstItem = fmt.Sprintf("%s/%s", itemType, itemName)
+		} else {
+			dstItem = fmt.Sprintf("%s/%s-%s", itemType, pluginName, itemName)
+		}
+		return
+	}
+
+	err = fmt.Errorf("invalid item format: %s", item)
+	return
 }
 
 // Uninstall removes items from hub
@@ -105,6 +144,7 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 
 	itemTypes := []string{"skills", "agents", "commands", "rules", "hooks", "setting-fragments"}
 
+	// Scan root-level item directories (skills/, agents/, etc.)
 	for _, itemType := range itemTypes {
 		typeDir := filepath.Join(sourceDir, itemType)
 		entries, err := os.ReadDir(typeDir)
@@ -115,6 +155,39 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 		for _, entry := range entries {
 			if entry.IsDir() {
 				items = append(items, fmt.Sprintf("%s/%s", itemType, entry.Name()))
+			}
+		}
+	}
+
+	// Scan plugins/<plugin-name>/<type>/ structure
+	pluginDirs := []string{"plugins", "external_plugins"}
+	for _, pluginDir := range pluginDirs {
+		pluginsPath := filepath.Join(sourceDir, pluginDir)
+		plugins, err := os.ReadDir(pluginsPath)
+		if err != nil {
+			continue
+		}
+
+		for _, plugin := range plugins {
+			if !plugin.IsDir() {
+				continue
+			}
+			pluginPath := filepath.Join(pluginsPath, plugin.Name())
+
+			// Scan each item type within the plugin
+			for _, itemType := range itemTypes {
+				typeDir := filepath.Join(pluginPath, itemType)
+				entries, err := os.ReadDir(typeDir)
+				if err != nil {
+					continue
+				}
+
+				for _, entry := range entries {
+					if entry.IsDir() {
+						// Use plugin-prefixed name: plugins/<plugin>/<type>/<name>
+						items = append(items, fmt.Sprintf("%s/%s/%s/%s", pluginDir, plugin.Name(), itemType, entry.Name()))
+					}
+				}
 			}
 		}
 	}

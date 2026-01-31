@@ -6,10 +6,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/picker"
 	"github.com/samhoang/ccp/internal/source"
 )
 
-var sourceInstallAll bool
+var (
+	sourceInstallAll         bool
+	sourceInstallInteractive bool
+)
 
 var sourceInstallCmd = &cobra.Command{
 	Use:   "install <source> [items...]",
@@ -19,13 +23,15 @@ var sourceInstallCmd = &cobra.Command{
 Examples:
   ccp source install samhoang/skills skills/debugging
   ccp source install samhoang/skills skills/debugging commands/debug
-  ccp source install samhoang/skills --all`,
+  ccp source install samhoang/skills --all
+  ccp source install samhoang/skills -i  # Interactive selection`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runSourceInstall,
 }
 
 func init() {
 	sourceInstallCmd.Flags().BoolVarP(&sourceInstallAll, "all", "a", false, "Install all available items")
+	sourceInstallCmd.Flags().BoolVarP(&sourceInstallInteractive, "interactive", "i", false, "Interactive item selection")
 	sourceCmd.AddCommand(sourceInstallCmd)
 }
 
@@ -49,13 +55,38 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	installer := source.NewInstaller(paths, registry)
+	available := installer.DiscoverItems(src.Path)
 
 	if sourceInstallAll {
-		items = installer.DiscoverItems(src.Path)
+		items = available
+	}
+
+	// Interactive selection
+	if sourceInstallInteractive && len(items) == 0 {
+		if len(available) == 0 {
+			return fmt.Errorf("no items found in source")
+		}
+
+		var pickerItems []picker.Item
+		for _, item := range available {
+			pickerItems = append(pickerItems, picker.Item{
+				ID:    item,
+				Label: item,
+			})
+		}
+
+		selected, err := picker.Run("Select items to install", pickerItems)
+		if err != nil {
+			return fmt.Errorf("selection failed: %w", err)
+		}
+		if selected == nil || len(selected) == 0 {
+			fmt.Println("Cancelled")
+			return nil
+		}
+		items = selected
 	}
 
 	if len(items) == 0 {
-		available := installer.DiscoverItems(src.Path)
 		if len(available) == 0 {
 			return fmt.Errorf("no items found in source")
 		}
@@ -65,6 +96,7 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println()
 		fmt.Printf("Install with: ccp source install %s <item>\n", sourceID)
+		fmt.Printf("Or use: ccp source install %s -i (interactive)\n", sourceID)
 		return nil
 	}
 

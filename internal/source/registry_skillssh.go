@@ -42,6 +42,10 @@ func (r *SkillsShRegistry) CanHandle(identifier string) bool {
 	if strings.HasPrefix(identifier, "github:") {
 		return false
 	}
+	// Don't handle owner/repo@ref format (that's GitHub direct)
+	if strings.Contains(identifier, "@") {
+		return false
+	}
 	// Default registry for owner/repo format without protocol
 	if !strings.Contains(identifier, "://") && !strings.HasSuffix(identifier, ".git") {
 		return true

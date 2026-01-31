@@ -32,8 +32,12 @@ func TestGitHubRegistryCanHandle(t *testing.T) {
 		want bool
 	}{
 		{"github:owner/name", true},
-		{"owner/name", false},
+		{"owner/name@ref", true},           // owner/repo@ref format
+		{"owner/name@v1.0.0", true},        // with version tag
+		{"anthropics/repo@playground", true}, // user's use case
+		{"owner/name", false},              // no ref = skills.sh
 		{"skills.sh/owner/name", false},
+		{"https://github.com/owner/repo", false}, // URLs not handled here
 	}
 
 	for _, tt := range tests {
@@ -53,6 +57,8 @@ func TestDetectRegistry(t *testing.T) {
 		{"owner/name", "skills.sh"},
 		{"skills.sh/owner/name", "skills.sh"},
 		{"github:owner/name", "github"},
+		{"owner/name@ref", "github"},    // owner/repo@ref → github
+		{"owner/name@v1.0", "github"},   // with version
 	}
 
 	for _, tt := range tests {

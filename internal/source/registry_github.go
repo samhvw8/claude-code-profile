@@ -32,7 +32,19 @@ func (r *GitHubRegistry) Name() string {
 }
 
 func (r *GitHubRegistry) CanHandle(identifier string) bool {
-	return strings.HasPrefix(identifier, "github:")
+	// Explicit github: prefix
+	if strings.HasPrefix(identifier, "github:") {
+		return true
+	}
+	// owner/repo@ref format (@ indicates explicit ref, treat as direct GitHub)
+	if strings.Contains(identifier, "@") && strings.Contains(identifier, "/") {
+		// Exclude URLs
+		if strings.Contains(identifier, "://") || strings.Contains(identifier, ".com") {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 func (r *GitHubRegistry) Search(ctx context.Context, query string, opts SearchOptions) ([]PackageInfo, error) {
@@ -137,6 +149,13 @@ func (r *GitHubRegistry) doSearch(ctx context.Context, searchQuery string, perPa
 func (r *GitHubRegistry) Get(ctx context.Context, packageID string) (*PackageDetails, error) {
 	packageID = strings.TrimPrefix(packageID, "github:")
 
+	// Parse ref from owner/repo@ref format
+	var requestedRef string
+	if idx := strings.Index(packageID, "@"); idx != -1 {
+		requestedRef = packageID[idx+1:]
+		packageID = packageID[:idx]
+	}
+
 	u := fmt.Sprintf("%s/repos/%s", r.baseURL, packageID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
@@ -176,6 +195,12 @@ func (r *GitHubRegistry) Get(ctx context.Context, packageID string) (*PackageDet
 		return nil, err
 	}
 
+	// Use requestedRef if provided, otherwise default branch
+	ref := result.DefaultBranch
+	if requestedRef != "" {
+		ref = requestedRef
+	}
+
 	return &PackageDetails{
 		PackageInfo: PackageInfo{
 			ID:          result.FullName,
@@ -186,6 +211,6 @@ func (r *GitHubRegistry) Get(ctx context.Context, packageID string) (*PackageDet
 		},
 		DownloadURL:  result.CloneURL,
 		ProviderType: "git",
-		Ref:          result.DefaultBranch,
+		Ref:          ref,
 	}, nil
 }

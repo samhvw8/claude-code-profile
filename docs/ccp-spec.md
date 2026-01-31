@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.12.0
+**Version:** 0.13.0
 **Date:** 2026-01-31
 **Status:** Draft
 
@@ -866,6 +866,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.13.0 | 2026-01-31 | — | Added: `owner/repo@ref` format for direct GitHub source add. Plugin discovery now scans `plugins/` and `external_plugins/` directories. `source install -i` interactive item selection. Smart naming avoids duplicates when plugin name equals item name. |
 | 0.12.0 | 2026-01-31 | — | Added: `ccp migrate` command for running migrations from older ccp versions (profile.yaml → profile.toml, source.yaml → registry.toml). `ccp init` now auto-generates ccp.toml config file. |
 | 0.9.0 | 2026-01-30 | — | Added: GitHub source tracking for skills and plugins (source.yaml manifest). New update commands: `ccp hub update`, `ccp skills update`, `ccp plugin update` to pull latest from GitHub. Plugin add --select flag for interactive component selection. Hooks are now treated as a single folder unit (detected via hooks/hooks.json) and installed with plugin-prefixed name. |
 | 0.8.5 | 2026-01-29 | — | Added: `ccp hub prune` to remove unused hub items not linked to any profile. Supports interactive selection (-i), force removal (-f), and type filtering (--type). |
