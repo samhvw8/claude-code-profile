@@ -173,6 +173,11 @@ type HookCommand struct {
 
 Legacy `hook.yaml` format still supported. `GetHookManifest()` tries `hooks.json` first, falls back to `hook.yaml`.
 
+Run `ccp migrate` to convert existing `hook.yaml` to `hooks.json`:
+- Moves scripts to `scripts/` subdirectory
+- Converts paths to `${CLAUDE_PLUGIN_ROOT}`
+- Removes old `hook.yaml` after conversion
+
 ## Configuration
 
 Global config at `~/.ccp/ccp.toml`:
