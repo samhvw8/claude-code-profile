@@ -93,6 +93,30 @@ func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
 	return installed, nil
 }
 
+// validExtensions are the file extensions to check when resolving flat file items
+var validExtensions = []string{".md", ".yaml", ".yml", ".json", ".toml"}
+
+// tryFileExtensions checks if an item exists as a file with any valid extension
+// Returns the full path and the extension found (e.g., ".md")
+func (i *Installer) tryFileExtensions(baseDir, itemType, itemName string) (filePath, ext string) {
+	for _, e := range validExtensions {
+		candidate := filepath.Join(baseDir, itemType, itemName+e)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, e
+		}
+	}
+	return "", ""
+}
+
+// formatPluginDstItem formats the destination item name for plugin items
+// ext is optional - pass empty string for directories, or ".md" etc for files
+func formatPluginDstItem(pluginName, itemType, itemName, ext string) string {
+	if itemName == pluginName {
+		return fmt.Sprintf("%s/%s%s", itemType, itemName, ext)
+	}
+	return fmt.Sprintf("%s/%s-%s%s", itemType, pluginName, itemName, ext)
+}
+
 // resolveItemPaths resolves source path and destination item name
 // Handles multiple structures:
 // - Direct items: skills/name -> source/skills/name or source/.claude/skills/name
@@ -104,17 +128,31 @@ func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem s
 	if len(parts) == 2 {
 		itemType, itemName := parts[0], parts[1]
 
-		// Try root level first
+		// Try root level first (directory)
 		srcPath = filepath.Join(sourceDir, itemType, itemName)
 		if _, statErr := os.Stat(srcPath); statErr == nil {
 			dstItem = item
 			return
 		}
 
-		// Try .claude/ folder
+		// Try root level as file with extension
+		if filePath, ext := i.tryFileExtensions(sourceDir, itemType, itemName); filePath != "" {
+			srcPath = filePath
+			dstItem = fmt.Sprintf("%s/%s%s", itemType, itemName, ext)
+			return
+		}
+
+		// Try .claude/ folder (directory)
 		srcPath = filepath.Join(sourceDir, ".claude", itemType, itemName)
 		if _, statErr := os.Stat(srcPath); statErr == nil {
 			dstItem = item
+			return
+		}
+
+		// Try .claude/ folder as file
+		if filePath, ext := i.tryFileExtensions(filepath.Join(sourceDir, ".claude"), itemType, itemName); filePath != "" {
+			srcPath = filePath
+			dstItem = fmt.Sprintf("%s/%s%s", itemType, itemName, ext)
 			return
 		}
 
@@ -129,15 +167,25 @@ func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem s
 		itemType := parts[2]
 		itemName := parts[3]
 
-		srcPath = filepath.Join(sourceDir, parts[0], pluginName, itemType, itemName)
+		baseDir := filepath.Join(sourceDir, parts[0], pluginName)
 
-		// Avoid duplicate: if item name equals plugin name, just use item name
-		// e.g., plugins/playground/skills/playground -> skills/playground (not skills/playground-playground)
-		if itemName == pluginName {
-			dstItem = fmt.Sprintf("%s/%s", itemType, itemName)
-		} else {
-			dstItem = fmt.Sprintf("%s/%s-%s", itemType, pluginName, itemName)
+		// Try as directory first
+		srcPath = filepath.Join(baseDir, itemType, itemName)
+		if _, statErr := os.Stat(srcPath); statErr == nil {
+			dstItem = formatPluginDstItem(pluginName, itemType, itemName, "")
+			return
 		}
+
+		// Try as file with extension
+		if filePath, ext := i.tryFileExtensions(baseDir, itemType, itemName); filePath != "" {
+			srcPath = filePath
+			dstItem = formatPluginDstItem(pluginName, itemType, itemName, ext)
+			return
+		}
+
+		// Return path for error message (will fail os.Stat in caller)
+		srcPath = filepath.Join(baseDir, itemType, itemName)
+		dstItem = formatPluginDstItem(pluginName, itemType, itemName, "")
 		return
 	}
 
