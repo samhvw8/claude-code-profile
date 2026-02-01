@@ -87,6 +87,8 @@ ccp use --show
 │       ├── tasks/
 │       ├── todos/
 │       └── ...
+│
+└── ccp.toml                          # Config + installed sources
 
 ~/.claude → ~/.ccp/profiles/default   # Symlink to active profile
 ```
@@ -132,7 +134,9 @@ ccp use --show
 | Command | Description |
 |---------|-------------|
 | `ccp source find <query>` | Search skills.sh for skills |
-| `ccp source add <owner/repo>` | Install from GitHub |
+| `ccp source install` | Sync all sources from ccp.toml |
+| `ccp source install <owner/repo>` | Install from GitHub |
+| `ccp source add <owner/repo>` | Add source without installing |
 | `ccp source list` | List installed sources |
 | `ccp source update` | Update installed sources |
 
@@ -198,6 +202,24 @@ ccp completion zsh > "${fpath[1]}/_ccp"
 # Fish
 ccp completion fish | source
 ```
+
+## Machine Migration (chezmoi)
+
+ccp stores all configuration in `~/.ccp/ccp.toml` and `~/.ccp/hub/`, making it easy to sync across machines:
+
+```bash
+# On source machine - add to chezmoi
+chezmoi add ~/.ccp/ccp.toml
+chezmoi add ~/.ccp/hub
+
+# On new machine - restore
+chezmoi apply
+ccp source install  # Syncs all sources from ccp.toml
+```
+
+The `ccp source install` command (with no arguments) will:
+- Clone any missing source repositories
+- Reinstall hub items listed in `ccp.toml`
 
 ## Development
 

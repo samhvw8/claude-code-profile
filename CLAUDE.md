@@ -231,6 +231,16 @@ per_page = 10
 [skillssh]
 base_url = "https://skills.sh"
 limit = 10
+
+# Installed sources (auto-managed by ccp source commands)
+[sources.'owner/repo']
+registry = 'github'
+provider = 'git'
+url = 'https://github.com/owner/repo.git'
+path = '/Users/.../.ccp/sources/owner--repo'
+ref = 'main'
+commit = 'abc123...'
+installed = ['skills/my-skill', 'agents/my-agent']
 ```
 
 Generate default config: `ccp config init`
