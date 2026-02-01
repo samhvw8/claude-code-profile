@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.19.0**
+**Current version: v0.20.0**
 
 ## Project Context
 
@@ -12,9 +12,9 @@ Go CLI tool for managing Claude Code profiles via a central hub. Uses Cobra for 
 internal/
 ├── config/     # Path resolution, types, CcpConfig (ccp.toml)
 ├── errors/     # Custom error types (ProfileError, HubError, DriftError)
-├── hub/        # Hub scanning and item management
+├── hub/        # Hub scanning, item management, fragment processing
 ├── source/     # Unified source system (providers, registries, installer)
-├── profile/    # Profile CRUD, manifest (profile.toml), drift detection
+├── profile/    # Profile CRUD, manifest (profile.toml), settings generation, drift detection
 ├── symlink/    # Platform-specific symlink operations (unix/windows)
 ├── migration/  # YAML→TOML migration, source migration, rollback
 └── picker/     # Bubble Tea multi-select TUI
@@ -37,7 +37,7 @@ go mod tidy               # Update dependencies
 ### Go Conventions
 - Standard Go formatting (gofmt)
 - Errors returned, not panicked
-- Interfaces for testability (Scanner, Manager, Detector)
+- Interfaces for testability (Scanner, Manager, Detector, FragmentReader, HookProcessor)
 - Platform-specific code via build tags (`//go:build !windows`)
 
 ### CLI Patterns
@@ -97,6 +97,32 @@ type CcpConfig struct {
     DefaultRegistry string         // "skills.sh" or "github"
     GitHub          GitHubConfig   // topics, per_page
     SkillsSh        SkillsShConfig // base_url, limit
+}
+
+// internal/hub/fragment.go
+type Fragment struct {
+    Name        string      // Fragment identifier
+    Description string      // Human-readable description
+    Key         string      // Settings key to set
+    Value       interface{} // Value to set
+}
+
+type FragmentReader interface {
+    Read(hubDir, name string) (*Fragment, error)
+    ReadAll(hubDir string, names []string) ([]*Fragment, error)
+}
+
+// internal/profile/generator.go
+type HookProcessor interface {
+    ProcessAll(manifest *Manifest) (map[HookType][]SettingsHookEntry, error)
+}
+
+type FragmentProcessor interface {
+    ProcessAll(manifest *Manifest) (map[string]interface{}, error)
+}
+
+type SettingsBuilder interface {
+    Build(manifest *Manifest) (map[string]interface{}, error)
 }
 ```
 

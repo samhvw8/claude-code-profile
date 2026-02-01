@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gopkg.in/yaml.v3"
-
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/hub"
 )
@@ -152,35 +150,13 @@ func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manife
 	return writeJSONFile(settingsPath, settings)
 }
 
-// settingFragment represents a single setting fragment (local copy to avoid import cycle)
-type settingFragment struct {
-	Name        string      `yaml:"name"`
-	Description string      `yaml:"description,omitempty"`
-	Key         string      `yaml:"key"`
-	Value       interface{} `yaml:"value"`
-}
+// settingFragment is deprecated - use hub.Fragment instead
+// Kept temporarily for backward compatibility during migration
 
 // mergeSettingFragments merges multiple fragments into a settings map
+// Uses hub.MergeFragmentsFromHub for the actual implementation
 func mergeSettingFragments(hubDir string, fragmentNames []string) (map[string]interface{}, error) {
-	settings := make(map[string]interface{})
-
-	for _, name := range fragmentNames {
-		fragmentPath := filepath.Join(hubDir, string(config.HubSettingFragments), name+".yaml")
-
-		data, err := os.ReadFile(fragmentPath)
-		if err != nil {
-			return nil, err
-		}
-
-		var fragment settingFragment
-		if err := yaml.Unmarshal(data, &fragment); err != nil {
-			return nil, err
-		}
-
-		settings[fragment.Key] = fragment.Value
-	}
-
-	return settings, nil
+	return hub.MergeFragmentsFromHub(hubDir, fragmentNames)
 }
 
 // writeJSONFile writes data as JSON without HTML escaping

@@ -20,23 +20,11 @@ func NewSettingsManager(paths *config.Paths) *SettingsManager {
 }
 
 // Settings represents the settings.json structure
+// Uses config.SettingsHookEntry for hook entries to avoid type duplication
 type Settings struct {
-	Hooks           map[string][]HookEntry `json:"hooks,omitempty"`
-	OtherSettings   map[string]interface{} `json:"-"` // Preserve other settings
-	rawData         map[string]interface{}
-}
-
-// HookEntry represents a hook configuration in settings.json
-type HookEntry struct {
-	Hooks   []HookCommand `json:"hooks"`
-	Matcher string        `json:"matcher,omitempty"`
-}
-
-// HookCommand represents the actual command in a hook
-type HookCommand struct {
-	Command string `json:"command"`
-	Timeout int    `json:"timeout,omitempty"`
-	Type    string `json:"type"`
+	Hooks         map[config.HookType][]config.SettingsHookEntry `json:"hooks,omitempty"`
+	OtherSettings map[string]interface{}                         `json:"-"` // Preserve other settings
+	rawData       map[string]interface{}
 }
 
 // LoadSettings loads settings.json from a profile directory
@@ -47,7 +35,7 @@ func (sm *SettingsManager) LoadSettings(profileDir string) (*Settings, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &Settings{
-				Hooks:   make(map[string][]HookEntry),
+				Hooks:   make(map[config.HookType][]config.SettingsHookEntry),
 				rawData: make(map[string]interface{}),
 			}, nil
 		}
@@ -60,24 +48,25 @@ func (sm *SettingsManager) LoadSettings(profileDir string) (*Settings, error) {
 	}
 
 	settings := &Settings{
-		Hooks:   make(map[string][]HookEntry),
+		Hooks:   make(map[config.HookType][]config.SettingsHookEntry),
 		rawData: rawData,
 	}
 
 	// Parse hooks if present
 	if hooksData, ok := rawData["hooks"].(map[string]interface{}); ok {
-		for hookType, entries := range hooksData {
+		for hookTypeName, entries := range hooksData {
+			hookType := config.HookType(hookTypeName)
 			if entriesArr, ok := entries.([]interface{}); ok {
 				for _, entry := range entriesArr {
 					if entryMap, ok := entry.(map[string]interface{}); ok {
-						hookEntry := HookEntry{}
+						hookEntry := config.SettingsHookEntry{}
 						if matcher, ok := entryMap["matcher"].(string); ok {
 							hookEntry.Matcher = matcher
 						}
 						if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
 							for _, h := range hooksArr {
 								if hMap, ok := h.(map[string]interface{}); ok {
-									cmd := HookCommand{Type: "command"}
+									cmd := config.SettingsHookCommand{Type: "command"}
 									if c, ok := hMap["command"].(string); ok {
 										cmd.Command = c
 									}
@@ -135,7 +124,7 @@ func (sm *SettingsManager) SaveSettings(profileDir string, settings *Settings) e
 				entryData["hooks"] = hooksArr
 				entriesData = append(entriesData, entryData)
 			}
-			hooksData[hookType] = entriesData
+			hooksData[string(hookType)] = entriesData
 		}
 		output["hooks"] = hooksData
 	}
@@ -152,11 +141,11 @@ func (sm *SettingsManager) SyncHooksFromManifest(profileDir string, manifest *Ma
 
 	// Clear existing hooks that were managed by ccp
 	// We'll rebuild from manifest
-	settings.Hooks = make(map[string][]HookEntry)
+	settings.Hooks = make(map[config.HookType][]config.SettingsHookEntry)
 
 	// Add hooks from manifest
 	for _, hookCfg := range manifest.Hooks {
-		hookType := string(hookCfg.Type)
+		hookType := hookCfg.Type
 
 		// Determine command
 		command := hookCfg.Command
@@ -172,8 +161,8 @@ func (sm *SettingsManager) SyncHooksFromManifest(profileDir string, manifest *Ma
 			timeout = config.DefaultHookTimeout()
 		}
 
-		entry := HookEntry{
-			Hooks: []HookCommand{
+		entry := config.SettingsHookEntry{
+			Hooks: []config.SettingsHookCommand{
 				{
 					Command: command,
 					Timeout: timeout,
