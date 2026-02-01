@@ -233,6 +233,10 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 					if entry.IsDir() {
 						// Use plugin-prefixed name: plugins/<plugin>/<type>/<name>
 						addItem(fmt.Sprintf("%s/%s/%s/%s", pluginDir, plugin.Name(), itemType, entry.Name()))
+					} else if isValidItemFile(entry.Name()) {
+						// Also scan for flat files (e.g., agents/foo.md, commands/bar.md)
+						name := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+						addItem(fmt.Sprintf("%s/%s/%s/%s", pluginDir, plugin.Name(), itemType, name))
 					}
 				}
 			}
@@ -242,7 +246,7 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 	return items
 }
 
-// scanItemDir scans a directory for item subdirectories
+// scanItemDir scans a directory for item subdirectories and valid item files
 func (i *Installer) scanItemDir(typeDir, itemType string, addItem func(string)) {
 	entries, err := os.ReadDir(typeDir)
 	if err != nil {
@@ -252,8 +256,32 @@ func (i *Installer) scanItemDir(typeDir, itemType string, addItem func(string)) 
 	for _, entry := range entries {
 		if entry.IsDir() {
 			addItem(fmt.Sprintf("%s/%s", itemType, entry.Name()))
+		} else if isValidItemFile(entry.Name()) {
+			// Also scan for flat files (e.g., agents/foo.md, commands/bar.md)
+			name := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			addItem(fmt.Sprintf("%s/%s", itemType, name))
 		}
 	}
+}
+
+// isValidItemFile checks if a file is a valid item file (not hidden, valid extension)
+func isValidItemFile(name string) bool {
+	// Skip hidden files
+	if strings.HasPrefix(name, ".") {
+		return false
+	}
+
+	// Valid item file extensions
+	ext := strings.ToLower(filepath.Ext(name))
+	validExts := map[string]bool{
+		".md":   true, // Markdown (skills, agents, commands)
+		".yaml": true, // YAML config
+		".yml":  true, // YAML config
+		".json": true, // JSON config
+		".toml": true, // TOML config
+	}
+
+	return validExts[ext]
 }
 
 // discoverFromPluginJSON parses plugin.json for custom component paths
