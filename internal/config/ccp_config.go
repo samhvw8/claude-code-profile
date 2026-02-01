@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -17,6 +18,22 @@ type CcpConfig struct {
 
 	// Default registry for searches
 	DefaultRegistry string `toml:"default_registry"`
+
+	// Installed sources (replaces registry.toml)
+	Sources map[string]SourceConfig `toml:"sources,omitempty"`
+}
+
+// SourceConfig represents an installed source in ccp.toml
+type SourceConfig struct {
+	Registry  string    `toml:"registry"`
+	Provider  string    `toml:"provider"`
+	URL       string    `toml:"url"`
+	Path      string    `toml:"path"`
+	Ref       string    `toml:"ref,omitempty"`
+	Commit    string    `toml:"commit,omitempty"`
+	Checksum  string    `toml:"checksum,omitempty"`
+	Updated   time.Time `toml:"updated"`
+	Installed []string  `toml:"installed,omitempty"`
 }
 
 // GitHubConfig holds GitHub registry settings

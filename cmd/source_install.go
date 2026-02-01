@@ -26,12 +26,12 @@ var sourceInstallCmd = &cobra.Command{
 If the source is not already added, it will be added automatically.
 If no items are specified, interactive selection is shown.
 
-When called without arguments, syncs all sources from registry.toml:
+When called without arguments, syncs all sources from ccp.toml:
 - Clones missing sources
 - Reinstalls items listed in registry
 
 Examples:
-  ccp source install                                  # Sync all from registry.toml
+  ccp source install                                  # Sync all from ccp.toml
   ccp source install remorses/playwriter              # Auto-add, interactive selection
   ccp source install owner/repo skills/my-skill
   ccp source install owner/repo --all`,
@@ -252,7 +252,7 @@ func addSourceForInstall(identifier string, paths *config.Paths, registry *sourc
 	return nil
 }
 
-// runSourceSync syncs all sources from registry.toml
+// runSourceSync syncs all sources from ccp.toml
 // For each source in registry:
 // 1. Clone if missing
 // 2. Reinstall items from Installed list

@@ -12,7 +12,7 @@ import (
 	"github.com/samhoang/ccp/internal/source"
 )
 
-// SourceMigrator handles migration from source.yaml files to registry.toml
+// SourceMigrator handles migration from source.yaml files to ccp.toml
 type SourceMigrator struct {
 	paths *config.Paths
 }
@@ -39,7 +39,7 @@ type oldSourceManifest struct {
 	} `yaml:"plugin"`
 }
 
-// MigrateSourceYAML migrates per-item source.yaml files to registry.toml
+// MigrateSourceYAML migrates per-item source.yaml files to ccp.toml
 func (m *SourceMigrator) MigrateSourceYAML() (int, error) {
 	registry, err := source.LoadRegistry(m.paths.RegistryPath())
 	if err != nil {

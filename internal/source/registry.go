@@ -7,63 +7,131 @@ import (
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
+	"github.com/samhoang/ccp/internal/config"
 )
 
 // RegistryVersion is the current registry format version
 const RegistryVersion = 1
 
-// Registry represents the registry.toml file
+// Registry represents the sources in ccp.toml
 type Registry struct {
-	Version int               `toml:"version"`
 	Sources map[string]Source `toml:"sources"`
 
-	path string `toml:"-"`
+	ccpDir string `toml:"-"`
 }
 
 // NewRegistry creates an empty registry
-func NewRegistry(path string) *Registry {
+func NewRegistry(ccpDir string) *Registry {
 	return &Registry{
-		Version: RegistryVersion,
 		Sources: make(map[string]Source),
-		path:    path,
+		ccpDir:  ccpDir,
 	}
 }
 
-// LoadRegistry reads registry.toml from path
+// LoadRegistry reads sources from ccp.toml
+// Falls back to legacy registry.toml if sources not in ccp.toml
 func LoadRegistry(path string) (*Registry, error) {
-	data, err := os.ReadFile(path)
+	// path is ~/.ccp/registry.toml, derive ccpDir
+	ccpDir := filepath.Dir(path)
+
+	// Try to load from ccp.toml first
+	ccpConfig, err := config.LoadCcpConfig(ccpDir)
+	if err != nil {
+		return nil, fmt.Errorf("load ccp.toml: %w", err)
+	}
+
+	// If sources exist in ccp.toml, use them
+	if len(ccpConfig.Sources) > 0 {
+		r := &Registry{
+			Sources: make(map[string]Source),
+			ccpDir:  ccpDir,
+		}
+		for id, src := range ccpConfig.Sources {
+			r.Sources[id] = Source{
+				Registry:  src.Registry,
+				Provider:  src.Provider,
+				URL:       src.URL,
+				Path:      src.Path,
+				Ref:       src.Ref,
+				Commit:    src.Commit,
+				Checksum:  src.Checksum,
+				Updated:   src.Updated,
+				Installed: src.Installed,
+			}
+		}
+		return r, nil
+	}
+
+	// Fall back to legacy registry.toml
+	legacyPath := filepath.Join(ccpDir, "registry.toml")
+	data, err := os.ReadFile(legacyPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return NewRegistry(path), nil
+			return NewRegistry(ccpDir), nil
 		}
 		return nil, err
 	}
 
-	var r Registry
-	if err := toml.Unmarshal(data, &r); err != nil {
+	// Parse legacy format
+	var legacy struct {
+		Version int               `toml:"version"`
+		Sources map[string]Source `toml:"sources"`
+	}
+	if err := toml.Unmarshal(data, &legacy); err != nil {
 		return nil, fmt.Errorf("parse registry.toml: %w", err)
 	}
 
-	r.path = path
+	r := &Registry{
+		Sources: legacy.Sources,
+		ccpDir:  ccpDir,
+	}
 	if r.Sources == nil {
 		r.Sources = make(map[string]Source)
 	}
 
-	return &r, nil
+	return r, nil
 }
 
-// Save writes registry.toml to disk
+// Save writes sources to ccp.toml
 func (r *Registry) Save() error {
-	if err := os.MkdirAll(filepath.Dir(r.path), 0755); err != nil {
+	if err := os.MkdirAll(r.ccpDir, 0755); err != nil {
 		return err
 	}
 
-	data, err := toml.Marshal(r)
+	// Load existing ccp.toml config
+	ccpConfig, err := config.LoadCcpConfig(r.ccpDir)
 	if err != nil {
+		ccpConfig = config.DefaultCcpConfig()
+	}
+
+	// Update sources
+	ccpConfig.Sources = make(map[string]config.SourceConfig)
+	for id, src := range r.Sources {
+		ccpConfig.Sources[id] = config.SourceConfig{
+			Registry:  src.Registry,
+			Provider:  src.Provider,
+			URL:       src.URL,
+			Path:      src.Path,
+			Ref:       src.Ref,
+			Commit:    src.Commit,
+			Checksum:  src.Checksum,
+			Updated:   src.Updated,
+			Installed: src.Installed,
+		}
+	}
+
+	// Save to ccp.toml
+	if err := ccpConfig.Save(r.ccpDir); err != nil {
 		return err
 	}
 
-	return os.WriteFile(r.path, data, 0644)
+	// Remove legacy registry.toml if it exists
+	legacyPath := filepath.Join(r.ccpDir, "registry.toml")
+	if _, err := os.Stat(legacyPath); err == nil {
+		os.Remove(legacyPath)
+	}
+
+	return nil
 }
 
 // AddSource adds a new source to the registry
