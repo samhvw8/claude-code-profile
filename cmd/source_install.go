@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,18 +19,23 @@ var (
 )
 
 var sourceInstallCmd = &cobra.Command{
-	Use:   "install <source> [items...]",
-	Short: "Install items from a source",
+	Use:   "install [source] [items...]",
+	Short: "Install items from a source or sync all from registry",
 	Long: `Install specific items from a source to the hub.
 
 If the source is not already added, it will be added automatically.
 If no items are specified, interactive selection is shown.
 
+When called without arguments, syncs all sources from registry.toml:
+- Clones missing sources
+- Reinstalls items listed in registry
+
 Examples:
+  ccp source install                                  # Sync all from registry.toml
   ccp source install remorses/playwriter              # Auto-add, interactive selection
   ccp source install owner/repo skills/my-skill
   ccp source install owner/repo --all`,
-	Args: cobra.MinimumNArgs(1),
+	Args: cobra.MinimumNArgs(0),
 	RunE: runSourceInstall,
 }
 
@@ -40,6 +46,11 @@ func init() {
 }
 
 func runSourceInstall(cmd *cobra.Command, args []string) error {
+	// No args = sync all from registry
+	if len(args) == 0 {
+		return runSourceSync()
+	}
+
 	sourceID := args[0]
 	items := args[1:]
 
@@ -238,5 +249,118 @@ func addSourceForInstall(identifier string, paths *config.Paths, registry *sourc
 	}
 
 	fmt.Printf("Added source: %s\n", sourceID)
+	return nil
+}
+
+// runSourceSync syncs all sources from registry.toml
+// For each source in registry:
+// 1. Clone if missing
+// 2. Reinstall items from Installed list
+func runSourceSync() error {
+	paths, err := config.ResolvePaths()
+	if err != nil {
+		return err
+	}
+
+	registry, err := source.LoadRegistry(paths.RegistryPath())
+	if err != nil {
+		return err
+	}
+
+	sources := registry.ListSources()
+	if len(sources) == 0 {
+		fmt.Println("No sources in registry. Add sources with: ccp source install <owner/repo>")
+		return nil
+	}
+
+	fmt.Printf("Syncing %d sources from registry...\n\n", len(sources))
+
+	installer := source.NewInstaller(paths, registry)
+	ctx := context.Background()
+
+	var totalCloned, totalInstalled int
+
+	for _, entry := range sources {
+		fmt.Printf("Source: %s\n", entry.ID)
+
+		// Check if source directory exists
+		sourceDir := paths.SourceDir(entry.ID)
+		needsClone := false
+
+		if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+			needsClone = true
+		}
+
+		// Clone if missing
+		if needsClone {
+			provider := source.GetProvider(entry.Source.Provider)
+			if provider == nil {
+				fmt.Printf("  ⚠ Unknown provider: %s, skipping\n", entry.Source.Provider)
+				continue
+			}
+
+			fmt.Printf("  Cloning from %s...\n", entry.Source.URL)
+			opts := source.FetchOptions{
+				Ref:      entry.Source.Ref,
+				Progress: false,
+			}
+			if err := provider.Fetch(ctx, entry.Source.URL, sourceDir, opts); err != nil {
+				fmt.Printf("  ⚠ Clone failed: %v\n", err)
+				continue
+			}
+
+			// Update path in registry (in case it changed)
+			src := entry.Source
+			src.Path = sourceDir
+			registry.UpdateSource(entry.ID, src)
+			totalCloned++
+			fmt.Printf("  ✓ Cloned\n")
+		} else {
+			fmt.Printf("  ✓ Source exists\n")
+		}
+
+		// Reinstall items if any are missing from hub
+		if len(entry.Source.Installed) > 0 {
+			var missing []string
+			for _, item := range entry.Source.Installed {
+				parts := strings.SplitN(item, "/", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				itemPath := paths.HubDir + "/" + item
+				if _, err := os.Stat(itemPath); os.IsNotExist(err) {
+					missing = append(missing, item)
+				}
+			}
+
+			if len(missing) > 0 {
+				fmt.Printf("  Installing %d missing items...\n", len(missing))
+
+				// Remove items from registry first so Install can add them back
+				for _, item := range missing {
+					registry.RemoveInstalled(entry.ID, item)
+				}
+
+				installed, err := installer.Install(entry.ID, missing)
+				if err != nil {
+					fmt.Printf("  ⚠ Install failed: %v\n", err)
+				} else {
+					for _, item := range installed {
+						fmt.Printf("    + %s\n", item)
+					}
+					totalInstalled += len(installed)
+				}
+			} else {
+				fmt.Printf("  ✓ All %d items present\n", len(entry.Source.Installed))
+			}
+		}
+		fmt.Println()
+	}
+
+	if err := registry.Save(); err != nil {
+		return err
+	}
+
+	fmt.Printf("Sync complete: %d sources cloned, %d items installed\n", totalCloned, totalInstalled)
 	return nil
 }
