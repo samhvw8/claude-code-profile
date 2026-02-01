@@ -233,11 +233,12 @@ base_url = "https://skills.sh"
 limit = 10
 
 # Installed sources (auto-managed by ccp source commands)
+# Paths are relative to ~/.ccp/ for portability
 [sources.'owner/repo']
 registry = 'github'
 provider = 'git'
 url = 'https://github.com/owner/repo.git'
-path = '/Users/.../.ccp/sources/owner--repo'
+path = 'sources/owner--repo'
 ref = 'main'
 commit = 'abc123...'
 installed = ['skills/my-skill', 'agents/my-agent']

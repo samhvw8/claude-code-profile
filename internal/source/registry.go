@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -26,6 +27,34 @@ func NewRegistry(ccpDir string) *Registry {
 		Sources: make(map[string]Source),
 		ccpDir:  ccpDir,
 	}
+}
+
+// expandPath converts a relative path to absolute (from ccpDir)
+func (r *Registry) expandPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	// Already absolute
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(r.ccpDir, path)
+}
+
+// relativePath converts an absolute path to relative (from ccpDir)
+func (r *Registry) relativePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	// Try to make relative to ccpDir
+	if strings.HasPrefix(path, r.ccpDir) {
+		rel, err := filepath.Rel(r.ccpDir, path)
+		if err == nil {
+			return rel
+		}
+	}
+	// Return as-is if can't make relative
+	return path
 }
 
 // LoadRegistry reads sources from ccp.toml
@@ -51,7 +80,7 @@ func LoadRegistry(path string) (*Registry, error) {
 				Registry:  src.Registry,
 				Provider:  src.Provider,
 				URL:       src.URL,
-				Path:      src.Path,
+				Path:      r.expandPath(src.Path), // Expand to absolute
 				Ref:       src.Ref,
 				Commit:    src.Commit,
 				Checksum:  src.Checksum,
@@ -111,7 +140,7 @@ func (r *Registry) Save() error {
 			Registry:  src.Registry,
 			Provider:  src.Provider,
 			URL:       src.URL,
-			Path:      src.Path,
+			Path:      r.relativePath(src.Path), // Store as relative
 			Ref:       src.Ref,
 			Commit:    src.Commit,
 			Checksum:  src.Checksum,
