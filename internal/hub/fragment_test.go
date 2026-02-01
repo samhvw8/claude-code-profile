@@ -135,3 +135,130 @@ func TestFragmentReader_Read_NotFound(t *testing.T) {
 		t.Error("expected error for nonexistent fragment")
 	}
 }
+
+func TestFragmentReader_Read_ComplexValues(t *testing.T) {
+	hubDir := t.TempDir()
+	fragmentsDir := filepath.Join(hubDir, string(config.HubSettingFragments))
+	if err := os.MkdirAll(fragmentsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create fragment with complex nested value
+	fragmentContent := `name: complex-fragment
+key: apiSettings
+value:
+  timeout: 30
+  retries: 3
+  endpoints:
+    - /api/v1
+    - /api/v2
+`
+	if err := os.WriteFile(filepath.Join(fragmentsDir, "complex.yaml"), []byte(fragmentContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := NewFragmentReader()
+	fragment, err := reader.Read(hubDir, "complex")
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+
+	if fragment.Name != "complex-fragment" {
+		t.Errorf("expected name 'complex-fragment', got %q", fragment.Name)
+	}
+	if fragment.Key != "apiSettings" {
+		t.Errorf("expected key 'apiSettings', got %q", fragment.Key)
+	}
+
+	// Value should be a map
+	valueMap, ok := fragment.Value.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected Value to be map, got %T", fragment.Value)
+	}
+	if valueMap["timeout"] != 30 {
+		t.Errorf("expected timeout=30, got %v", valueMap["timeout"])
+	}
+}
+
+func TestFragmentReader_Read_InvalidYAML(t *testing.T) {
+	hubDir := t.TempDir()
+	fragmentsDir := filepath.Join(hubDir, string(config.HubSettingFragments))
+	if err := os.MkdirAll(fragmentsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create invalid YAML
+	invalidContent := `name: broken
+key: test
+value: [invalid yaml`
+	if err := os.WriteFile(filepath.Join(fragmentsDir, "invalid.yaml"), []byte(invalidContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := NewFragmentReader()
+	_, err := reader.Read(hubDir, "invalid")
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+}
+
+func TestFragmentReader_ReadAll_Empty(t *testing.T) {
+	hubDir := t.TempDir()
+
+	reader := NewFragmentReader()
+	fragments, err := reader.ReadAll(hubDir, []string{})
+	if err != nil {
+		t.Fatalf("ReadAll() error = %v", err)
+	}
+
+	if len(fragments) != 0 {
+		t.Errorf("expected 0 fragments, got %d", len(fragments))
+	}
+}
+
+func TestFragmentReader_ReadAll_PartialFailure(t *testing.T) {
+	hubDir := t.TempDir()
+	fragmentsDir := filepath.Join(hubDir, string(config.HubSettingFragments))
+	if err := os.MkdirAll(fragmentsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create only one fragment
+	fragmentContent := `name: exists
+key: key1
+value: value1
+`
+	if err := os.WriteFile(filepath.Join(fragmentsDir, "exists.yaml"), []byte(fragmentContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := NewFragmentReader()
+	// Try to read existing and non-existing fragments
+	_, err := reader.ReadAll(hubDir, []string{"exists", "missing"})
+	if err == nil {
+		t.Error("expected error when one fragment is missing")
+	}
+}
+
+func TestMergeFragments_Empty(t *testing.T) {
+	fragments := []*Fragment{}
+	settings := MergeFragments(fragments)
+
+	if len(settings) != 0 {
+		t.Errorf("expected empty settings, got %d entries", len(settings))
+	}
+}
+
+func TestMergeFragments_Override(t *testing.T) {
+	// Later fragments should override earlier ones with same key
+	fragments := []*Fragment{
+		{Key: "model", Value: "old-model"},
+		{Key: "model", Value: "new-model"},
+	}
+
+	settings := MergeFragments(fragments)
+
+	if settings["model"] != "new-model" {
+		t.Errorf("expected model='new-model' (override), got %v", settings["model"])
+	}
+}

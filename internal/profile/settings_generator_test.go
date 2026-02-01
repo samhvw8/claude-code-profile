@@ -250,3 +250,206 @@ func TestMergeSettingFragments_NotFound(t *testing.T) {
 		t.Error("expected error for nonexistent fragment")
 	}
 }
+
+func TestGenerateSettingsHooks_MultipleHooksPerType(t *testing.T) {
+	// Setup temp directories
+	profileDir := t.TempDir()
+	hubDir := t.TempDir()
+
+	// Create two hook directories
+	for _, hookName := range []string{"hook1", "hook2"} {
+		hookDir := filepath.Join(profileDir, "hooks", hookName)
+		if err := os.MkdirAll(hookDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		hooksJSON := config.HooksJSON{
+			Hooks: map[config.HookType][]config.HookEntry{
+				config.HookSessionStart: {
+					{
+						Matcher: hookName + "-matcher",
+						Hooks: []config.HookCommand{
+							{
+								Type:    "command",
+								Command: "${CLAUDE_PLUGIN_ROOT}/scripts/" + hookName + ".sh",
+								Timeout: 60,
+							},
+						},
+					},
+				},
+			},
+		}
+		data, _ := json.Marshal(hooksJSON)
+		if err := os.WriteFile(filepath.Join(hookDir, "hooks.json"), data, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	paths := &config.Paths{HubDir: hubDir}
+	manifest := &Manifest{
+		Hub: HubLinks{
+			Hooks: []string{"hook1", "hook2"},
+		},
+	}
+
+	hooks, err := GenerateSettingsHooks(paths, profileDir, manifest)
+	if err != nil {
+		t.Fatalf("GenerateSettingsHooks() error = %v", err)
+	}
+
+	entries := hooks[config.HookSessionStart]
+	if len(entries) != 2 {
+		t.Errorf("expected 2 SessionStart entries, got %d", len(entries))
+	}
+}
+
+func TestGenerateSettingsHooks_DefaultTimeout(t *testing.T) {
+	profileDir := t.TempDir()
+	hubDir := t.TempDir()
+	hookName := "no-timeout-hook"
+
+	hookDir := filepath.Join(profileDir, "hooks", hookName)
+	if err := os.MkdirAll(hookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create hook without timeout specified
+	hooksJSON := config.HooksJSON{
+		Hooks: map[config.HookType][]config.HookEntry{
+			config.HookUserPromptSubmit: {
+				{
+					Hooks: []config.HookCommand{
+						{
+							Type:    "command",
+							Command: "/path/to/script.sh",
+							// No timeout specified
+						},
+					},
+				},
+			},
+		},
+	}
+	data, _ := json.Marshal(hooksJSON)
+	if err := os.WriteFile(filepath.Join(hookDir, "hooks.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := &config.Paths{HubDir: hubDir}
+	manifest := &Manifest{
+		Hub: HubLinks{
+			Hooks: []string{hookName},
+		},
+	}
+
+	hooks, err := GenerateSettingsHooks(paths, profileDir, manifest)
+	if err != nil {
+		t.Fatalf("GenerateSettingsHooks() error = %v", err)
+	}
+
+	entries := hooks[config.HookUserPromptSubmit]
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	// Should use default timeout
+	if entries[0].Hooks[0].Timeout != config.DefaultHookTimeout() {
+		t.Errorf("expected default timeout %d, got %d", config.DefaultHookTimeout(), entries[0].Hooks[0].Timeout)
+	}
+}
+
+func TestGenerateSettingsHooks_SkipsMissingHook(t *testing.T) {
+	profileDir := t.TempDir()
+	hubDir := t.TempDir()
+
+	paths := &config.Paths{HubDir: hubDir}
+	manifest := &Manifest{
+		Hub: HubLinks{
+			Hooks: []string{"nonexistent-hook"},
+		},
+	}
+
+	// Should not error, just skip missing hooks
+	hooks, err := GenerateSettingsHooks(paths, profileDir, manifest)
+	if err != nil {
+		t.Fatalf("GenerateSettingsHooks() error = %v", err)
+	}
+
+	if len(hooks) != 0 {
+		t.Errorf("expected 0 hooks (missing skipped), got %d", len(hooks))
+	}
+}
+
+func TestResolvePluginRootPath_MultipleOccurrences(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot get home dir")
+	}
+
+	hookDir := filepath.Join(home, ".ccp", "profiles", "test", "hooks", "myhook")
+
+	// Test command with multiple CLAUDE_PLUGIN_ROOT occurrences
+	command := "${CLAUDE_PLUGIN_ROOT}/bin/cmd --config ${CLAUDE_PLUGIN_ROOT}/config.json"
+	got := resolvePluginRootPath(command, hookDir)
+
+	expected := "$HOME/.ccp/profiles/test/hooks/myhook/bin/cmd --config $HOME/.ccp/profiles/test/hooks/myhook/config.json"
+	if got != expected {
+		t.Errorf("resolvePluginRootPath() = %q, want %q", got, expected)
+	}
+}
+
+func TestMergeSettingFragments_MultipleFragments(t *testing.T) {
+	hubDir := t.TempDir()
+	fragmentsDir := filepath.Join(hubDir, "setting-fragments")
+	if err := os.MkdirAll(fragmentsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create multiple fragments
+	fragments := map[string]string{
+		"model": `name: model-config
+key: model
+value: claude-sonnet-4-20250514
+`,
+		"temp": `name: temp-config
+key: temperature
+value: 0.7
+`,
+		"perms": `name: perms-config
+key: permissions
+value:
+  allow_edit: true
+  allow_bash: false
+`,
+	}
+
+	for name, content := range fragments {
+		if err := os.WriteFile(filepath.Join(fragmentsDir, name+".yaml"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	settings, err := mergeSettingFragments(hubDir, []string{"model", "temp", "perms"})
+	if err != nil {
+		t.Fatalf("mergeSettingFragments() error = %v", err)
+	}
+
+	if len(settings) != 3 {
+		t.Errorf("expected 3 settings, got %d", len(settings))
+	}
+
+	if settings["model"] != "claude-sonnet-4-20250514" {
+		t.Errorf("expected model = 'claude-sonnet-4-20250514', got %v", settings["model"])
+	}
+
+	if settings["temperature"] != 0.7 {
+		t.Errorf("expected temperature = 0.7, got %v", settings["temperature"])
+	}
+
+	perms, ok := settings["permissions"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected permissions to be a map, got %T", settings["permissions"])
+	}
+	if perms["allow_edit"] != true {
+		t.Errorf("expected permissions.allow_edit = true, got %v", perms["allow_edit"])
+	}
+}

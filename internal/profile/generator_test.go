@@ -114,3 +114,125 @@ func TestBuilderFromPaths(t *testing.T) {
 		t.Error("BuilderFromPaths() returned nil")
 	}
 }
+
+func TestDefaultSettingsBuilder_Build_ProcessorError(t *testing.T) {
+	// Test hook processor error propagation
+	hookProcessor := &mockHookProcessorImpl{
+		hooks: nil,
+		err:   errTestError,
+	}
+	fragmentProcessor := &mockFragmentProcessorImpl{
+		settings: map[string]interface{}{},
+	}
+
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	manifest := &Manifest{}
+
+	_, err := builder.Build(manifest)
+	if err == nil {
+		t.Error("expected error from hook processor to propagate")
+	}
+}
+
+func TestDefaultSettingsBuilder_Build_FragmentProcessorError(t *testing.T) {
+	// Test fragment processor error propagation
+	hookProcessor := &mockHookProcessorImpl{
+		hooks: map[config.HookType][]config.SettingsHookEntry{},
+	}
+	fragmentProcessor := &mockFragmentProcessorImpl{
+		settings: nil,
+		err:      errTestError,
+	}
+
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	manifest := &Manifest{}
+
+	_, err := builder.Build(manifest)
+	if err == nil {
+		t.Error("expected error from fragment processor to propagate")
+	}
+}
+
+func TestDefaultSettingsBuilder_Build_MultipleHookTypes(t *testing.T) {
+	hookProcessor := &mockHookProcessorImpl{
+		hooks: map[config.HookType][]config.SettingsHookEntry{
+			config.HookSessionStart: {
+				config.NewSettingsHookEntry("startup", "/path/start.sh", 60),
+			},
+			config.HookPreToolUse: {
+				config.NewSettingsHookEntry("Bash", "/path/pre-bash.sh", 30),
+				config.NewSettingsHookEntry("Edit", "/path/pre-edit.sh", 30),
+			},
+			config.HookUserPromptSubmit: {
+				config.NewSettingsHookEntry("", "/path/prompt.sh", 60),
+			},
+		},
+	}
+
+	fragmentProcessor := &mockFragmentProcessorImpl{
+		settings: map[string]interface{}{},
+	}
+
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	manifest := &Manifest{}
+
+	settings, err := builder.Build(manifest)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	hooks, ok := settings["hooks"].(map[config.HookType][]config.SettingsHookEntry)
+	if !ok {
+		t.Fatal("expected hooks map")
+	}
+
+	if len(hooks) != 3 {
+		t.Errorf("expected 3 hook types, got %d", len(hooks))
+	}
+
+	if len(hooks[config.HookPreToolUse]) != 2 {
+		t.Errorf("expected 2 PreToolUse hooks, got %d", len(hooks[config.HookPreToolUse]))
+	}
+}
+
+func TestDefaultSettingsBuilder_Build_OnlyFragments(t *testing.T) {
+	hookProcessor := &mockHookProcessorImpl{
+		hooks: map[config.HookType][]config.SettingsHookEntry{},
+	}
+
+	fragmentProcessor := &mockFragmentProcessorImpl{
+		settings: map[string]interface{}{
+			"model":                  "claude-sonnet-4-20250514",
+			"temperature":            0.5,
+			"permissions.allow_edit": true,
+		},
+	}
+
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	manifest := &Manifest{}
+
+	settings, err := builder.Build(manifest)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	// Should have 3 fragment keys, no hooks key
+	if len(settings) != 3 {
+		t.Errorf("expected 3 settings keys, got %d", len(settings))
+	}
+
+	if _, hasHooks := settings["hooks"]; hasHooks {
+		t.Error("expected no hooks key when hooks are empty")
+	}
+}
+
+// Error for testing
+var errTestError = &testError{msg: "test error"}
+
+type testError struct {
+	msg string
+}
+
+func (e *testError) Error() string {
+	return e.msg
+}
