@@ -5,9 +5,10 @@ import (
 )
 
 var profileCmd = &cobra.Command{
-	Use:   "profile",
-	Short: "Manage profiles",
-	Long:  `Create, list, check, fix, and delete profiles.`,
+	Use:     "profile",
+	Aliases: []string{"p"},
+	Short:   "Manage profiles",
+	Long:    `Create, list, check, fix, and delete profiles.`,
 }
 
 func init() {

@@ -16,8 +16,9 @@ import (
 )
 
 var hubLinkCmd = &cobra.Command{
-	Use:   "link [profile]",
-	Short: "Add hub items to a profile",
+	Use:     "link [profile]",
+	Aliases: []string{"ln"},
+	Short:   "Add hub items to a profile",
 	Long: `Add hub items to a profile by selecting from non-linked components.
 
 With no arguments: Interactive selection for current active profile

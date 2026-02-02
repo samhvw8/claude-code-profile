@@ -12,14 +12,16 @@ import (
 )
 
 var hubCmd = &cobra.Command{
-	Use:   "hub",
-	Short: "Manage the hub of reusable components",
-	Long:  `The hub contains all reusable skills, agents, hooks, rules, commands, and setting-fragments.`,
+	Use:     "hub",
+	Aliases: []string{"h"},
+	Short:   "Manage the hub of reusable components",
+	Long:    `The hub contains all reusable skills, agents, hooks, rules, commands, and setting-fragments.`,
 }
 
 var hubListCmd = &cobra.Command{
-	Use:   "list [type]",
-	Short: "List hub contents",
+	Use:     "list [type]",
+	Aliases: []string{"ls", "l"},
+	Short:   "List hub contents",
 	Long: `List all items in the hub, optionally filtered by type.
 
 Types: skills, agents, hooks, rules, commands, setting-fragments`,

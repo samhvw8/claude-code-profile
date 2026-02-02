@@ -12,10 +12,11 @@ import (
 )
 
 var profileListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all profiles",
-	Long:  `List all profiles and indicate which one is currently active.`,
-	RunE:  runProfileList,
+	Use:     "list",
+	Aliases: []string{"ls", "l"},
+	Short:   "List all profiles",
+	Long:    `List all profiles and indicate which one is currently active.`,
+	RunE:    runProfileList,
 }
 
 func init() {

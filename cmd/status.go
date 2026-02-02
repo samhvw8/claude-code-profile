@@ -14,8 +14,9 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show ccp status and health",
+	Use:     "status",
+	Aliases: []string{"st"},
+	Short:   "Show ccp status and health",
 	Long: `Display comprehensive status of ccp configuration.
 
 Shows:

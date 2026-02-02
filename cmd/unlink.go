@@ -11,8 +11,9 @@ import (
 )
 
 var unlinkCmd = &cobra.Command{
-	Use:   "unlink <profile> <path>",
-	Short: "Remove a hub item from a profile",
+	Use:     "unlink <profile> <path>",
+	Aliases: []string{"ul"},
+	Short:   "Remove a hub item from a profile",
 	Long: `Remove a hub item from a profile by deleting its symlink.
 
 The path should be in format: type/name

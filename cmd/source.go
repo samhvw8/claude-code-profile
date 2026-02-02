@@ -5,8 +5,9 @@ import (
 )
 
 var sourceCmd = &cobra.Command{
-	Use:   "source",
-	Short: "Manage sources (skills, plugins, tools)",
+	Use:     "source",
+	Aliases: []string{"s", "src"},
+	Short:   "Manage sources (skills, plugins, tools)",
 	Long: `Manage external sources for skills, agents, commands, and other components.
 
 Sources can be added from:

@@ -16,8 +16,9 @@ import (
 )
 
 var linkCmd = &cobra.Command{
-	Use:   "link [profile] [path]",
-	Short: "Add hub items to a profile",
+	Use:     "link [profile] [path]",
+	Aliases: []string{"l", "ln"},
+	Short:   "Add hub items to a profile",
 	Long: `Add hub items to a profile by creating symlinks.
 
 With no arguments: Interactive selection for current active profile

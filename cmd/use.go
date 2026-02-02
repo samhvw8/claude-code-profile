@@ -18,8 +18,9 @@ var (
 )
 
 var useCmd = &cobra.Command{
-	Use:   "use [profile]",
-	Short: "Set or show the active profile",
+	Use:     "use [profile]",
+	Aliases: []string{"u"},
+	Short:   "Set or show the active profile",
 	Long: `Set which profile to use for the current project or globally.
 
 Without -g flag: Updates project environment (auto-detects mise.toml or .envrc).

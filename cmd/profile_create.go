@@ -25,8 +25,9 @@ var (
 )
 
 var profileCreateCmd = &cobra.Command{
-	Use:   "create <name>",
-	Short: "Create a new profile",
+	Use:     "create <name>",
+	Aliases: []string{"c", "new"},
+	Short:   "Create a new profile",
 	Long: `Create a new profile by selecting items from the hub.
 
 Examples:

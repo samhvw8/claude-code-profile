@@ -13,8 +13,9 @@ import (
 var whichPathFlag bool
 
 var whichCmd = &cobra.Command{
-	Use:   "which",
-	Short: "Show which profile is currently active",
+	Use:     "which",
+	Aliases: []string{"w"},
+	Short:   "Show which profile is currently active",
 	Long: `Display the currently active Claude Code profile.
 
 Checks CLAUDE_CONFIG_DIR environment variable first,

@@ -19,8 +19,9 @@ var (
 )
 
 var sourceInstallCmd = &cobra.Command{
-	Use:   "install [source] [items...]",
-	Short: "Install items from a source or sync all from registry",
+	Use:     "install [source] [items...]",
+	Aliases: []string{"i", "add"},
+	Short:   "Install items from a source or sync all from registry",
 	Long: `Install specific items from a source to the hub.
 
 If the source is not already added, it will be added automatically.

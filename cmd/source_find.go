@@ -17,8 +17,9 @@ var (
 )
 
 var sourceFindCmd = &cobra.Command{
-	Use:   "find <query>",
-	Short: "Search for packages in registries",
+	Use:     "find <query>",
+	Aliases: []string{"f", "search"},
+	Short:   "Search for packages in registries",
 	Long: `Search skills.sh and other registries for packages.
 
 Examples:
