@@ -37,6 +37,10 @@ go build -o ccp .
 # Initialize from existing ~/.claude
 ccp init
 
+# Search and install packages
+ccp find debugging
+ccp install owner/repo
+
 # List profiles
 ccp profile list
 
@@ -133,17 +137,18 @@ ccp use --show
 | `ccp link [profile] [path]` | `l` | Add/edit hub items in profile |
 | `ccp unlink <profile> <path>` | `ul` | Remove hub item from profile |
 
-### Skills & Plugins
+### Package Management
 
 | Command | Alias | Description |
 |---------|-------|-------------|
-| `ccp source` | `s` | Source commands |
-| `ccp source find <query>` | `s f` | Search skills.sh for skills |
-| `ccp source install` | `s i` | Sync all sources from ccp.toml |
-| `ccp source install <owner/repo>` | | Install from GitHub |
+| `ccp find <query>` | `search` | Search skills.sh for packages |
+| `ccp install` | `i` | Sync all sources from ccp.toml |
+| `ccp install <owner/repo>` | | Install from package (auto-adds source) |
+| `ccp source` | `s` | Advanced source management |
 | `ccp source add <owner/repo>` | | Add source without installing |
 | `ccp source list` | | List installed sources |
 | `ccp source update` | | Update installed sources |
+| `ccp source remove <name>` | | Remove a source |
 
 ## Profile Activation
 
@@ -222,7 +227,7 @@ chezmoi apply
 ccp source install  # Syncs all sources from ccp.toml
 ```
 
-The `ccp source install` command (with no arguments) will:
+The `ccp install` command (with no arguments) will:
 - Clone any missing source repositories
 - Reinstall hub items listed in `ccp.toml`
 

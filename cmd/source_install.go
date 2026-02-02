@@ -125,8 +125,8 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 			fmt.Printf("  - %s\n", item)
 		}
 		fmt.Println()
-		fmt.Printf("Install with: ccp source install %s <item>\n", sourceID)
-		fmt.Printf("Or use: ccp source install %s -i (interactive)\n", sourceID)
+		fmt.Printf("Install with: ccp install %s <item>\n", sourceID)
+		fmt.Printf("Or use: ccp install %s -i (interactive)\n", sourceID)
 		return nil
 	}
 
@@ -270,7 +270,7 @@ func runSourceSync() error {
 
 	sources := registry.ListSources()
 	if len(sources) == 0 {
-		fmt.Println("No sources in registry. Add sources with: ccp source install <owner/repo>")
+		fmt.Println("No sources in registry. Add sources with: ccp install <owner/repo>")
 		return nil
 	}
 
