@@ -97,48 +97,53 @@ ccp use --show
 
 ### Core
 
-| Command | Description |
-|---------|-------------|
-| `ccp init` | Migrate existing ~/.claude to ~/.ccp structure |
-| `ccp migrate` | Run migrations from older ccp versions |
-| `ccp use <profile>` | Set default profile (~/.claude symlink) |
-| `ccp use --show` | Show current default profile |
-| `ccp status` | Show ccp status and health |
-| `ccp doctor` | Diagnose and fix common issues |
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `ccp init` | | Migrate existing ~/.claude to ~/.ccp structure |
+| `ccp migrate` | | Run migrations from older ccp versions |
+| `ccp use <profile>` | `u` | Set default profile (~/.claude symlink) |
+| `ccp use --show` | | Show current default profile |
+| `ccp which` | `w` | Show current active profile |
+| `ccp status` | `st` | Show ccp status and health |
+| `ccp doctor` | | Diagnose and fix common issues |
 
 ### Profile Management
 
-| Command | Description |
-|---------|-------------|
-| `ccp profile create <name>` | Create new profile |
-| `ccp profile list` | List all profiles |
-| `ccp profile edit <name> -i` | Interactive hub item selection |
-| `ccp profile check <name>` | Validate profile against manifest |
-| `ccp profile fix <name>` | Reconcile profile to match manifest |
-| `ccp profile sync [name]` | Regenerate symlinks and settings |
-| `ccp profile delete <name>` | Delete a profile |
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `ccp profile` | `p` | Profile commands |
+| `ccp profile create <name>` | `p c` | Create new profile |
+| `ccp profile list` | `p l` | List all profiles |
+| `ccp profile edit <name> -i` | | Interactive hub item selection |
+| `ccp profile check <name>` | | Validate profile against manifest |
+| `ccp profile fix <name>` | | Reconcile profile to match manifest |
+| `ccp profile sync [name]` | | Regenerate symlinks and settings |
+| `ccp profile delete <name>` | | Delete a profile |
 
 ### Hub Management
 
-| Command | Description |
-|---------|-------------|
-| `ccp hub list [type]` | List hub contents |
-| `ccp hub add <type> <path>` | Add item to hub |
-| `ccp hub show <type/name>` | Show hub item details |
-| `ccp hub remove <type/name>` | Remove item from hub |
-| `ccp link <profile> <path>` | Add hub item to profile |
-| `ccp unlink <profile> <path>` | Remove hub item from profile |
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `ccp hub` | `h` | Hub commands |
+| `ccp hub list [type]` | `h l` | List hub contents |
+| `ccp hub link [profile]` | `h ln` | Interactive add items to profile |
+| `ccp hub add <type> <path>` | | Add item to hub |
+| `ccp hub show <type/name>` | | Show hub item details |
+| `ccp hub remove <type/name>` | | Remove item from hub |
+| `ccp link [profile] [path]` | `l` | Add/edit hub items in profile |
+| `ccp unlink <profile> <path>` | `ul` | Remove hub item from profile |
 
 ### Skills & Plugins
 
-| Command | Description |
-|---------|-------------|
-| `ccp source find <query>` | Search skills.sh for skills |
-| `ccp source install` | Sync all sources from ccp.toml |
-| `ccp source install <owner/repo>` | Install from GitHub |
-| `ccp source add <owner/repo>` | Add source without installing |
-| `ccp source list` | List installed sources |
-| `ccp source update` | Update installed sources |
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `ccp source` | `s` | Source commands |
+| `ccp source find <query>` | `s f` | Search skills.sh for skills |
+| `ccp source install` | `s i` | Sync all sources from ccp.toml |
+| `ccp source install <owner/repo>` | | Install from GitHub |
+| `ccp source add <owner/repo>` | | Add source without installing |
+| `ccp source list` | | List installed sources |
+| `ccp source update` | | Update installed sources |
 
 ## Profile Activation
 

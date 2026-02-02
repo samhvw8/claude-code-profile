@@ -46,7 +46,7 @@ func (m *Manager) Get(name string) (*Profile, error) {
 		return nil, nil
 	}
 
-	manifestPath := filepath.Join(profileDir, "profile.yaml")
+	manifestPath := ManifestPath(profileDir)
 	manifest, err := LoadManifest(manifestPath)
 	if err != nil {
 		if os.IsNotExist(err) {
