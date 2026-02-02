@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -10,6 +11,8 @@ import (
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/hub"
 )
+
+var hubListJSON bool
 
 var hubCmd = &cobra.Command{
 	Use:     "hub",
@@ -31,6 +34,7 @@ Types: skills, agents, hooks, rules, commands, setting-fragments`,
 
 func init() {
 	rootCmd.AddCommand(hubCmd)
+	hubListCmd.Flags().BoolVarP(&hubListJSON, "json", "j", false, "Output as JSON")
 	hubCmd.AddCommand(hubListCmd)
 }
 
@@ -71,6 +75,31 @@ func runHubList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print results
+	// JSON output
+	if hubListJSON {
+		type hubItemJSON struct {
+			Type  string `json:"type"`
+			Name  string `json:"name"`
+			IsDir bool   `json:"is_dir"`
+		}
+
+		var output []hubItemJSON
+		for _, itemType := range typesToShow {
+			items := h.GetItems(itemType)
+			for _, item := range items {
+				output = append(output, hubItemJSON{
+					Type:  string(itemType),
+					Name:  item.Name,
+					IsDir: item.IsDir,
+				})
+			}
+		}
+
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(output)
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
 	for _, itemType := range typesToShow {

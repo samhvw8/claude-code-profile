@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,8 @@ import (
 	"github.com/samhoang/ccp/internal/hub"
 	"github.com/samhoang/ccp/internal/profile"
 )
+
+var statusJSON bool
 
 var statusCmd = &cobra.Command{
 	Use:     "status",
@@ -28,6 +31,7 @@ Shows:
 }
 
 func init() {
+	statusCmd.Flags().BoolVarP(&statusJSON, "json", "j", false, "Output as JSON")
 	rootCmd.AddCommand(statusCmd)
 }
 
@@ -38,14 +42,19 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	if !paths.IsInitialized() {
+		if statusJSON {
+			output := map[string]interface{}{
+				"initialized": false,
+			}
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(output)
+		}
 		fmt.Println("Status: NOT INITIALIZED")
 		fmt.Println()
 		fmt.Println("Run 'ccp init' to initialize ccp")
 		return nil
 	}
-
-	fmt.Println("=== CCP Status ===")
-	fmt.Println()
 
 	// Active profile
 	activeProfile := "none"
@@ -55,16 +64,87 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			activeProfile = filepath.Base(target)
 		}
 	}
+
+	// Gather data for JSON output
+	scanner := hub.NewScanner()
+	h, hubErr := scanner.Scan(paths.HubDir)
+
+	profiles, profilesErr := listAllProfiles(paths)
+
+	issues := checkHealth(paths)
+
+	// JSON output
+	if statusJSON {
+		type hubCounts struct {
+			Skills           int `json:"skills"`
+			Agents           int `json:"agents"`
+			Hooks            int `json:"hooks"`
+			Rules            int `json:"rules"`
+			Commands         int `json:"commands"`
+			SettingFragments int `json:"setting_fragments"`
+			Total            int `json:"total"`
+		}
+
+		type profileStatus struct {
+			Name        string `json:"name"`
+			Active      bool   `json:"active"`
+			HasDrift    bool   `json:"has_drift,omitempty"`
+			BrokenLinks int    `json:"broken_links,omitempty"`
+		}
+
+		output := map[string]interface{}{
+			"initialized":    true,
+			"active_profile": activeProfile,
+			"ccp_dir":        paths.CcpDir,
+			"healthy":        len(issues) == 0,
+		}
+
+		if hubErr == nil {
+			output["hub"] = hubCounts{
+				Skills:           len(h.GetItems(config.HubSkills)),
+				Agents:           len(h.GetItems(config.HubAgents)),
+				Hooks:            len(h.GetItems(config.HubHooks)),
+				Rules:            len(h.GetItems(config.HubRules)),
+				Commands:         len(h.GetItems(config.HubCommands)),
+				SettingFragments: len(h.GetItems(config.HubSettingFragments)),
+				Total:            h.ItemCount(),
+			}
+		}
+
+		if profilesErr == nil {
+			var profileList []profileStatus
+			for _, p := range profiles {
+				profileList = append(profileList, profileStatus{
+					Name:        p.name,
+					Active:      p.name == activeProfile,
+					HasDrift:    p.hasDrift,
+					BrokenLinks: p.brokenLinks,
+				})
+			}
+			output["profiles"] = profileList
+		}
+
+		if len(issues) > 0 {
+			output["issues"] = issues
+		}
+
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(output)
+	}
+
+	// Text output
+	fmt.Println("=== CCP Status ===")
+	fmt.Println()
+
 	fmt.Printf("Active Profile: %s\n", activeProfile)
 	fmt.Printf("CCP Directory:  %s\n", paths.CcpDir)
 	fmt.Println()
 
 	// Hub summary
 	fmt.Println("--- Hub ---")
-	scanner := hub.NewScanner()
-	h, err := scanner.Scan(paths.HubDir)
-	if err != nil {
-		fmt.Printf("Error scanning hub: %v\n", err)
+	if hubErr != nil {
+		fmt.Printf("Error scanning hub: %v\n", hubErr)
 	} else {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		for _, itemType := range config.AllHubItemTypes() {
@@ -80,9 +160,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Profiles summary
 	fmt.Println("--- Profiles ---")
-	profiles, err := listAllProfiles(paths)
-	if err != nil {
-		fmt.Printf("Error listing profiles: %v\n", err)
+	if profilesErr != nil {
+		fmt.Printf("Error listing profiles: %v\n", profilesErr)
 	} else {
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		for _, p := range profiles {
@@ -105,7 +184,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Health check
 	fmt.Println("--- Health ---")
-	issues := checkHealth(paths)
 	if len(issues) == 0 {
 		fmt.Println("  All systems healthy")
 	} else {

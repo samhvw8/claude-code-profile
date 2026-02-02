@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"text/tabwriter"
@@ -11,6 +12,8 @@ import (
 	"github.com/samhoang/ccp/internal/profile"
 )
 
+var profileListJSON bool
+
 var profileListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls", "l"},
@@ -20,6 +23,7 @@ var profileListCmd = &cobra.Command{
 }
 
 func init() {
+	profileListCmd.Flags().BoolVarP(&profileListJSON, "json", "j", false, "Output as JSON")
 	profileCmd.AddCommand(profileListCmd)
 }
 
@@ -54,6 +58,35 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 
 	// Also check CLAUDE_CONFIG_DIR
 	envProfile := os.Getenv("CLAUDE_CONFIG_DIR")
+
+	// JSON output
+	if profileListJSON {
+		type profileJSON struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Path        string `json:"path"`
+			Active      bool   `json:"active"`
+			ActiveEnv   bool   `json:"active_env,omitempty"`
+		}
+
+		var output []profileJSON
+		for _, p := range profiles {
+			pj := profileJSON{
+				Name:        p.Name,
+				Description: p.Manifest.Description,
+				Path:        p.Path,
+				Active:      p.Name == activeName,
+			}
+			if envProfile != "" && envProfile == p.Path {
+				pj.ActiveEnv = true
+			}
+			output = append(output, pj)
+		}
+
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(output)
+	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "NAME\tDESCRIPTION\tSTATUS\n")

@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.17.0
-**Date:** 2026-01-31
+**Version:** 0.24.0
+**Date:** 2026-02-02
 **Status:** Draft
 
 ---
@@ -881,6 +881,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.24.0 | 2026-02-02 | — | Added: `--json` flag to list commands (profile list, hub list, source list, status) for scripting/CI integration. First-run guidance when ccp is not initialized. |
 | 0.17.0 | 2026-01-31 | — | Added: `profile rename` command, `--empty` flag for `profile create` to skip interactive selection, enhanced `link` command with interactive mode (no args = active profile, one arg = specified profile). |
 | 0.16.0 | 2026-01-31 | — | Added shared plugin store at `~/.ccp/store/plugins/`. Plugin caches (marketplaces, known_marketplaces.json) are now shared across profiles via symlinks, reducing duplication. New `ccp migrate` step moves existing plugin caches to store. Profile creation automatically symlinks to store. |
 | 0.14.0 | 2026-01-31 | — | Symlinks now use relative paths for cross-computer portability. `ccp migrate` converts existing absolute symlinks to relative. Profiles and ~/.claude can be synced between machines. |

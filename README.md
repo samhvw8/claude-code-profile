@@ -109,6 +109,7 @@ ccp use --show
 | `ccp use --show` | | Show current default profile |
 | `ccp which` | `w` | Show current active profile |
 | `ccp status` | `st` | Show ccp status and health |
+| `ccp status --json` | | Output status as JSON |
 | `ccp doctor` | | Diagnose and fix common issues |
 
 ### Profile Management
@@ -118,6 +119,7 @@ ccp use --show
 | `ccp profile` | `p` | Profile commands |
 | `ccp profile create <name>` | `p c` | Create new profile |
 | `ccp profile list` | `p l` | List all profiles |
+| `ccp profile list --json` | | Output profiles as JSON |
 | `ccp profile edit <name> -i` | | Interactive hub item selection |
 | `ccp profile check <name>` | | Validate profile against manifest |
 | `ccp profile fix <name>` | | Reconcile profile to match manifest |
@@ -130,6 +132,7 @@ ccp use --show
 |---------|-------|-------------|
 | `ccp hub` | `h` | Hub commands |
 | `ccp hub list [type]` | `h l` | List hub contents |
+| `ccp hub list --json` | | Output hub contents as JSON |
 | `ccp hub link [profile]` | `h ln` | Interactive add hub items to profile |
 | `ccp hub add` | | Interactive promote local items to hub |
 | `ccp hub add <type> <path>` | | Add item to hub from filesystem |
@@ -148,6 +151,7 @@ ccp use --show
 | `ccp source` | `s` | Advanced source management |
 | `ccp source add <owner/repo>` | | Add source without installing |
 | `ccp source list` | | List installed sources |
+| `ccp source list --json` | | Output sources as JSON |
 | `ccp source update` | | Update installed sources |
 | `ccp source remove <name>` | | Remove a source |
 
