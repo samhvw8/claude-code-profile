@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.22.3**
+**Current version: v0.22.4**
 
 ## Project Context
 
@@ -313,3 +313,9 @@ Generate default config: `ccp config init`
 2. Define interface for testability
 3. Add tests in `*_test.go`
 4. Wire up in cmd layer
+
+### Git Tagging
+
+- **Never force-update tags** (`git tag -f` or `git push --tags -f`)
+- Force-updating tags prevents GitHub CI from re-running
+- Always increment version and create a new tag
