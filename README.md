@@ -130,8 +130,9 @@ ccp use --show
 |---------|-------|-------------|
 | `ccp hub` | `h` | Hub commands |
 | `ccp hub list [type]` | `h l` | List hub contents |
-| `ccp hub link [profile]` | `h ln` | Interactive add items to profile |
-| `ccp hub add <type> <path>` | | Add item to hub |
+| `ccp hub link [profile]` | `h ln` | Interactive add hub items to profile |
+| `ccp hub add` | | Interactive promote local items to hub |
+| `ccp hub add <type> <path>` | | Add item to hub from filesystem |
 | `ccp hub show <type/name>` | | Show hub item details |
 | `ccp hub remove <type/name>` | | Remove item from hub |
 | `ccp link [profile] [path]` | `l` | Add/edit hub items in profile |
