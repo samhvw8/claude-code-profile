@@ -71,6 +71,17 @@ func (p *GitProvider) Update(ctx context.Context, sourcePath string, opts Update
 	ref := opts.Ref
 	if ref == "" {
 		ref = "origin/HEAD"
+	} else if !strings.HasPrefix(ref, "origin/") {
+		ref = "origin/" + ref
+	}
+
+	// Get the remote commit BEFORE reset to compare
+	result.NewCommit = p.getRefCommit(sourcePath, ref)
+
+	// Only reset if there are actual changes
+	if result.OldCommit == result.NewCommit {
+		result.Updated = false
+		return result, nil
 	}
 
 	resetCmd := exec.CommandContext(ctx, "git", "-C", sourcePath, "reset", "--hard", ref)
@@ -78,13 +89,21 @@ func (p *GitProvider) Update(ctx context.Context, sourcePath string, opts Update
 		return nil, &SourceError{Op: "git reset", Source: sourcePath, Err: err}
 	}
 
-	result.NewCommit = p.getCommit(sourcePath)
-	result.Updated = result.OldCommit != result.NewCommit
+	result.Updated = true
 	return result, nil
 }
 
 func (p *GitProvider) getCommit(repoPath string) string {
 	cmd := exec.Command("git", "-C", repoPath, "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func (p *GitProvider) getRefCommit(repoPath, ref string) string {
+	cmd := exec.Command("git", "-C", repoPath, "rev-parse", ref)
 	output, err := cmd.Output()
 	if err != nil {
 		return ""

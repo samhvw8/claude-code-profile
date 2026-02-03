@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.24.0
-**Date:** 2026-02-02
+**Version:** 0.25.0
+**Date:** 2026-02-03
 **Status:** Draft
 
 ---
@@ -881,6 +881,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.25.0 | 2026-02-03 | — | Fixed: `source update` now only updates registry timestamp when git has actual changes. Previously `git reset --hard` ran unconditionally; now it only runs when remote has new commits. |
 | 0.24.0 | 2026-02-02 | — | Added: `--json` flag to list commands (profile list, hub list, source list, status) for scripting/CI integration. First-run guidance when ccp is not initialized. |
 | 0.17.0 | 2026-01-31 | — | Added: `profile rename` command, `--empty` flag for `profile create` to skip interactive selection, enhanced `link` command with interactive mode (no args = active profile, one arg = specified profile). |
 | 0.16.0 | 2026-01-31 | — | Added shared plugin store at `~/.ccp/store/plugins/`. Plugin caches (marketplaces, known_marketplaces.json) are now shared across profiles via symlinks, reducing duplication. New `ccp migrate` step moves existing plugin caches to store. Profile creation automatically symlinks to store. |
