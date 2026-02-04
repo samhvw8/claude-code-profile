@@ -97,9 +97,15 @@ func (r *SkillsShRegistry) Search(ctx context.Context, query string, opts Search
 
 	packages := make([]PackageInfo, len(result.Skills))
 	for i, s := range result.Skills {
-		pkg := s.Source
-		if pkg == "" {
-			pkg = s.Slug
+		fullPath := s.Source
+		if fullPath == "" {
+			fullPath = s.Slug
+		}
+		// Extract owner/repo from full path (e.g., "owner/repo/skill" -> "owner/repo")
+		pkg := fullPath
+		parts := strings.Split(fullPath, "/")
+		if len(parts) >= 2 {
+			pkg = parts[0] + "/" + parts[1]
 		}
 		packages[i] = PackageInfo{
 			ID:          pkg,

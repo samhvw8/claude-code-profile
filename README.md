@@ -147,7 +147,8 @@ ccp use --show
 |---------|-------|-------------|
 | `ccp find <query>` | `search` | Search skills.sh for packages |
 | `ccp install` | `i` | Sync all sources from ccp.toml |
-| `ccp install <owner/repo>` | | Install from package (auto-adds source) |
+| `ccp install <owner/repo>` | | Install from package (interactive picker) |
+| `ccp install <owner/repo> skills/<name>` | | Install specific skill directly |
 | `ccp source` | `s` | Advanced source management |
 | `ccp source add <owner/repo>` | | Add source without installing |
 | `ccp source list` | | List installed sources |

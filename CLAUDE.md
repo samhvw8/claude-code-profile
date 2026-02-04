@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.25.0**
+**Current version: v0.25.1**
 
 ## Project Context
 
@@ -131,23 +131,25 @@ type SettingsBuilder interface {
 Unified source management for skills, agents, and plugins:
 
 ```bash
-ccp find <query>                     # Search skills.sh (shows PACKAGE + SKILL columns)
-ccp find -r github <query>           # Search GitHub repos
-ccp install                          # Sync all from ccp.toml (for machine migration)
-ccp install <owner/repo>             # Auto-add + interactive install (recommended)
-ccp install <owner/repo> -a          # Auto-add + install all items
-ccp source add <owner/repo>          # Add source only (falls back to GitHub if not on skills.sh)
-ccp source list                      # List installed sources
-ccp source update [name]             # Update sources
-ccp source remove <name>             # Remove source
+ccp find <query>                        # Search skills.sh (shows PACKAGE + SKILL columns)
+ccp find -r github <query>              # Search GitHub repos
+ccp install                             # Sync all from ccp.toml (for machine migration)
+ccp install <owner/repo>                # Auto-add + interactive install (recommended)
+ccp install <owner/repo> skills/<name>  # Install specific skill directly
+ccp install <owner/repo> -a             # Auto-add + install all items
+ccp source add <owner/repo>             # Add source only (falls back to GitHub if not on skills.sh)
+ccp source list                         # List installed sources
+ccp source update [name]                # Update sources
+ccp source remove <name>                # Remove source
 ```
 
 ### Source Workflow
 
-1. `find` searches skills.sh by default, shows PACKAGE and SKILL separately
-2. `install` auto-adds source if not found, then shows interactive picker
-3. `install` (no args) syncs all sources from ccp.toml - clones missing sources and reinstalls items
-4. `source add` tries skills.sh first, falls back to GitHub with default branch
+1. `find` searches skills.sh by default, shows PACKAGE (owner/repo) and SKILL separately
+2. `install <owner/repo>` auto-adds source if not found, then shows interactive picker
+3. `install <owner/repo> skills/<name>` installs a specific skill directly without picker
+4. `install` (no args) syncs all sources from ccp.toml - clones missing sources and reinstalls items
+5. `source add` tries skills.sh first, falls back to GitHub with default branch
 
 ## Hooks Format
 

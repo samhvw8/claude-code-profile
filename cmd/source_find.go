@@ -94,10 +94,9 @@ func runSourceFind(cmd *cobra.Command, args []string) error {
 	w.Flush()
 
 	fmt.Println()
-	fmt.Println("Install with: ccp install <package>")
-	if hasSkillName {
-		fmt.Println("  (skill name is informational - use PACKAGE column)")
-	}
+	fmt.Println("Install with:")
+	fmt.Println("  ccp install <package>                      # Interactive selection")
+	fmt.Println("  ccp install <package> skills/<skill-name>  # Install specific skill")
 
 	return nil
 }
