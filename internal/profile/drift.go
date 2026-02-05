@@ -12,10 +12,11 @@ import (
 type DriftType string
 
 const (
-	DriftMissing    DriftType = "missing"    // In manifest but not in directory
-	DriftExtra      DriftType = "extra"      // In directory but not in manifest
-	DriftBroken     DriftType = "broken"     // Symlink exists but is broken
-	DriftMismatched DriftType = "mismatched" // Symlink points to wrong target
+	DriftMissing    DriftType = "missing"     // In manifest but not in directory
+	DriftExtra      DriftType = "extra"       // In directory but not in manifest
+	DriftBroken     DriftType = "broken"      // Symlink exists but is broken
+	DriftMismatched DriftType = "mismatched"  // Symlink points to wrong target
+	DriftHubMissing DriftType = "hub_missing" // In manifest but hub item doesn't exist
 )
 
 // DriftItem represents a single drift issue
@@ -45,6 +46,20 @@ func (r *DriftReport) IssuesByType() map[DriftType][]DriftItem {
 		result[issue.Type] = append(result[issue.Type], issue)
 	}
 	return result
+}
+
+// FixOptions configures the fix behavior
+type FixOptions struct {
+	DryRun            bool
+	Force             bool                                           // Auto-remove hub_missing items without confirmation
+	ConfirmHubMissing func(items []DriftItem) ([]DriftItem, error) // Callback to confirm which hub_missing items to remove
+}
+
+// FixResult contains the result of a fix operation
+type FixResult struct {
+	Actions         []string
+	ManifestUpdated bool
+	RemovedItems    []DriftItem
 }
 
 // Detector detects configuration drift
@@ -94,6 +109,18 @@ func (d *Detector) detectItemTypeDrift(profile *Profile, itemType config.HubItem
 	// Check for missing items (in manifest but not in directory)
 	for name := range manifestItems {
 		itemPath := filepath.Join(itemDir, name)
+		hubPath := d.paths.HubItemPath(itemType, name)
+
+		// Check if hub item exists first
+		if _, err := os.Stat(hubPath); os.IsNotExist(err) {
+			issues = append(issues, DriftItem{
+				Type:     DriftHubMissing,
+				ItemType: itemType,
+				ItemName: name,
+			})
+			continue
+		}
+
 		info, err := d.symMgr.Info(itemPath)
 		if err != nil {
 			return nil, err
@@ -166,20 +193,69 @@ func (d *Detector) detectItemTypeDrift(profile *Profile, itemType config.HubItem
 }
 
 // Fix reconciles a profile to match its manifest
-func (d *Detector) Fix(profile *Profile, report *DriftReport, dryRun bool) ([]string, error) {
-	var actions []string
+func (d *Detector) Fix(profile *Profile, report *DriftReport, opts FixOptions) (*FixResult, error) {
+	result := &FixResult{}
 
+	// Separate hub_missing issues from others
+	var hubMissingIssues []DriftItem
+	var otherIssues []DriftItem
 	for _, issue := range report.Issues {
-		action, err := d.fixIssue(profile, issue, dryRun)
-		if err != nil {
-			return actions, err
-		}
-		if action != "" {
-			actions = append(actions, action)
+		if issue.Type == DriftHubMissing {
+			hubMissingIssues = append(hubMissingIssues, issue)
+		} else {
+			otherIssues = append(otherIssues, issue)
 		}
 	}
 
-	return actions, nil
+	// Handle hub_missing issues
+	if len(hubMissingIssues) > 0 {
+		var toRemove []DriftItem
+
+		if opts.DryRun {
+			// In dry-run, just report what would happen
+			for _, issue := range hubMissingIssues {
+				result.Actions = append(result.Actions, "remove from manifest: "+string(issue.ItemType)+"/"+issue.ItemName+" (hub item not found)")
+			}
+		} else if opts.Force {
+			// Auto-remove all
+			toRemove = hubMissingIssues
+		} else if opts.ConfirmHubMissing != nil {
+			// Ask for confirmation
+			confirmed, err := opts.ConfirmHubMissing(hubMissingIssues)
+			if err != nil {
+				return result, err
+			}
+			toRemove = confirmed
+		}
+
+		// Remove confirmed items from manifest
+		if len(toRemove) > 0 {
+			for _, issue := range toRemove {
+				profile.Manifest.RemoveHubItem(issue.ItemType, issue.ItemName)
+				result.Actions = append(result.Actions, "removed from manifest: "+string(issue.ItemType)+"/"+issue.ItemName)
+				result.RemovedItems = append(result.RemovedItems, issue)
+			}
+
+			// Save updated manifest
+			if err := profile.Manifest.SaveTOML(profile.Path); err != nil {
+				return result, err
+			}
+			result.ManifestUpdated = true
+		}
+	}
+
+	// Fix other issues
+	for _, issue := range otherIssues {
+		action, err := d.fixIssue(profile, issue, opts.DryRun)
+		if err != nil {
+			return result, err
+		}
+		if action != "" {
+			result.Actions = append(result.Actions, action)
+		}
+	}
+
+	return result, nil
 }
 
 // fixIssue fixes a single drift issue

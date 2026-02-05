@@ -123,6 +123,7 @@ ccp use --show
 | `ccp profile edit <name> -i` | | Interactive hub item selection |
 | `ccp profile check <name>` | | Validate profile against manifest |
 | `ccp profile fix <name>` | | Reconcile profile to match manifest |
+| `ccp profile fix <name> --force` | | Auto-remove non-existent hub items |
 | `ccp profile sync [name]` | | Regenerate symlinks and settings |
 | `ccp profile delete <name>` | | Delete a profile |
 

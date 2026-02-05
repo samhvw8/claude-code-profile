@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -9,19 +12,24 @@ import (
 	"github.com/samhoang/ccp/internal/profile"
 )
 
-var fixDryRun bool
+var (
+	fixDryRun bool
+	fixForce  bool
+)
 
 var profileFixCmd = &cobra.Command{
 	Use:   "fix <name>",
 	Short: "Reconcile profile to match its manifest",
-	Long: `Fix configuration drift by reconciling the profile directory to match profile.yaml.
+	Long: `Fix configuration drift by reconciling the profile directory to match profile.toml.
 
 Actions taken:
   - Create missing symlinks
   - Remove extra items not in manifest
   - Recreate broken or mismatched symlinks
+  - Remove references to non-existent hub items from manifest
 
-Use --dry-run to preview changes without executing.`,
+Use --dry-run to preview changes without executing.
+Use --force to auto-remove non-existent hub items without confirmation.`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: completeProfileNames,
 	RunE:              runProfileFix,
@@ -29,6 +37,7 @@ Use --dry-run to preview changes without executing.`,
 
 func init() {
 	profileFixCmd.Flags().BoolVar(&fixDryRun, "dry-run", false, "Preview changes without executing")
+	profileFixCmd.Flags().BoolVarP(&fixForce, "force", "f", false, "Auto-remove non-existent hub items from manifest")
 	profileCmd.AddCommand(profileFixCmd)
 }
 
@@ -65,10 +74,51 @@ func runProfileFix(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	// Build fix options
+	opts := profile.FixOptions{
+		DryRun: fixDryRun,
+		Force:  fixForce,
+	}
+
+	// Set up confirmation callback for hub_missing items (only if not dry-run and not force)
+	if !fixDryRun && !fixForce {
+		opts.ConfirmHubMissing = func(items []profile.DriftItem) ([]profile.DriftItem, error) {
+			if len(items) == 0 {
+				return nil, nil
+			}
+
+			fmt.Printf("Found %d hub item(s) that no longer exist:\n", len(items))
+			for _, item := range items {
+				fmt.Printf("  - %s/%s\n", item.ItemType, item.ItemName)
+			}
+			fmt.Println()
+
+			fmt.Print("Remove these items from manifest? [y/N]: ")
+			reader := bufio.NewReader(os.Stdin)
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return nil, err
+			}
+
+			input = strings.TrimSpace(strings.ToLower(input))
+			if input == "y" || input == "yes" {
+				return items, nil
+			}
+
+			fmt.Println("Skipped removing non-existent hub items from manifest")
+			return nil, nil
+		}
+	}
+
 	// Apply fixes
-	actions, err := detector.Fix(p, report, fixDryRun)
+	result, err := detector.Fix(p, report, opts)
 	if err != nil {
 		return fmt.Errorf("failed to fix drift: %w", err)
+	}
+
+	if len(result.Actions) == 0 {
+		fmt.Printf("Profile '%s' is already in sync - no fixes needed\n", profileName)
+		return nil
 	}
 
 	if fixDryRun {
@@ -77,7 +127,7 @@ func runProfileFix(cmd *cobra.Command, args []string) error {
 		fmt.Println("Changes applied:")
 	}
 
-	for _, action := range actions {
+	for _, action := range result.Actions {
 		fmt.Printf("  - %s\n", action)
 	}
 

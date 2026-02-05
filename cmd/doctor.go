@@ -153,10 +153,14 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 				}
 
 				if report.HasDrift() {
-					actions, err := detector.Fix(p, report, false)
-					if err == nil && len(actions) > 0 {
+					opts := profile.FixOptions{
+						DryRun: false,
+						Force:  true, // Auto-fix without prompts in doctor --fix
+					}
+					result, err := detector.Fix(p, report, opts)
+					if err == nil && len(result.Actions) > 0 {
 						fixedProfiles++
-						fixed += len(actions)
+						fixed += len(result.Actions)
 					}
 				}
 			}

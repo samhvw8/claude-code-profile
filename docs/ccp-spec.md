@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.25.1
-**Date:** 2026-02-04
+**Version:** 0.25.2
+**Date:** 2026-02-05
 **Status:** Draft
 
 ---
@@ -775,6 +775,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 **`ccp profile fix`**
 - `--dry-run` — Show changes without executing
+- `-f, --force` — Auto-remove non-existent hub items from manifest without confirmation
 
 **`ccp profile sync`**
 - `--all` — Sync all profiles
@@ -881,6 +882,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.25.2 | 2026-02-05 | — | Enhanced: `profile fix` now handles non-existent hub items by prompting user to remove them from manifest. Added `--force` flag to auto-remove without confirmation. New drift type `hub_missing` for items in manifest but missing from hub. |
 | 0.25.0 | 2026-02-03 | — | Fixed: `source update` now only updates registry timestamp when git has actual changes. Previously `git reset --hard` ran unconditionally; now it only runs when remote has new commits. |
 | 0.24.0 | 2026-02-02 | — | Added: `--json` flag to list commands (profile list, hub list, source list, status) for scripting/CI integration. First-run guidance when ccp is not initialized. |
 | 0.17.0 | 2026-01-31 | — | Added: `profile rename` command, `--empty` flag for `profile create` to skip interactive selection, enhanced `link` command with interactive mode (no args = active profile, one arg = specified profile). |
