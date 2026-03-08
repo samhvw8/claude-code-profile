@@ -12,17 +12,23 @@ import (
 )
 
 // ManifestVersion is the current manifest format version
-const ManifestVersion = 2
+const ManifestVersion = 3
+
+// ManifestVersionV2 is the previous version without engine/context support
+const ManifestVersionV2 = 2
 
 // Manifest represents the profile.toml file
 type Manifest struct {
-	Version     int               `toml:"version" yaml:"-"`
-	Name        string            `toml:"name" yaml:"name"`
-	Description string            `toml:"description,omitempty" yaml:"description,omitempty"`
-	Created     time.Time         `toml:"created" yaml:"created"`
-	Updated     time.Time         `toml:"updated" yaml:"updated"`
-	Hub         HubLinks          `toml:"hub" yaml:"hub"`
-	Data        DataConfig        `toml:"data" yaml:"data"`
+	Version     int                 `toml:"version" yaml:"-"`
+	Name        string              `toml:"name" yaml:"name"`
+	Description string              `toml:"description,omitempty" yaml:"description,omitempty"`
+	Engine      string              `toml:"engine,omitempty" yaml:"engine,omitempty"`
+	Context     string              `toml:"context,omitempty" yaml:"context,omitempty"`
+	Created     time.Time           `toml:"created" yaml:"created"`
+	Updated     time.Time           `toml:"updated" yaml:"updated"`
+	Hub         HubLinks            `toml:"hub" yaml:"hub"`
+	Data        DataConfig          `toml:"data" yaml:"data"`
+	LinkedDirs  []string            `toml:"linked-dirs,omitempty" yaml:"linked-dirs,omitempty"`
 	Hooks       []config.HookConfig `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
 }
 
@@ -82,8 +88,8 @@ func LoadManifest(path string) (*Manifest, error) {
 
 	var m Manifest
 
-	// Try TOML first (new format)
-	if err := toml.Unmarshal(data, &m); err == nil && m.Version >= 2 {
+	// Try TOML first (v2+ format)
+	if err := toml.Unmarshal(data, &m); err == nil && m.Version >= ManifestVersionV2 {
 		return &m, nil
 	}
 
@@ -121,7 +127,12 @@ func (m *Manifest) SaveTOML(dir string) error {
 
 // NeedsMigration returns true if manifest is old YAML format
 func (m *Manifest) NeedsMigration() bool {
-	return m.Version < ManifestVersion
+	return m.Version < ManifestVersionV2
+}
+
+// UsesComposition returns true if the manifest references an engine or context
+func (m *Manifest) UsesComposition() bool {
+	return m.Engine != "" || m.Context != ""
 }
 
 // ManifestPath returns the path to the manifest file

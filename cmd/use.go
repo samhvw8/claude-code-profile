@@ -155,9 +155,19 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 
 	// Global mode: update ~/.claude symlink
 	if global {
-		// Check for drift before switching
+		// Resolve engine+context composition
+		resolved, err := profile.ResolveManifest(p.Manifest, paths)
+		if err != nil {
+			fmt.Printf("Warning: could not resolve engine/context: %v\n", err)
+			resolved = p.Manifest
+		}
+
+		// Check for drift before switching (using resolved manifest)
+		origManifest := p.Manifest
+		p.Manifest = resolved
 		detector := profile.NewDetector(paths)
 		report, err := detector.Detect(p)
+		p.Manifest = origManifest
 		if err != nil {
 			fmt.Printf("Warning: could not check profile health: %v\n", err)
 		} else if report.HasDrift() {
@@ -169,11 +179,19 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 			return fmt.Errorf("failed to set active profile: %w", err)
 		}
 
-		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
+		if err := profile.RegenerateSettings(paths, p.Path, resolved); err != nil {
 			fmt.Printf("Warning: failed to regenerate settings.json: %v\n", err)
 		}
 
 		fmt.Printf("Switched global profile to: %s\n", profileName)
+		if p.Manifest.UsesComposition() {
+			if p.Manifest.Engine != "" {
+				fmt.Printf("  Engine: %s\n", p.Manifest.Engine)
+			}
+			if p.Manifest.Context != "" {
+				fmt.Printf("  Context: %s\n", p.Manifest.Context)
+			}
+		}
 		return nil
 	}
 

@@ -128,3 +128,63 @@ func (m *TOMLMigrator) MigrateProfile(name string) error {
 
 	return nil
 }
+
+// UpgradeV2ToV3 upgrades all v2 TOML manifests to v3.
+// This is a no-op structurally (v2 manifests already work as v3),
+// but re-saves to bump the version number.
+func (m *TOMLMigrator) UpgradeV2ToV3() ([]string, error) {
+	var upgraded []string
+
+	entries, err := os.ReadDir(m.paths.ProfilesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "shared" {
+			continue
+		}
+
+		tomlPath := filepath.Join(m.paths.ProfilesDir, entry.Name(), "profile.toml")
+
+		manifest, err := profile.LoadManifest(tomlPath)
+		if err != nil {
+			continue
+		}
+
+		if manifest.Version >= profile.ManifestVersion {
+			continue // Already v3+
+		}
+
+		// Re-save stamps ManifestVersion (3)
+		if err := manifest.SaveTOML(filepath.Join(m.paths.ProfilesDir, entry.Name())); err != nil {
+			return upgraded, fmt.Errorf("upgrade %s: %w", entry.Name(), err)
+		}
+
+		upgraded = append(upgraded, entry.Name())
+	}
+
+	return upgraded, nil
+}
+
+// NeedsV2ToV3Upgrade checks if any profiles need version upgrade
+func (m *TOMLMigrator) NeedsV2ToV3Upgrade() bool {
+	entries, _ := os.ReadDir(m.paths.ProfilesDir)
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "shared" {
+			continue
+		}
+		tomlPath := filepath.Join(m.paths.ProfilesDir, entry.Name(), "profile.toml")
+		manifest, err := profile.LoadManifest(tomlPath)
+		if err != nil {
+			continue
+		}
+		if manifest.Version < profile.ManifestVersion {
+			return true
+		}
+	}
+	return false
+}

@@ -20,11 +20,13 @@ var migrateCmd = &cobra.Command{
 
 This command:
 1. Migrates profile manifests from YAML to TOML (profile.yaml → profile.toml)
-2. Migrates source.yaml files to ccp.toml [sources] section
-3. Migrates registry.toml to ccp.toml [sources] section
-4. Converts absolute symlinks to relative (for cross-computer portability)
-5. Converts hook.yaml to hooks.json (official Claude Code format)
-6. Moves plugin caches to shared store (marketplaces, known_marketplaces.json)
+2. Upgrades v2 manifests to v3 (adds engine/context support)
+3. Creates engines/ and contexts/ directories
+4. Migrates source.yaml files to ccp.toml [sources] section
+5. Migrates registry.toml to ccp.toml [sources] section
+6. Converts absolute symlinks to relative (for cross-computer portability)
+7. Converts hook.yaml to hooks.json (official Claude Code format)
+8. Moves plugin caches to shared store (marketplaces, known_marketplaces.json)
 
 Migrations are idempotent and safe to run multiple times.`,
 	RunE: runMigrate,
@@ -46,20 +48,25 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	}
 
 	tomlMigrator := migration.NewTOMLMigrator(paths)
+	structureMigrator := migration.NewStructureMigrator(paths)
 	sourceMigrator := migration.NewSourceMigrator(paths)
 	registryMigrator := migration.NewRegistryMigrator(paths)
 	symlinkMigrator := migration.NewSymlinkMigrator(paths)
 	hookFormatMigrator := migration.NewHookFormatMigrator(paths)
 	pluginStoreMigrator := migration.NewPluginStoreMigrator(paths)
+	linkedDirMigrator := migration.NewLinkedDirMigrator(paths)
 
 	needsTOML := tomlMigrator.NeedsMigration()
+	needsV3 := tomlMigrator.NeedsV2ToV3Upgrade()
+	needsStructure := structureMigrator.NeedsMigration()
 	needsSource := sourceMigrator.NeedsMigration()
 	needsRegistry := registryMigrator.NeedsMigration()
 	needsSymlink := symlinkMigrator.NeedsMigration()
 	needsHookFormat := hookFormatMigrator.NeedsMigration()
 	needsPluginStore := pluginStoreMigrator.NeedsMigration()
+	needsLinkedDirs := linkedDirMigrator.NeedsMigration()
 
-	if !needsTOML && !needsSource && !needsRegistry && !needsSymlink && !needsHookFormat && !needsPluginStore {
+	if !needsTOML && !needsV3 && !needsStructure && !needsSource && !needsRegistry && !needsSymlink && !needsHookFormat && !needsPluginStore && !needsLinkedDirs {
 		fmt.Println("No migrations needed - everything is up to date.")
 		return nil
 	}
@@ -68,6 +75,12 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		fmt.Println("Migrations that would run:")
 		if needsTOML {
 			fmt.Println("  - Profile manifest YAML → TOML migration")
+		}
+		if needsV3 {
+			fmt.Println("  - Profile manifest v2 → v3 upgrade (engine/context support)")
+		}
+		if needsStructure {
+			fmt.Println("  - Create engines/ and contexts/ directories")
 		}
 		if needsSource {
 			fmt.Println("  - source.yaml → ccp.toml migration")
@@ -84,6 +97,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		if needsPluginStore {
 			fmt.Println("  - Plugin cache → shared store migration")
 		}
+		if needsLinkedDirs {
+			fmt.Println("  - Track CLAUDE.md @import linked directories")
+		}
 		fmt.Println()
 		fmt.Println("Run without --dry-run to apply migrations.")
 		return nil
@@ -98,6 +114,30 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if len(migrated) > 0 {
 			fmt.Printf("  Migrated %d profile(s): %v\n", len(migrated), migrated)
+		}
+	}
+
+	// Upgrade v2 manifests to v3
+	if needsV3 {
+		fmt.Println("Upgrading profile manifests to v3...")
+		upgraded, err := tomlMigrator.UpgradeV2ToV3()
+		if err != nil {
+			return fmt.Errorf("v3 upgrade failed: %w", err)
+		}
+		if len(upgraded) > 0 {
+			fmt.Printf("  Upgraded %d profile(s): %v\n", len(upgraded), upgraded)
+		}
+	}
+
+	// Create engines/ and contexts/ directories
+	if needsStructure {
+		fmt.Println("Creating engines/ and contexts/ directories...")
+		count, err := structureMigrator.Migrate()
+		if err != nil {
+			return fmt.Errorf("structure migration failed: %w", err)
+		}
+		if count > 0 {
+			fmt.Printf("  Created %d directory(ies)\n", count)
 		}
 	}
 
@@ -158,6 +198,18 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if count > 0 {
 			fmt.Printf("  Moved %d plugin item(s) to shared store\n", count)
+		}
+	}
+
+	// Track CLAUDE.md @import linked directories
+	if needsLinkedDirs {
+		fmt.Println("Tracking CLAUDE.md @import linked directories...")
+		count, err := linkedDirMigrator.Migrate()
+		if err != nil {
+			return fmt.Errorf("linked dir migration failed: %w", err)
+		}
+		if count > 0 {
+			fmt.Printf("  Updated %d profile(s) with linked directory tracking\n", count)
 		}
 	}
 

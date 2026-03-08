@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.25.2**
+**Current version: v0.26.0**
 
 ## Project Context
 
@@ -14,7 +14,7 @@ internal/
 ├── errors/     # Custom error types (ProfileError, HubError, DriftError)
 ├── hub/        # Hub scanning, item management, fragment processing
 ├── source/     # Unified source system (providers, registries, installer)
-├── profile/    # Profile CRUD, manifest (profile.toml), settings generation, drift detection
+├── profile/    # Profile CRUD, manifest, engines, contexts, resolver, settings, drift
 ├── symlink/    # Platform-specific symlink operations (unix/windows)
 ├── migration/  # YAML→TOML migration, source migration, rollback
 └── picker/     # Bubble Tea multi-select TUI
@@ -68,6 +68,8 @@ type Paths struct {
     ProfilesDir string // ~/.ccp/profiles
     SharedDir   string // ~/.ccp/profiles/shared
     StoreDir    string // ~/.ccp/store (shared downloadable resources)
+    EnginesDir  string // ~/.ccp/engines
+    ContextsDir string // ~/.ccp/contexts
 }
 
 type HubItemType string      // skills, agents, hooks, rules, commands, setting-fragments
@@ -77,11 +79,27 @@ type PluginStoreItem string  // marketplaces, cache, known_marketplaces.json
 
 // internal/profile/manifest.go
 type Manifest struct {
-    Version           int           // 2 = TOML format
+    Version           int           // 3 = current (engine/context), 2 = TOML, 1 = YAML
     Name, Description string
+    Engine            string        // Optional engine reference
+    Context           string        // Optional context reference
     Created, Updated  time.Time
-    Hub               HubLinks      // What hub items to link
+    Hub               HubLinks      // What hub items to link (overrides)
     Data              DataConfig    // Shared vs isolated data dirs
+    LinkedDirs        []string      // Dirs referenced by @imports in CLAUDE.md
+}
+
+// internal/profile/engine.go
+type Engine struct {
+    Name, Description string
+    Hub               EngineHub     // setting-fragments, hooks
+    Data              DataConfig    // Data sharing config
+}
+
+// internal/profile/context.go
+type Context struct {
+    Name, Description string
+    Hub               ContextHub    // skills, agents, rules, commands, hooks
 }
 
 // internal/source/types.go
@@ -126,6 +144,38 @@ type SettingsBuilder interface {
 }
 ```
 
+## Two-Layer Profile Composition
+
+Profiles can compose an **engine** (runtime config) + **context** (prompt/capabilities):
+
+| Layer | Hub Items | Rationale |
+|-------|-----------|-----------|
+| Engine | setting-fragments, hooks | Runtime behavior, permissions |
+| Context | skills, agents, rules, commands, hooks | Prompt content, capabilities |
+| Profile | Any (overrides) | Profile-specific extras |
+
+Resolution order (lowest to highest priority): Engine → Context → Profile (union-merged, deduplicated).
+
+```bash
+# Engine CRUD
+ccp engine create <name> [-e | -i]
+ccp engine list [--json]
+ccp engine show <name>
+ccp engine delete <name>
+
+# Context CRUD
+ccp context create <name> [-e | -i]
+ccp context list [--json]
+ccp context show <name>
+ccp context delete <name>
+
+# Profile composition
+ccp profile create <name> --engine opus-full --context coding
+ccp profile edit <name> --engine haiku-fast
+```
+
+Engine and context fields are **optional** — profiles without them work as before (inline hub items).
+
 ## Source System
 
 Unified source management for skills, agents, and plugins:
@@ -150,6 +200,18 @@ ccp source remove <name>                # Remove source
 3. `install <owner/repo> skills/<name>` installs a specific skill directly without picker
 4. `install` (no args) syncs all sources from ccp.toml - clones missing sources and reinstalls items
 5. `source add` tries skills.sh first, falls back to GitHub with default branch
+
+## CLAUDE.md Linked Directories
+
+Claude Code supports `@path/to/file.md` imports in CLAUDE.md. ccp parses these references, stores the directories as reusable `rules` hub items, and creates root-level symlinks so `@` imports resolve correctly.
+
+- **Parser**: `internal/claudemd/parser.go` extracts `@path` references (skips code blocks and annotations)
+- **Hub storage**: Referenced dirs (e.g., `principles/`) are stored as `hub/rules/principles/` — reusable across profiles
+- **Dual symlinks**: Each linked dir gets both `profileDir/rules/{name}` (standard) and `profileDir/{name}` (root-level for `@` resolution)
+- **Manifest tracking**: `linked-dirs` field identifies which rules items need root-level symlinks
+- **Init**: During `ccp init`, referenced dirs are moved to hub/rules and symlinked
+- **Profile create**: `--from` copies linked-dirs + CLAUDE.md; hub items are shared via symlinks
+- **Migrate**: `ccp migrate` moves existing profile dirs to hub/rules and creates symlinks
 
 ## Hooks Format
 
@@ -252,6 +314,12 @@ Generate default config: `ccp config init`
 
 ```
 ~/.ccp/
+├── engines/                    # Reusable runtime config layers
+│   └── {name}/
+│       └── engine.toml
+├── contexts/                   # Reusable prompt/capability layers
+│   └── {name}/
+│       └── context.toml
 ├── hub/                        # Human-configurable (ccp-managed)
 │   ├── skills/
 │   ├── agents/
@@ -273,7 +341,7 @@ Generate default config: `ccp config init`
 │   │   ├── paste-cache/
 │   │   └── projects/
 │   └── {name}/                 # Individual profile
-│       ├── profile.toml        # Profile manifest
+│       ├── profile.toml        # Profile manifest (may ref engine + context)
 │       ├── skills/ → hub/skills/{linked}
 │       ├── agents/ → hub/agents/{linked}
 │       ├── plugins/

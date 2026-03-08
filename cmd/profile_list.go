@@ -65,6 +65,8 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 			Name        string `json:"name"`
 			Description string `json:"description"`
 			Path        string `json:"path"`
+			Engine      string `json:"engine,omitempty"`
+			Context     string `json:"context,omitempty"`
 			Active      bool   `json:"active"`
 			ActiveEnv   bool   `json:"active_env,omitempty"`
 		}
@@ -75,6 +77,8 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 				Name:        p.Name,
 				Description: p.Manifest.Description,
 				Path:        p.Path,
+				Engine:      p.Manifest.Engine,
+				Context:     p.Manifest.Context,
 				Active:      p.Name == activeName,
 			}
 			if envProfile != "" && envProfile == p.Path {
@@ -89,7 +93,7 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "NAME\tDESCRIPTION\tSTATUS\n")
+	fmt.Fprintf(w, "NAME\tENGINE\tCONTEXT\tDESCRIPTION\tSTATUS\n")
 
 	for _, p := range profiles {
 		status := ""
@@ -108,7 +112,16 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 			desc = desc[:37] + "..."
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, desc, status)
+		engineCol := p.Manifest.Engine
+		if engineCol == "" {
+			engineCol = "(inline)"
+		}
+		contextCol := p.Manifest.Context
+		if contextCol == "" {
+			contextCol = "(inline)"
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", p.Name, engineCol, contextCol, desc, status)
 	}
 
 	w.Flush()

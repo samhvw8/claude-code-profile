@@ -8,6 +8,8 @@ A CLI tool for managing multiple Claude Code **configuration profiles** via a ce
 
 - **Central Hub**: Store all your skills, agents, hooks, rules, and settings in one place (`~/.ccp/hub/`)
 - **Multiple Profiles**: Create purpose-specific configurations (quickfix, full-stack-dev, documentation)
+- **Two-Layer Composition**: Split profiles into reusable **engines** (runtime config) + **contexts** (prompt/capabilities)
+- **CLAUDE.md Linked Dirs**: `@path/file.md` imports are auto-tracked as hub rules, shared across profiles via symlinks
 - **Concurrent Profiles**: Run different profiles simultaneously in different projects via mise/direnv
 - **Symlink Architecture**: Profiles link to hub items, ensuring single-source-of-truth maintenance
 - **Instant Switching**: Switch between profiles globally or per-project via `CLAUDE_CONFIG_DIR`
@@ -61,11 +63,18 @@ ccp use --show
 
 ```
 ~/.ccp/                               # CCP data directory
+├── engines/                          # Reusable runtime config layers
+│   └── opus-full/
+│       └── engine.toml
+├── contexts/                         # Reusable prompt/capability layers
+│   └── coding/
+│       └── context.toml
 ├── hub/                              # Single source of truth
 │   ├── skills/
 │   ├── agents/
 │   ├── hooks/
-│   ├── rules/
+│   ├── rules/                        # Includes CLAUDE.md linked dirs
+│   │   └── principles/               # @principles/se.md → hub item
 │   ├── commands/
 │   └── setting-fragments/
 │
@@ -78,10 +87,12 @@ ccp use --show
 │   ├── default/                      # Migrated from original ~/.claude
 │   │   ├── CLAUDE.md
 │   │   ├── settings.json
+│   │   ├── principles → hub/rules/principles  # Root symlink for @imports
 │   │   ├── skills/                   # Symlinks → hub/skills/*
 │   │   ├── agents/                   # Symlinks → hub/agents/*
 │   │   ├── hooks/
-│   │   ├── profile.toml              # Manifest
+│   │   ├── rules/                    # Also has rules/principles symlink
+│   │   ├── profile.toml              # Manifest (may ref engine + context)
 │   │   └── ...
 │   │
 │   ├── quickfix/                     # Purpose-specific profile
@@ -142,6 +153,19 @@ ccp use --show
 | `ccp link [profile] [path]` | `l` | Add/edit hub items in profile |
 | `ccp unlink <profile> <path>` | `ul` | Remove hub item from profile |
 
+### Engine & Context (Two-Layer Composition)
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `ccp engine create <name>` | `e c` | Create reusable engine (runtime config) |
+| `ccp engine list` | `e l` | List engines |
+| `ccp engine show <name>` | | Show engine details |
+| `ccp engine delete <name>` | | Delete engine |
+| `ccp context create <name>` | `ctx c` | Create reusable context (prompt/capabilities) |
+| `ccp context list` | `ctx l` | List contexts |
+| `ccp context show <name>` | | Show context details |
+| `ccp context delete <name>` | | Delete context |
+
 ### Package Management
 
 | Command | Alias | Description |
@@ -192,14 +216,19 @@ CLAUDE_CONFIG_DIR=~/.ccp/profiles/quickfix claude "fix the bug"
 Each profile has a `profile.toml` manifest:
 
 ```toml
-version = 2
+version = 3
 name = "quickfix"
 description = "Minimal bug-fixing configuration"
+engine = "opus-full"           # Optional: reusable runtime config
+context = "coding"             # Optional: reusable prompt/capabilities
+linked-dirs = ["principles"]   # CLAUDE.md @import dirs (hub rules items)
 
 [hub]
 skills = ["debugging-core", "git-basics"]
 hooks = ["pre-commit-lint"]
-rules = ["minimal-change"]
+rules = ["minimal-change", "principles"]
+commands = []
+setting-fragments = []
 
 [data]
 tasks = "shared"

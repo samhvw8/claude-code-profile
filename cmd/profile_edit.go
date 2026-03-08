@@ -24,6 +24,8 @@ var (
 	editRemoveRules    []string
 	editRemoveCommands []string
 	editInteractive    bool
+	editEngine         string
+	editContext        string
 )
 
 var profileEditCmd = &cobra.Command{
@@ -58,6 +60,8 @@ func init() {
 	profileEditCmd.Flags().StringSliceVar(&editRemoveCommands, "remove-commands", nil, "Commands to remove")
 
 	profileEditCmd.Flags().BoolVarP(&editInteractive, "interactive", "i", false, "Interactive picker mode")
+	profileEditCmd.Flags().StringVar(&editEngine, "engine", "", "Set engine (runtime config layer)")
+	profileEditCmd.Flags().StringVar(&editContext, "context", "", "Set context (prompt/capability layer)")
 
 	profileCmd.AddCommand(profileEditCmd)
 }
@@ -97,11 +101,29 @@ func runProfileEdit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("profile not found: %s", profileName)
 	}
 
+	// Handle engine/context changes
+	if editEngine != "" {
+		engineMgr := profile.NewEngineManager(paths)
+		if !engineMgr.Exists(editEngine) {
+			return fmt.Errorf("engine not found: %s", editEngine)
+		}
+		p.Manifest.Engine = editEngine
+		fmt.Printf("Set engine: %s\n", editEngine)
+	}
+	if editContext != "" {
+		ctxMgr := profile.NewContextManager(paths)
+		if !ctxMgr.Exists(editContext) {
+			return fmt.Errorf("context not found: %s", editContext)
+		}
+		p.Manifest.Context = editContext
+		fmt.Printf("Set context: %s\n", editContext)
+	}
+
 	// Check if any flags were provided
 	hasFlags := len(editAddSkills) > 0 || len(editAddHooks) > 0 || len(editAddRules) > 0 ||
 		len(editAddCommands) > 0 ||
 		len(editRemoveSkills) > 0 || len(editRemoveHooks) > 0 || len(editRemoveRules) > 0 ||
-		len(editRemoveCommands) > 0
+		len(editRemoveCommands) > 0 || editEngine != "" || editContext != ""
 
 	if editInteractive || !hasFlags {
 		// Interactive mode
@@ -243,6 +265,12 @@ func runFlagEdit(paths *config.Paths, p *profile.Profile) error {
 }
 
 func syncProfileEdit(paths *config.Paths, p *profile.Profile) error {
+	// Resolve engine+context for symlink sync
+	resolved, err := profile.ResolveManifest(p.Manifest, paths)
+	if err != nil {
+		return fmt.Errorf("failed to resolve engine/context: %w", err)
+	}
+
 	symMgr := symlink.New()
 
 	// Sync hub item symlinks
@@ -254,9 +282,9 @@ func syncProfileEdit(paths *config.Paths, p *profile.Profile) error {
 			return fmt.Errorf("failed to create %s directory: %w", itemType, err)
 		}
 
-		// Get items from manifest
+		// Get items from resolved manifest
 		manifestItems := make(map[string]bool)
-		for _, name := range p.Manifest.GetHubItems(itemType) {
+		for _, name := range resolved.GetHubItems(itemType) {
 			manifestItems[name] = true
 		}
 
@@ -277,7 +305,7 @@ func syncProfileEdit(paths *config.Paths, p *profile.Profile) error {
 		}
 
 		// Create missing symlinks
-		for _, itemName := range p.Manifest.GetHubItems(itemType) {
+		for _, itemName := range resolved.GetHubItems(itemType) {
 			hubItemPath := paths.HubItemPath(itemType, itemName)
 			profileItemPath := filepath.Join(itemDir, itemName)
 
@@ -302,9 +330,9 @@ func syncProfileEdit(paths *config.Paths, p *profile.Profile) error {
 		}
 	}
 
-	// Regenerate settings.json for hooks and setting fragments
-	if len(p.Manifest.Hub.Hooks) > 0 || len(p.Manifest.Hub.SettingFragments) > 0 {
-		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
+	// Regenerate settings.json for hooks and setting fragments from resolved manifest
+	if len(resolved.Hub.Hooks) > 0 || len(resolved.Hub.SettingFragments) > 0 {
+		if err := profile.RegenerateSettings(paths, p.Path, resolved); err != nil {
 			return fmt.Errorf("failed to regenerate settings.json: %w", err)
 		}
 	}

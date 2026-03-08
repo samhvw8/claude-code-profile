@@ -14,6 +14,8 @@ type Paths struct {
 	ProfilesDir string // ~/.ccp/profiles
 	SharedDir   string // ~/.ccp/profiles/shared
 	StoreDir    string // ~/.ccp/store (shared downloadable resources)
+	EnginesDir  string // ~/.ccp/engines
+	ContextsDir string // ~/.ccp/contexts
 }
 
 // HubItemType represents the type of item in the hub
@@ -123,12 +125,24 @@ func ResolvePaths() (*Paths, error) {
 		ProfilesDir: filepath.Join(ccpDir, "profiles"),
 		SharedDir:   filepath.Join(ccpDir, "profiles", "shared"),
 		StoreDir:    filepath.Join(ccpDir, "store"),
+		EnginesDir:  filepath.Join(ccpDir, "engines"),
+		ContextsDir: filepath.Join(ccpDir, "contexts"),
 	}, nil
 }
 
 // ProfileDir returns the directory for a specific profile
 func (p *Paths) ProfileDir(name string) string {
 	return filepath.Join(p.ProfilesDir, name)
+}
+
+// EngineDir returns the directory for a specific engine
+func (p *Paths) EngineDir(name string) string {
+	return filepath.Join(p.EnginesDir, name)
+}
+
+// ContextDir returns the directory for a specific context
+func (p *Paths) ContextDir(name string) string {
+	return filepath.Join(p.ContextsDir, name)
 }
 
 // HubItemDir returns the directory for a specific hub item type

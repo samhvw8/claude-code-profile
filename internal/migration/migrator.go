@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/samhoang/ccp/internal/claudemd"
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/hub"
 	"github.com/samhoang/ccp/internal/profile"
@@ -18,6 +19,7 @@ import (
 type MigrationPlan struct {
 	HubItems           map[config.HubItemType][]string
 	FilesToCopy        []string // CLAUDE.md, settings.json, etc.
+	LinkedDirs         []string // Directories referenced by @imports in CLAUDE.md
 	DataDirs           []string // tasks, todos, etc.
 	HookClassification *HookClassification // Classified hooks from settings.json
 	HookMigrationPlan  *HookMigrationPlan  // User decisions for hook migration
@@ -27,9 +29,10 @@ type MigrationPlan struct {
 
 // Migrator handles the init migration process
 type Migrator struct {
-	paths    *config.Paths
-	symMgr   *symlink.Manager
-	rollback *Rollback
+	paths      *config.Paths
+	symMgr     *symlink.Manager
+	rollback   *Rollback
+	linkedDirs []string // dirs already copied (from CLAUDE.md @imports)
 }
 
 // NewMigrator creates a new migrator
@@ -65,6 +68,18 @@ func (m *Migrator) Plan() (*MigrationPlan, error) {
 	for _, f := range filesToCheck {
 		if _, err := os.Stat(filepath.Join(m.paths.ClaudeDir, f)); err == nil {
 			plan.FilesToCopy = append(plan.FilesToCopy, f)
+		}
+	}
+
+	// Parse CLAUDE.md for @import references
+	claudeMDPath := filepath.Join(m.paths.ClaudeDir, "CLAUDE.md")
+	if linkedDirs, err := claudemd.LinkedDirs(claudeMDPath); err == nil && len(linkedDirs) > 0 {
+		// Verify directories actually exist
+		for _, dir := range linkedDirs {
+			dirPath := filepath.Join(m.paths.ClaudeDir, dir)
+			if info, err := os.Stat(dirPath); err == nil && info.IsDir() {
+				plan.LinkedDirs = append(plan.LinkedDirs, dir)
+			}
 		}
 	}
 
@@ -122,6 +137,14 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 	}
 	m.rollback.AddDir(m.paths.CcpDir)
 
+	// Step 1.5: Create engines and contexts directories
+	for _, dir := range []string{m.paths.EnginesDir, m.paths.ContextsDir} {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return m.rollbackAndReturn(fmt.Errorf("failed to create dir %s: %w", dir, err))
+		}
+		m.rollback.AddDir(dir)
+	}
+
 	// Step 2: Create hub directory structure
 	if err := m.createHubStructure(); err != nil {
 		return m.rollbackAndReturn(err)
@@ -155,6 +178,7 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 	if err := m.createDefaultProfile(plan); err != nil {
 		return m.rollbackAndReturn(err)
 	}
+	m.linkedDirs = plan.LinkedDirs
 
 	// Step 6.5: Migrate hooks if there are any
 	if plan.HookMigrationPlan != nil {
@@ -336,6 +360,38 @@ func (m *Migrator) createDefaultProfile(plan *MigrationPlan) error {
 		}
 	}
 
+	// Move linked directories to hub/rules and create root-level symlinks.
+	// CLAUDE.md @imports like @principles/se.md resolve relative to profile root,
+	// so we symlink profileDir/principles → hub/rules/principles.
+	if len(plan.LinkedDirs) > 0 {
+		manifest.LinkedDirs = plan.LinkedDirs
+		for _, dir := range plan.LinkedDirs {
+			src := filepath.Join(m.paths.ClaudeDir, dir)
+			hubDst := m.paths.HubItemPath(config.HubRules, dir)
+
+			// Move to hub/rules/
+			if err := m.moveItem(src, hubDst); err != nil {
+				return fmt.Errorf("failed to move linked dir %s to hub: %w", dir, err)
+			}
+			m.rollback.AddMove(hubDst, src)
+
+			// Add as rules item in manifest
+			manifest.AddHubItem(config.HubRules, dir)
+
+			// Create root-level symlink for CLAUDE.md @import resolution
+			rootLink := filepath.Join(defaultDir, dir)
+			if err := m.symMgr.Create(rootLink, hubDst); err != nil {
+				return fmt.Errorf("failed to create root symlink for %s: %w", dir, err)
+			}
+
+			// Also create standard rules/ symlink
+			rulesLink := filepath.Join(defaultDir, string(config.HubRules), dir)
+			if err := m.symMgr.Create(rulesLink, hubDst); err != nil {
+				return fmt.Errorf("failed to create rules symlink for %s: %w", dir, err)
+			}
+		}
+	}
+
 	// Handle data directories
 	for _, dataType := range config.AllDataItemTypes() {
 		srcDir := filepath.Join(m.paths.ClaudeDir, string(dataType))
@@ -455,6 +511,10 @@ func (m *Migrator) moveRemainingItems(profileDir string) error {
 	knownNames["settings.json"] = true
 	knownNames["settings.local.json"] = true
 	knownNames["profile.yaml"] = true
+	// Skip linked dirs already copied from CLAUDE.md @imports
+	for _, dir := range m.linkedDirs {
+		knownNames[dir] = true
+	}
 
 	for _, entry := range entries {
 		if knownNames[entry.Name()] {

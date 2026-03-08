@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -106,6 +107,12 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		return nil, os.ErrExist
 	}
 
+	// Resolve engine+context composition for symlink creation
+	resolved, err := ResolveManifest(manifest, m.paths)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve engine/context: %w", err)
+	}
+
 	// Get default permissions from ~/.claude if it exists (resolved through symlink)
 	defaultPerm := os.FileMode(0755)
 	if info, err := os.Stat(m.paths.ClaudeDir); err == nil {
@@ -133,9 +140,9 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		}
 	}
 
-	// Create data directories based on config
+	// Create data directories based on resolved config
 	for _, dataType := range config.AllDataItemTypes() {
-		mode := manifest.GetDataShareMode(dataType)
+		mode := resolved.GetDataShareMode(dataType)
 		dataDir := filepath.Join(profileDir, string(dataType))
 
 		// Preserve data dir permissions from ~/.claude if they exist
@@ -178,9 +185,9 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		}
 	}
 
-	// Create symlinks for hub items
+	// Create symlinks for resolved hub items (merged from engine + context + profile)
 	for _, itemType := range config.AllHubItemTypes() {
-		for _, itemName := range manifest.GetHubItems(itemType) {
+		for _, itemName := range resolved.GetHubItems(itemType) {
 			hubItemPath := m.paths.HubItemPath(itemType, itemName)
 			profileItemPath := filepath.Join(profileDir, string(itemType), itemName)
 			if err := m.symMgr.Create(profileItemPath, hubItemPath); err != nil {
@@ -189,16 +196,45 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		}
 	}
 
-	// Save manifest
+	// Create root-level symlinks for linked dirs (CLAUDE.md @import references).
+	// These are rules hub items that need to be accessible at profile root
+	// so @principles/se.md resolves to profileDir/principles/se.md.
+	for _, dir := range manifest.LinkedDirs {
+		hubItemPath := m.paths.HubItemPath(config.HubRules, dir)
+		if _, err := os.Stat(hubItemPath); err != nil {
+			continue // Hub item doesn't exist, skip
+		}
+		rootLink := filepath.Join(profileDir, dir)
+		if err := m.symMgr.Create(rootLink, hubItemPath); err != nil {
+			return nil, fmt.Errorf("failed to create root symlink for linked dir %s: %w", dir, err)
+		}
+	}
+
+	// Copy CLAUDE.md from the source profile if using --from
+	if len(manifest.LinkedDirs) > 0 {
+		activeDir := m.paths.ClaudeDir
+		if target, err := os.Readlink(activeDir); err == nil {
+			activeDir = target
+		}
+		srcClaude := filepath.Join(activeDir, "CLAUDE.md")
+		if _, err := os.Stat(srcClaude); err == nil {
+			dstClaude := filepath.Join(profileDir, "CLAUDE.md")
+			if err := copyFile(srcClaude, dstClaude); err != nil {
+				return nil, fmt.Errorf("failed to copy CLAUDE.md: %w", err)
+			}
+		}
+	}
+
+	// Save the original manifest (with engine/context references, not resolved)
 	manifestPath := filepath.Join(profileDir, "profile.yaml")
 	manifest.Name = name
 	if err := manifest.Save(manifestPath); err != nil {
 		return nil, err
 	}
 
-	// Generate settings.json with hooks and setting fragments from hub
-	if len(manifest.Hub.Hooks) > 0 || len(manifest.Hub.SettingFragments) > 0 {
-		if err := RegenerateSettings(m.paths, profileDir, manifest); err != nil {
+	// Generate settings.json with hooks and setting fragments from resolved manifest
+	if len(resolved.Hub.Hooks) > 0 || len(resolved.Hub.SettingFragments) > 0 {
+		if err := RegenerateSettings(m.paths, profileDir, resolved); err != nil {
 			// Non-fatal - log and continue
 			fmt.Fprintf(os.Stderr, "Warning: failed to generate settings.json: %v\n", err)
 		}
@@ -321,3 +357,27 @@ func (m *Manager) SetActive(name string) error {
 	// Swap symlink
 	return m.symMgr.Swap(m.paths.ClaudeDir, profileDir)
 }
+
+// copyFile copies a single file preserving permissions
+func copyFile(src, dst string) error {
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	source, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	dest, err := os.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	_, err = io.Copy(dest, source)
+	return err
+}
+

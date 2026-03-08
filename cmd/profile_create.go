@@ -22,6 +22,8 @@ var (
 	createInteractive      bool
 	createEmpty            bool
 	createDescription      string
+	createEngine           string
+	createContext          string
 )
 
 var profileCreateCmd = &cobra.Command{
@@ -49,6 +51,8 @@ func init() {
 	profileCreateCmd.Flags().BoolVarP(&createInteractive, "interactive", "i", false, "Interactive picker mode")
 	profileCreateCmd.Flags().BoolVarP(&createEmpty, "empty", "e", false, "Create empty profile without hub items")
 	profileCreateCmd.Flags().StringVarP(&createDescription, "description", "d", "", "Profile description")
+	profileCreateCmd.Flags().StringVar(&createEngine, "engine", "", "Engine to use (runtime config layer)")
+	profileCreateCmd.Flags().StringVar(&createContext, "context", "", "Context to use (prompt/capability layer)")
 	profileCmd.AddCommand(profileCreateCmd)
 }
 
@@ -74,6 +78,24 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 	// Create manifest
 	manifest := profile.NewManifest(profileName, createDescription)
 
+	// Validate and assign engine
+	if createEngine != "" {
+		engineMgr := profile.NewEngineManager(paths)
+		if !engineMgr.Exists(createEngine) {
+			return fmt.Errorf("engine not found: %s", createEngine)
+		}
+		manifest.Engine = createEngine
+	}
+
+	// Validate and assign context
+	if createContext != "" {
+		ctxMgr := profile.NewContextManager(paths)
+		if !ctxMgr.Exists(createContext) {
+			return fmt.Errorf("context not found: %s", createContext)
+		}
+		manifest.Context = createContext
+	}
+
 	// If --from is specified, copy from existing profile
 	if createFrom != "" {
 		sourceProfile, err := mgr.Get(createFrom)
@@ -91,6 +113,17 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 
 		// Copy data config
 		manifest.Data = sourceProfile.Manifest.Data
+
+		// Copy linked dirs (CLAUDE.md @import references)
+		manifest.LinkedDirs = sourceProfile.Manifest.LinkedDirs
+
+		// Copy engine/context if not overridden by flags
+		if createEngine == "" && sourceProfile.Manifest.Engine != "" {
+			manifest.Engine = sourceProfile.Manifest.Engine
+		}
+		if createContext == "" && sourceProfile.Manifest.Context != "" {
+			manifest.Context = sourceProfile.Manifest.Context
+		}
 
 		if createDescription == "" {
 			manifest.Description = fmt.Sprintf("Created from %s", createFrom)
@@ -116,7 +149,8 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 
 	// Interactive mode
 	hasAnyFlags := len(createSkills) > 0 || len(createHooks) > 0 || len(createRules) > 0 ||
-		len(createCommands) > 0 || len(createSettingFragments) > 0 || createFrom != "" || createEmpty
+		len(createCommands) > 0 || len(createSettingFragments) > 0 || createFrom != "" || createEmpty ||
+		createEngine != "" || createContext != ""
 
 	if createInteractive || !hasAnyFlags {
 		// Scan hub for available items

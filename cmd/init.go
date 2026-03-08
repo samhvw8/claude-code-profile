@@ -90,6 +90,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\n  Config files: %v\n", plan.FilesToCopy)
 	}
 
+	if len(plan.LinkedDirs) > 0 {
+		fmt.Printf("\n  CLAUDE.md linked dirs: %v\n", plan.LinkedDirs)
+	}
+
 	if len(plan.DataDirs) > 0 {
 		fmt.Printf("  Data directories: %v\n", plan.DataDirs)
 	}
