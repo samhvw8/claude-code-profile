@@ -57,11 +57,11 @@ func TestPathsHubItemPath(t *testing.T) {
 
 func TestAllHubItemTypes(t *testing.T) {
 	types := AllHubItemTypes()
-	if len(types) != 6 {
-		t.Errorf("AllHubItemTypes() returned %d types, want 6", len(types))
+	if len(types) != 7 {
+		t.Errorf("AllHubItemTypes() returned %d types, want 7", len(types))
 	}
 
-	expected := []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubSettingFragments}
+	expected := []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubSettingFragments, HubSettingsTemplates}
 	for i, typ := range types {
 		if typ != expected[i] {
 			t.Errorf("types[%d] = %q, want %q", i, typ, expected[i])
@@ -102,6 +102,60 @@ func TestPathsIsInitialized(t *testing.T) {
 	// Now initialized
 	if !paths.IsInitialized() {
 		t.Error("IsInitialized() = false, want true")
+	}
+}
+
+func TestResolvePaths_GlobalClaudeDir_AlwaysHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot get home dir")
+	}
+
+	// Set CLAUDE_CONFIG_DIR to a project-specific path (simulating mise.toml)
+	projectProfile := "/some/project/.ccp/profiles/dev"
+	os.Setenv("CLAUDE_CONFIG_DIR", projectProfile)
+	defer os.Unsetenv("CLAUDE_CONFIG_DIR")
+
+	paths, err := ResolvePaths()
+	if err != nil {
+		t.Fatalf("ResolvePaths() error: %v", err)
+	}
+
+	// ClaudeDir should respect the env var
+	if paths.ClaudeDir != projectProfile {
+		t.Errorf("ClaudeDir = %q, want %q", paths.ClaudeDir, projectProfile)
+	}
+
+	// GlobalClaudeDir should always be ~/.claude regardless of CLAUDE_CONFIG_DIR
+	want := filepath.Join(home, ".claude")
+	if paths.GlobalClaudeDir != want {
+		t.Errorf("GlobalClaudeDir = %q, want %q", paths.GlobalClaudeDir, want)
+	}
+}
+
+func TestResolvePaths_GlobalClaudeDir_MatchesDefault(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot get home dir")
+	}
+
+	// Unset CLAUDE_CONFIG_DIR — ClaudeDir and GlobalClaudeDir should match
+	os.Unsetenv("CLAUDE_CONFIG_DIR")
+
+	paths, err := ResolvePaths()
+	if err != nil {
+		t.Fatalf("ResolvePaths() error: %v", err)
+	}
+
+	want := filepath.Join(home, ".claude")
+	if paths.ClaudeDir != want {
+		t.Errorf("ClaudeDir = %q, want %q", paths.ClaudeDir, want)
+	}
+	if paths.GlobalClaudeDir != want {
+		t.Errorf("GlobalClaudeDir = %q, want %q", paths.GlobalClaudeDir, want)
+	}
+	if paths.ClaudeDir != paths.GlobalClaudeDir {
+		t.Error("ClaudeDir and GlobalClaudeDir should match when CLAUDE_CONFIG_DIR is unset")
 	}
 }
 

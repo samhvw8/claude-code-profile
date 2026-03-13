@@ -26,6 +26,7 @@ var (
 	editInteractive    bool
 	editEngine         string
 	editContext        string
+	editTemplate       string
 )
 
 var profileEditCmd = &cobra.Command{
@@ -62,6 +63,7 @@ func init() {
 	profileEditCmd.Flags().BoolVarP(&editInteractive, "interactive", "i", false, "Interactive picker mode")
 	profileEditCmd.Flags().StringVar(&editEngine, "engine", "", "Set engine (runtime config layer)")
 	profileEditCmd.Flags().StringVar(&editContext, "context", "", "Set context (prompt/capability layer)")
+	profileEditCmd.Flags().StringVar(&editTemplate, "template", "", "Set settings template")
 
 	profileCmd.AddCommand(profileEditCmd)
 }
@@ -118,12 +120,20 @@ func runProfileEdit(cmd *cobra.Command, args []string) error {
 		p.Manifest.Context = editContext
 		fmt.Printf("Set context: %s\n", editContext)
 	}
+	if editTemplate != "" {
+		tmplMgr := hub.NewTemplateManager(paths.HubDir)
+		if !tmplMgr.Exists(editTemplate) {
+			return fmt.Errorf("settings template not found: %s", editTemplate)
+		}
+		p.Manifest.SettingsTemplate = editTemplate
+		fmt.Printf("Set settings template: %s\n", editTemplate)
+	}
 
 	// Check if any flags were provided
 	hasFlags := len(editAddSkills) > 0 || len(editAddHooks) > 0 || len(editAddRules) > 0 ||
 		len(editAddCommands) > 0 ||
 		len(editRemoveSkills) > 0 || len(editRemoveHooks) > 0 || len(editRemoveRules) > 0 ||
-		len(editRemoveCommands) > 0 || editEngine != "" || editContext != ""
+		len(editRemoveCommands) > 0 || editEngine != "" || editContext != "" || editTemplate != ""
 
 	if editInteractive || !hasFlags {
 		// Interactive mode
@@ -330,8 +340,8 @@ func syncProfileEdit(paths *config.Paths, p *profile.Profile) error {
 		}
 	}
 
-	// Regenerate settings.json for hooks and setting fragments from resolved manifest
-	if len(resolved.Hub.Hooks) > 0 || len(resolved.Hub.SettingFragments) > 0 {
+	// Regenerate settings.json for hooks, templates, and setting fragments from resolved manifest
+	if len(resolved.Hub.Hooks) > 0 || len(resolved.Hub.SettingFragments) > 0 || resolved.SettingsTemplate != "" {
 		if err := profile.RegenerateSettings(paths, p.Path, resolved); err != nil {
 			return fmt.Errorf("failed to regenerate settings.json: %w", err)
 		}

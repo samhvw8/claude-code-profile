@@ -24,6 +24,7 @@ var (
 	createDescription      string
 	createEngine           string
 	createContext          string
+	createTemplate         string
 )
 
 var profileCreateCmd = &cobra.Command{
@@ -53,6 +54,7 @@ func init() {
 	profileCreateCmd.Flags().StringVarP(&createDescription, "description", "d", "", "Profile description")
 	profileCreateCmd.Flags().StringVar(&createEngine, "engine", "", "Engine to use (runtime config layer)")
 	profileCreateCmd.Flags().StringVar(&createContext, "context", "", "Context to use (prompt/capability layer)")
+	profileCreateCmd.Flags().StringVar(&createTemplate, "template", "", "Settings template to use")
 	profileCmd.AddCommand(profileCreateCmd)
 }
 
@@ -96,6 +98,15 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 		manifest.Context = createContext
 	}
 
+	// Validate and assign settings template
+	if createTemplate != "" {
+		tmplMgr := hub.NewTemplateManager(paths.HubDir)
+		if !tmplMgr.Exists(createTemplate) {
+			return fmt.Errorf("settings template not found: %s", createTemplate)
+		}
+		manifest.SettingsTemplate = createTemplate
+	}
+
 	// If --from is specified, copy from existing profile
 	if createFrom != "" {
 		sourceProfile, err := mgr.Get(createFrom)
@@ -117,12 +128,15 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 		// Copy linked dirs (CLAUDE.md @import references)
 		manifest.LinkedDirs = sourceProfile.Manifest.LinkedDirs
 
-		// Copy engine/context if not overridden by flags
+		// Copy engine/context/template if not overridden by flags
 		if createEngine == "" && sourceProfile.Manifest.Engine != "" {
 			manifest.Engine = sourceProfile.Manifest.Engine
 		}
 		if createContext == "" && sourceProfile.Manifest.Context != "" {
 			manifest.Context = sourceProfile.Manifest.Context
+		}
+		if createTemplate == "" && sourceProfile.Manifest.SettingsTemplate != "" {
+			manifest.SettingsTemplate = sourceProfile.Manifest.SettingsTemplate
 		}
 
 		if createDescription == "" {
@@ -150,7 +164,7 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 	// Interactive mode
 	hasAnyFlags := len(createSkills) > 0 || len(createHooks) > 0 || len(createRules) > 0 ||
 		len(createCommands) > 0 || len(createSettingFragments) > 0 || createFrom != "" || createEmpty ||
-		createEngine != "" || createContext != ""
+		createEngine != "" || createContext != "" || createTemplate != ""
 
 	if createInteractive || !hasAnyFlags {
 		// Scan hub for available items

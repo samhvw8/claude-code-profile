@@ -62,7 +62,7 @@ func completeHubItems(cmd *cobra.Command, args []string, toComplete string) ([]s
 
 // completeHubTypes returns completion for hub item types
 func completeHubTypes(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	types := []string{"skills", "agents", "hooks", "rules", "commands", "setting-fragments"}
+	types := []string{"skills", "agents", "hooks", "rules", "commands", "setting-fragments", "settings-templates"}
 	return types, cobra.ShellCompDirectiveNoFileComp
 }
 

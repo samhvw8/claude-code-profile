@@ -155,6 +155,12 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 
 	// Global mode: update ~/.claude symlink
 	if global {
+		// Use the global ~/.claude path, ignoring CLAUDE_CONFIG_DIR
+		// This ensures `ccp use -g` works from any directory, even when
+		// CLAUDE_CONFIG_DIR is set to a project-specific profile
+		globalPaths := *paths
+		globalPaths.ClaudeDir = paths.GlobalClaudeDir
+
 		// Resolve engine+context composition
 		resolved, err := profile.ResolveManifest(p.Manifest, paths)
 		if err != nil {
@@ -175,7 +181,8 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 			fmt.Printf("  Run 'ccp profile fix %s' to reconcile\n\n", profileName)
 		}
 
-		if err := mgr.SetActive(profileName); err != nil {
+		globalMgr := profile.NewManager(&globalPaths)
+		if err := globalMgr.SetActive(profileName); err != nil {
 			return fmt.Errorf("failed to set active profile: %w", err)
 		}
 

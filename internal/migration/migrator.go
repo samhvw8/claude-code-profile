@@ -24,7 +24,8 @@ type MigrationPlan struct {
 	HookClassification *HookClassification // Classified hooks from settings.json
 	HookMigrationPlan  *HookMigrationPlan  // User decisions for hook migration
 	MigratedHooks      []MigratedHook      // Successfully migrated hooks
-	SettingFragments   []SettingFragment   // Extracted setting fragments
+	SettingFragments   []SettingFragment        // Extracted setting fragments (legacy)
+	SettingsTemplate   map[string]interface{}   // Extracted settings template (new)
 }
 
 // Migrator handles the init migration process
@@ -115,10 +116,16 @@ func (m *Migrator) Plan() (*MigrationPlan, error) {
 			}
 		}
 
-		// Extract setting fragments (non-hook keys)
+		// Extract setting fragments (non-hook keys) — legacy
 		fragments, err := ExtractSettingFragments(settingsPath)
 		if err == nil && len(fragments) > 0 {
 			plan.SettingFragments = fragments
+		}
+
+		// Extract settings template (non-hook keys as a complete JSON)
+		tmplSettings, err := hub.ExtractFromSettings(settingsPath)
+		if err == nil && len(tmplSettings) > 0 {
+			plan.SettingsTemplate = tmplSettings
 		}
 	}
 
@@ -150,8 +157,15 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 		return m.rollbackAndReturn(err)
 	}
 
-	// Step 2.5: Save setting fragments to hub
-	if len(plan.SettingFragments) > 0 {
+	// Step 2.5: Save settings template to hub
+	if len(plan.SettingsTemplate) > 0 {
+		tmplMgr := hub.NewTemplateManager(m.paths.HubDir)
+		tmpl := &hub.Template{Name: "default", Settings: plan.SettingsTemplate}
+		if err := tmplMgr.Save(tmpl); err != nil {
+			return m.rollbackAndReturn(fmt.Errorf("failed to save settings template: %w", err))
+		}
+	} else if len(plan.SettingFragments) > 0 {
+		// Fallback: save as legacy fragments
 		if err := SaveSettingFragments(m.paths.HubDir, plan.SettingFragments); err != nil {
 			return m.rollbackAndReturn(fmt.Errorf("failed to save setting fragments: %w", err))
 		}
@@ -215,8 +229,22 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 		}
 	}
 
-	// Step 6.6: Add setting fragments to default profile manifest
-	if len(plan.SettingFragments) > 0 {
+	// Step 6.6: Set settings template on default profile manifest
+	if len(plan.SettingsTemplate) > 0 {
+		defaultDir := m.paths.ProfileDir("default")
+		manifestPath := filepath.Join(defaultDir, "profile.yaml")
+		manifest, err := profile.LoadManifest(manifestPath)
+		if err != nil {
+			return m.rollbackAndReturn(fmt.Errorf("failed to load manifest for settings template: %w", err))
+		}
+
+		manifest.SettingsTemplate = "default"
+
+		if err := manifest.Save(manifestPath); err != nil {
+			return m.rollbackAndReturn(fmt.Errorf("failed to save manifest with settings template: %w", err))
+		}
+	} else if len(plan.SettingFragments) > 0 {
+		// Fallback: add legacy fragments
 		defaultDir := m.paths.ProfileDir("default")
 		manifestPath := filepath.Join(defaultDir, "profile.yaml")
 		manifest, err := profile.LoadManifest(manifestPath)

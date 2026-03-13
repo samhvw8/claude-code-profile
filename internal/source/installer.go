@@ -225,7 +225,7 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 	var items []string
 	seen := make(map[string]bool)
 
-	itemTypes := []string{"skills", "agents", "commands", "rules", "hooks", "setting-fragments"}
+	itemTypes := []string{"skills", "agents", "commands", "rules", "hooks", "setting-fragments", "settings-templates"}
 
 	// Helper to add items without duplicates
 	addItem := func(item string) {

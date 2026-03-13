@@ -22,8 +22,9 @@ type Manifest struct {
 	Version     int                 `toml:"version" yaml:"-"`
 	Name        string              `toml:"name" yaml:"name"`
 	Description string              `toml:"description,omitempty" yaml:"description,omitempty"`
-	Engine      string              `toml:"engine,omitempty" yaml:"engine,omitempty"`
-	Context     string              `toml:"context,omitempty" yaml:"context,omitempty"`
+	Engine           string              `toml:"engine,omitempty" yaml:"engine,omitempty"`
+	Context          string              `toml:"context,omitempty" yaml:"context,omitempty"`
+	SettingsTemplate string              `toml:"settings-template,omitempty" yaml:"settings-template,omitempty"`
 	Created     time.Time           `toml:"created" yaml:"created"`
 	Updated     time.Time           `toml:"updated" yaml:"updated"`
 	Hub         HubLinks            `toml:"hub" yaml:"hub"`

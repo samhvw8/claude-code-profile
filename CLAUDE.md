@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.26.0**
+**Current version: v0.27.0**
 
 ## Project Context
 
@@ -12,7 +12,7 @@ Go CLI tool for managing Claude Code profiles via a central hub. Uses Cobra for 
 internal/
 ├── config/     # Path resolution, types, CcpConfig (ccp.toml)
 ├── errors/     # Custom error types (ProfileError, HubError, DriftError)
-├── hub/        # Hub scanning, item management, fragment processing
+├── hub/        # Hub scanning, item management, settings templates, fragment processing (legacy)
 ├── source/     # Unified source system (providers, registries, installer)
 ├── profile/    # Profile CRUD, manifest, engines, contexts, resolver, settings, drift
 ├── symlink/    # Platform-specific symlink operations (unix/windows)
@@ -62,9 +62,10 @@ go mod tidy               # Update dependencies
 ```go
 // internal/config/paths.go
 type Paths struct {
-    CcpDir      string // ~/.ccp (ccp data directory)
-    ClaudeDir   string // ~/.claude (symlink to active profile)
-    HubDir      string // ~/.ccp/hub
+    CcpDir         string // ~/.ccp (ccp data directory)
+    ClaudeDir      string // ~/.claude or $CLAUDE_CONFIG_DIR (may be project-specific)
+    GlobalClaudeDir string // ~/.claude (always global, ignores CLAUDE_CONFIG_DIR)
+    HubDir         string // ~/.ccp/hub
     ProfilesDir string // ~/.ccp/profiles
     SharedDir   string // ~/.ccp/profiles/shared
     StoreDir    string // ~/.ccp/store (shared downloadable resources)
@@ -83,6 +84,7 @@ type Manifest struct {
     Name, Description string
     Engine            string        // Optional engine reference
     Context           string        // Optional context reference
+    SettingsTemplate  string        // Optional settings template name
     Created, Updated  time.Time
     Hub               HubLinks      // What hub items to link (overrides)
     Data              DataConfig    // Shared vs isolated data dirs
@@ -92,7 +94,8 @@ type Manifest struct {
 // internal/profile/engine.go
 type Engine struct {
     Name, Description string
-    Hub               EngineHub     // setting-fragments, hooks
+    SettingsTemplate  string        // Optional settings template name
+    Hub               EngineHub     // hooks (+ legacy setting-fragments)
     Data              DataConfig    // Data sharing config
 }
 
@@ -117,17 +120,18 @@ type CcpConfig struct {
     SkillsSh        SkillsShConfig // base_url, limit
 }
 
-// internal/hub/fragment.go
+// internal/hub/template.go
+type Template struct {
+    Name     string                 // Directory name
+    Settings map[string]interface{} // Complete settings.json content (hooks excluded)
+}
+
+// internal/hub/fragment.go (LEGACY — use templates for new code)
 type Fragment struct {
     Name        string      // Fragment identifier
     Description string      // Human-readable description
     Key         string      // Settings key to set
     Value       interface{} // Value to set
-}
-
-type FragmentReader interface {
-    Read(hubDir, name string) (*Fragment, error)
-    ReadAll(hubDir string, names []string) ([]*Fragment, error)
 }
 
 // internal/profile/generator.go
@@ -143,6 +147,28 @@ type SettingsBuilder interface {
     Build(manifest *Manifest) (map[string]interface{}, error)
 }
 ```
+
+## Settings Templates
+
+Complete `settings.json` templates stored in the hub. Profiles and engines reference a template by name. Replaces the old per-key setting-fragments system.
+
+```bash
+ccp template list                          # List available templates
+ccp template show <name>                   # Display template JSON
+ccp template create <name>                 # Create new (opens $EDITOR or --from-file)
+ccp template extract <name> --from <profile>  # Extract from existing profile's settings
+ccp template delete <name>
+ccp template edit <name>                   # Edit in $EDITOR
+
+# Use with profiles and engines
+ccp profile create <name> --template opus-full
+ccp engine create <name> --template haiku-fast
+ccp profile edit <name> --template minimal
+```
+
+Storage: `~/.ccp/hub/settings-templates/<name>/settings.json`
+
+Resolution order: Engine's template → Profile's template (profile wins if set). Hooks are always overlaid from hub hooks, not stored in templates.
 
 ## Two-Layer Profile Composition
 
@@ -326,7 +352,8 @@ Generate default config: `ccp config init`
 │   ├── hooks/
 │   ├── rules/
 │   ├── commands/
-│   └── setting-fragments/
+│   ├── settings-templates/     # Complete settings.json templates
+│   └── setting-fragments/      # Legacy (use settings-templates instead)
 ├── store/                      # Shared downloadable resources
 │   └── plugins/
 │       ├── marketplaces/       # Downloaded marketplace repos

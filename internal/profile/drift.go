@@ -80,9 +80,9 @@ func NewDetector(paths *config.Paths) *Detector {
 func (d *Detector) Detect(profile *Profile) (*DriftReport, error) {
 	report := &DriftReport{Profile: profile.Name}
 
-	// Check each hub item type (except setting-fragments which are merged into settings.json)
+	// Check each hub item type (except setting-fragments and settings-templates which are referenced by name, not symlinked)
 	for _, itemType := range config.AllHubItemTypes() {
-		if itemType == config.HubSettingFragments {
+		if itemType == config.HubSettingFragments || itemType == config.HubSettingsTemplates {
 			continue
 		}
 		issues, err := d.detectItemTypeDrift(profile, itemType)

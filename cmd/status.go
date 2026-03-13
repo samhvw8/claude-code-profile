@@ -76,13 +76,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// JSON output
 	if statusJSON {
 		type hubCounts struct {
-			Skills           int `json:"skills"`
-			Agents           int `json:"agents"`
-			Hooks            int `json:"hooks"`
-			Rules            int `json:"rules"`
-			Commands         int `json:"commands"`
-			SettingFragments int `json:"setting_fragments"`
-			Total            int `json:"total"`
+			Skills             int `json:"skills"`
+			Agents             int `json:"agents"`
+			Hooks              int `json:"hooks"`
+			Rules              int `json:"rules"`
+			Commands           int `json:"commands"`
+			SettingFragments   int `json:"setting_fragments"`
+			SettingsTemplates  int `json:"settings_templates"`
+			Total              int `json:"total"`
 		}
 
 		type profileStatus struct {
@@ -101,13 +102,14 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 		if hubErr == nil {
 			output["hub"] = hubCounts{
-				Skills:           len(h.GetItems(config.HubSkills)),
-				Agents:           len(h.GetItems(config.HubAgents)),
-				Hooks:            len(h.GetItems(config.HubHooks)),
-				Rules:            len(h.GetItems(config.HubRules)),
-				Commands:         len(h.GetItems(config.HubCommands)),
-				SettingFragments: len(h.GetItems(config.HubSettingFragments)),
-				Total:            h.ItemCount(),
+				Skills:            len(h.GetItems(config.HubSkills)),
+				Agents:            len(h.GetItems(config.HubAgents)),
+				Hooks:             len(h.GetItems(config.HubHooks)),
+				Rules:             len(h.GetItems(config.HubRules)),
+				Commands:          len(h.GetItems(config.HubCommands)),
+				SettingFragments:  len(h.GetItems(config.HubSettingFragments)),
+				SettingsTemplates: len(h.GetItems(config.HubSettingsTemplates)),
+				Total:             h.ItemCount(),
 			}
 		}
 

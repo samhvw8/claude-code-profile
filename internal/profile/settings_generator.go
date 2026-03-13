@@ -124,7 +124,19 @@ func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manife
 		}
 	}
 
-	// Merge setting fragments from hub - these define which keys should exist
+	// Load settings template (new system — takes priority)
+	if manifest.SettingsTemplate != "" {
+		tmplMgr := hub.NewTemplateManager(paths.HubDir)
+		t, err := tmplMgr.Load(manifest.SettingsTemplate)
+		if err != nil {
+			return err
+		}
+		for key, value := range t.Settings {
+			settings[key] = value
+		}
+	}
+
+	// Merge setting fragments from hub (legacy — will be removed after migration)
 	if len(manifest.Hub.SettingFragments) > 0 {
 		fragmentSettings, err := mergeSettingFragments(paths.HubDir, manifest.Hub.SettingFragments)
 		if err != nil {

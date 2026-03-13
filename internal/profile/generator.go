@@ -2,6 +2,7 @@ package profile
 
 import (
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/hub"
 )
 
 // HookProcessor processes hooks from the hub and generates settings entries
@@ -14,6 +15,12 @@ type HookProcessor interface {
 type FragmentProcessor interface {
 	// ProcessAll processes all fragments from the manifest and returns a settings map
 	ProcessAll(manifest *Manifest) (map[string]interface{}, error)
+}
+
+// TemplateProcessor loads a settings template from the hub
+type TemplateProcessor interface {
+	// Process loads the settings template referenced by the manifest
+	Process(manifest *Manifest) (map[string]interface{}, error)
 }
 
 // SettingsBuilder orchestrates the generation of settings.json content
@@ -59,17 +66,42 @@ func (p *DefaultFragmentProcessor) ProcessAll(manifest *Manifest) (map[string]in
 	return mergeSettingFragments(p.hubDir, manifest.Hub.SettingFragments)
 }
 
-// DefaultSettingsBuilder implements SettingsBuilder with hook and fragment processors
+// DefaultTemplateProcessor implements TemplateProcessor using hub.TemplateManager
+type DefaultTemplateProcessor struct {
+	hubDir string
+}
+
+// NewTemplateProcessor creates a new template processor
+func NewTemplateProcessor(hubDir string) TemplateProcessor {
+	return &DefaultTemplateProcessor{hubDir: hubDir}
+}
+
+// Process loads the settings template referenced by the manifest
+func (p *DefaultTemplateProcessor) Process(manifest *Manifest) (map[string]interface{}, error) {
+	if manifest.SettingsTemplate == "" {
+		return make(map[string]interface{}), nil
+	}
+	mgr := hub.NewTemplateManager(p.hubDir)
+	t, err := mgr.Load(manifest.SettingsTemplate)
+	if err != nil {
+		return nil, err
+	}
+	return t.Settings, nil
+}
+
+// DefaultSettingsBuilder implements SettingsBuilder with hook, fragment, and template processors
 type DefaultSettingsBuilder struct {
 	hookProcessor     HookProcessor
 	fragmentProcessor FragmentProcessor
+	templateProcessor TemplateProcessor
 }
 
 // NewSettingsBuilder creates a new settings builder with the given processors
-func NewSettingsBuilder(hookProcessor HookProcessor, fragmentProcessor FragmentProcessor) SettingsBuilder {
+func NewSettingsBuilder(hookProcessor HookProcessor, fragmentProcessor FragmentProcessor, templateProcessor TemplateProcessor) SettingsBuilder {
 	return &DefaultSettingsBuilder{
 		hookProcessor:     hookProcessor,
 		fragmentProcessor: fragmentProcessor,
+		templateProcessor: templateProcessor,
 	}
 }
 
@@ -77,7 +109,16 @@ func NewSettingsBuilder(hookProcessor HookProcessor, fragmentProcessor FragmentP
 func (b *DefaultSettingsBuilder) Build(manifest *Manifest) (map[string]interface{}, error) {
 	settings := make(map[string]interface{})
 
-	// Process fragments
+	// Process settings template (new system — takes priority)
+	templateSettings, err := b.templateProcessor.Process(manifest)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range templateSettings {
+		settings[key] = value
+	}
+
+	// Process fragments (legacy — will be removed after migration)
 	fragmentSettings, err := b.fragmentProcessor.ProcessAll(manifest)
 	if err != nil {
 		return nil, err
@@ -102,5 +143,6 @@ func (b *DefaultSettingsBuilder) Build(manifest *Manifest) (map[string]interface
 func BuilderFromPaths(paths *config.Paths, profileDir string) SettingsBuilder {
 	hookProcessor := NewHookProcessor(paths, profileDir)
 	fragmentProcessor := NewFragmentProcessor(paths.HubDir)
-	return NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	templateProcessor := NewTemplateProcessor(paths.HubDir)
+	return NewSettingsBuilder(hookProcessor, fragmentProcessor, templateProcessor)
 }

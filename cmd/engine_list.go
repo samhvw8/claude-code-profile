@@ -55,17 +55,20 @@ func runEngineList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "NAME\tDESCRIPTION\tFRAGMENTS\tHOOKS\n")
+	fmt.Fprintf(w, "NAME\tDESCRIPTION\tTEMPLATE\tHOOKS\n")
 
 	for _, e := range engines {
 		desc := e.Description
 		if len(desc) > 40 {
 			desc = desc[:37] + "..."
 		}
-		fragments := strings.Join(e.Hub.SettingFragments, ", ")
+		tmpl := e.SettingsTemplate
+		if tmpl == "" && len(e.Hub.SettingFragments) > 0 {
+			tmpl = fmt.Sprintf("(%d fragments)", len(e.Hub.SettingFragments))
+		}
 		hooks := strings.Join(e.Hub.Hooks, ", ")
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, desc, fragments, hooks)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, desc, tmpl, hooks)
 	}
 
 	w.Flush()

@@ -11,10 +11,11 @@ import (
 
 // Engine represents an engine.toml file
 type Engine struct {
-	Name        string     `toml:"name"`
-	Description string     `toml:"description,omitempty"`
-	Hub         EngineHub  `toml:"hub"`
-	Data        DataConfig `toml:"data"`
+	Name             string     `toml:"name"`
+	Description      string     `toml:"description,omitempty"`
+	SettingsTemplate string     `toml:"settings-template,omitempty"`
+	Hub              EngineHub  `toml:"hub"`
+	Data             DataConfig `toml:"data"`
 }
 
 // EngineHub defines which hub items an engine links

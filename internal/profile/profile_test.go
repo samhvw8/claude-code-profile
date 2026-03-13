@@ -127,14 +127,155 @@ func TestManifestAllHubItemsFlat(t *testing.T) {
 	}
 }
 
+func TestProfileManager_SetActive_GlobalVsProject(t *testing.T) {
+	testDir := t.TempDir()
+
+	// Simulate: CLAUDE_CONFIG_DIR points to a project-specific profile
+	projectClaudeDir := filepath.Join(testDir, "project", "profiles", "dev")
+	globalClaudeDir := filepath.Join(testDir, "global-claude-link")
+
+	paths := &config.Paths{
+		CcpDir:         testDir,
+		ClaudeDir:      projectClaudeDir, // as if CLAUDE_CONFIG_DIR is set
+		GlobalClaudeDir: globalClaudeDir,
+		HubDir:         filepath.Join(testDir, "hub"),
+		ProfilesDir:    filepath.Join(testDir, "profiles"),
+		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+	}
+
+	// Create hub + profile
+	for _, itemType := range config.AllHubItemTypes() {
+		os.MkdirAll(paths.HubItemDir(itemType), 0755)
+	}
+	mgr := NewManager(paths)
+	manifest := NewManifest("myprofile", "test")
+	if _, err := mgr.Create("myprofile", manifest); err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	// SetActive on the default manager uses ClaudeDir (project path)
+	os.MkdirAll(filepath.Dir(projectClaudeDir), 0755)
+	if err := mgr.SetActive("myprofile"); err != nil {
+		t.Fatalf("SetActive() with project ClaudeDir error: %v", err)
+	}
+
+	// Verify symlink was created at project path, NOT global path
+	info, _ := os.Lstat(projectClaudeDir)
+	if info == nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Error("expected symlink at project ClaudeDir")
+	}
+	if _, err := os.Lstat(globalClaudeDir); !os.IsNotExist(err) {
+		t.Error("global path should not have been touched")
+	}
+
+	// Now create a manager with GlobalClaudeDir — simulates `ccp use -g`
+	globalPaths := *paths
+	globalPaths.ClaudeDir = paths.GlobalClaudeDir
+	globalMgr := NewManager(&globalPaths)
+
+	if err := globalMgr.SetActive("myprofile"); err != nil {
+		t.Fatalf("SetActive() with GlobalClaudeDir error: %v", err)
+	}
+
+	// Verify symlink was created at global path
+	info, _ = os.Lstat(globalClaudeDir)
+	if info == nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Error("expected symlink at global ClaudeDir")
+	}
+}
+
+func TestProfileManager_SetActive_NonexistentProfile(t *testing.T) {
+	testDir := t.TempDir()
+	paths := &config.Paths{
+		CcpDir:         testDir,
+		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
+		HubDir:         filepath.Join(testDir, "hub"),
+		ProfilesDir:    filepath.Join(testDir, "profiles"),
+		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+	}
+
+	mgr := NewManager(paths)
+
+	err := mgr.SetActive("nonexistent")
+	if err == nil {
+		t.Error("expected error when setting active to nonexistent profile")
+	}
+}
+
+func TestProfileManager_GetActive_NotSymlink(t *testing.T) {
+	testDir := t.TempDir()
+	claudeDir := filepath.Join(testDir, "claude")
+	os.MkdirAll(claudeDir, 0755) // real dir, not symlink
+
+	paths := &config.Paths{
+		CcpDir:         testDir,
+		ClaudeDir:      claudeDir,
+		GlobalClaudeDir: claudeDir,
+		HubDir:         filepath.Join(testDir, "hub"),
+		ProfilesDir:    filepath.Join(testDir, "profiles"),
+		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+	}
+
+	mgr := NewManager(paths)
+	active, err := mgr.GetActive()
+	if err != nil {
+		t.Fatalf("GetActive() error: %v", err)
+	}
+	if active != nil {
+		t.Error("expected nil active profile when ClaudeDir is a real directory")
+	}
+}
+
+func TestProfileManager_SetActive_SwapExistingSymlink(t *testing.T) {
+	testDir := t.TempDir()
+	claudeLink := filepath.Join(testDir, "claude-link")
+
+	paths := &config.Paths{
+		CcpDir:         testDir,
+		ClaudeDir:      claudeLink,
+		GlobalClaudeDir: claudeLink,
+		HubDir:         filepath.Join(testDir, "hub"),
+		ProfilesDir:    filepath.Join(testDir, "profiles"),
+		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+	}
+
+	// Create hub + two profiles
+	for _, itemType := range config.AllHubItemTypes() {
+		os.MkdirAll(paths.HubItemDir(itemType), 0755)
+	}
+	mgr := NewManager(paths)
+	mgr.Create("profile-a", NewManifest("profile-a", "A"))
+	mgr.Create("profile-b", NewManifest("profile-b", "B"))
+
+	// Activate A
+	if err := mgr.SetActive("profile-a"); err != nil {
+		t.Fatalf("SetActive(a) error: %v", err)
+	}
+	active, _ := mgr.GetActive()
+	if active == nil || active.Name != "profile-a" {
+		t.Fatalf("expected active = profile-a, got %v", active)
+	}
+
+	// Swap to B
+	if err := mgr.SetActive("profile-b"); err != nil {
+		t.Fatalf("SetActive(b) error: %v", err)
+	}
+	active, _ = mgr.GetActive()
+	if active == nil || active.Name != "profile-b" {
+		t.Fatalf("expected active = profile-b, got %v", active)
+	}
+}
+
 func TestProfileManager(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:      testDir,
-		ClaudeDir:   filepath.Join(testDir, "claude-link"),
-		HubDir:      filepath.Join(testDir, "hub"),
-		ProfilesDir: filepath.Join(testDir, "profiles"),
-		SharedDir:   filepath.Join(testDir, "profiles", "shared"),
+		CcpDir:         testDir,
+		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
+		HubDir:         filepath.Join(testDir, "hub"),
+		ProfilesDir:    filepath.Join(testDir, "profiles"),
+		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
 	}
 
 	// Create hub structure

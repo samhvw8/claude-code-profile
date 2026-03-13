@@ -168,10 +168,13 @@ func syncProfile(paths *config.Paths, p *profile.Profile) error {
 	}
 
 	// Regenerate settings.json
-	if len(p.Manifest.Hub.Hooks) > 0 || len(p.Manifest.Hub.SettingFragments) > 0 {
+	if len(p.Manifest.Hub.Hooks) > 0 || len(p.Manifest.Hub.SettingFragments) > 0 || p.Manifest.SettingsTemplate != "" {
 		fmt.Println("  Regenerating settings.json...")
 		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
 			return fmt.Errorf("failed to regenerate settings.json: %w", err)
+		}
+		if p.Manifest.SettingsTemplate != "" {
+			fmt.Printf("  Applied settings template: %s\n", p.Manifest.SettingsTemplate)
 		}
 		if len(p.Manifest.Hub.Hooks) > 0 {
 			fmt.Printf("  Configured %d hooks\n", len(p.Manifest.Hub.Hooks))

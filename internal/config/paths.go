@@ -8,14 +8,15 @@ import (
 
 // Paths holds all resolved paths for ccp operations
 type Paths struct {
-	CcpDir      string // ~/.ccp (ccp data directory)
-	ClaudeDir   string // ~/.claude (symlink to active profile)
-	HubDir      string // ~/.ccp/hub
-	ProfilesDir string // ~/.ccp/profiles
-	SharedDir   string // ~/.ccp/profiles/shared
-	StoreDir    string // ~/.ccp/store (shared downloadable resources)
-	EnginesDir  string // ~/.ccp/engines
-	ContextsDir string // ~/.ccp/contexts
+	CcpDir         string // ~/.ccp (ccp data directory)
+	ClaudeDir      string // ~/.claude or $CLAUDE_CONFIG_DIR (may be project-specific)
+	GlobalClaudeDir string // ~/.claude (always the global path, ignores CLAUDE_CONFIG_DIR)
+	HubDir         string // ~/.ccp/hub
+	ProfilesDir    string // ~/.ccp/profiles
+	SharedDir      string // ~/.ccp/profiles/shared
+	StoreDir       string // ~/.ccp/store (shared downloadable resources)
+	EnginesDir     string // ~/.ccp/engines
+	ContextsDir    string // ~/.ccp/contexts
 }
 
 // HubItemType represents the type of item in the hub
@@ -27,12 +28,13 @@ const (
 	HubHooks            HubItemType = "hooks"
 	HubRules            HubItemType = "rules"
 	HubCommands         HubItemType = "commands"
-	HubSettingFragments HubItemType = "setting-fragments"
+	HubSettingFragments  HubItemType = "setting-fragments"
+	HubSettingsTemplates HubItemType = "settings-templates"
 )
 
 // AllHubItemTypes returns all hub item types in order
 func AllHubItemTypes() []HubItemType {
-	return []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubSettingFragments}
+	return []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubSettingFragments, HubSettingsTemplates}
 }
 
 // DataItemType represents data directories that can be shared or isolated
@@ -118,15 +120,18 @@ func ResolvePaths() (*Paths, error) {
 		claudeDir = filepath.Join(home, ".claude")
 	}
 
+	globalClaudeDir := filepath.Join(home, ".claude")
+
 	return &Paths{
-		CcpDir:      ccpDir,
-		ClaudeDir:   claudeDir,
-		HubDir:      filepath.Join(ccpDir, "hub"),
-		ProfilesDir: filepath.Join(ccpDir, "profiles"),
-		SharedDir:   filepath.Join(ccpDir, "profiles", "shared"),
-		StoreDir:    filepath.Join(ccpDir, "store"),
-		EnginesDir:  filepath.Join(ccpDir, "engines"),
-		ContextsDir: filepath.Join(ccpDir, "contexts"),
+		CcpDir:         ccpDir,
+		ClaudeDir:      claudeDir,
+		GlobalClaudeDir: globalClaudeDir,
+		HubDir:         filepath.Join(ccpDir, "hub"),
+		ProfilesDir:    filepath.Join(ccpDir, "profiles"),
+		SharedDir:      filepath.Join(ccpDir, "profiles", "shared"),
+		StoreDir:       filepath.Join(ccpDir, "store"),
+		EnginesDir:     filepath.Join(ccpDir, "engines"),
+		ContextsDir:    filepath.Join(ccpDir, "contexts"),
 	}, nil
 }
 
@@ -155,6 +160,10 @@ func (p *Paths) HubItemPath(itemType HubItemType, name string) string {
 	// Setting fragments are stored as .yaml files
 	if itemType == HubSettingFragments {
 		return filepath.Join(p.HubDir, string(itemType), name+".yaml")
+	}
+	// Settings templates store settings.json inside a directory
+	if itemType == HubSettingsTemplates {
+		return filepath.Join(p.HubDir, string(itemType), name, "settings.json")
 	}
 	return filepath.Join(p.HubDir, string(itemType), name)
 }

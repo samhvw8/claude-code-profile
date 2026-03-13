@@ -43,8 +43,11 @@ func runEngineShow(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("Path: %s\n", paths.EngineDir(args[0]))
 
+	if engine.SettingsTemplate != "" {
+		fmt.Printf("\nSettings Template: %s\n", engine.SettingsTemplate)
+	}
 	if len(engine.Hub.SettingFragments) > 0 {
-		fmt.Printf("\nSetting Fragments: %s\n", strings.Join(engine.Hub.SettingFragments, ", "))
+		fmt.Printf("Setting Fragments (legacy): %s\n", strings.Join(engine.Hub.SettingFragments, ", "))
 	}
 	if len(engine.Hub.Hooks) > 0 {
 		fmt.Printf("Hooks: %s\n", strings.Join(engine.Hub.Hooks, ", "))

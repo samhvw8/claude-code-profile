@@ -18,15 +18,16 @@ func ResolveManifest(m *Manifest, paths *config.Paths) (*Manifest, error) {
 	}
 
 	resolved := &Manifest{
-		Version:     m.Version,
-		Name:        m.Name,
-		Description: m.Description,
-		Engine:      m.Engine,
-		Context:     m.Context,
-		Created:     m.Created,
-		Updated:     m.Updated,
-		Data:        m.Data,
-		Hooks:       m.Hooks,
+		Version:          m.Version,
+		Name:             m.Name,
+		Description:      m.Description,
+		Engine:           m.Engine,
+		Context:          m.Context,
+		SettingsTemplate: m.SettingsTemplate,
+		Created:          m.Created,
+		Updated:          m.Updated,
+		Data:             m.Data,
+		Hooks:            m.Hooks,
 	}
 
 	// Start with empty hub
@@ -42,6 +43,11 @@ func ResolveManifest(m *Manifest, paths *config.Paths) (*Manifest, error) {
 
 		allFragments = append(allFragments, engine.Hub.SettingFragments...)
 		allHooks = append(allHooks, engine.Hub.Hooks...)
+
+		// Engine's settings-template is the base; profile overrides if set
+		if resolved.SettingsTemplate == "" && engine.SettingsTemplate != "" {
+			resolved.SettingsTemplate = engine.SettingsTemplate
+		}
 
 		// Use engine's data config as base
 		resolved.Data = engine.Data

@@ -26,6 +26,19 @@ func (m *mockFragmentProcessorImpl) ProcessAll(manifest *Manifest) (map[string]i
 	return m.settings, m.err
 }
 
+// mockTemplateProcessor is a test double for TemplateProcessor
+type mockTemplateProcessorImpl struct {
+	settings map[string]interface{}
+	err      error
+}
+
+func (m *mockTemplateProcessorImpl) Process(manifest *Manifest) (map[string]interface{}, error) {
+	return m.settings, m.err
+}
+
+// noopTemplateProcessor returns empty settings (used when template isn't being tested)
+var noopTemplate = &mockTemplateProcessorImpl{settings: map[string]interface{}{}}
+
 func TestDefaultSettingsBuilder_Build(t *testing.T) {
 	// Setup mock processors
 	hookProcessor := &mockHookProcessorImpl{
@@ -43,7 +56,7 @@ func TestDefaultSettingsBuilder_Build(t *testing.T) {
 		},
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
 	manifest := &Manifest{}
 
 	settings, err := builder.Build(manifest)
@@ -84,7 +97,7 @@ func TestDefaultSettingsBuilder_Build_EmptyHooks(t *testing.T) {
 		},
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
 	manifest := &Manifest{}
 
 	settings, err := builder.Build(manifest)
@@ -125,7 +138,7 @@ func TestDefaultSettingsBuilder_Build_ProcessorError(t *testing.T) {
 		settings: map[string]interface{}{},
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
 	manifest := &Manifest{}
 
 	_, err := builder.Build(manifest)
@@ -144,7 +157,7 @@ func TestDefaultSettingsBuilder_Build_FragmentProcessorError(t *testing.T) {
 		err:      errTestError,
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
 	manifest := &Manifest{}
 
 	_, err := builder.Build(manifest)
@@ -173,7 +186,7 @@ func TestDefaultSettingsBuilder_Build_MultipleHookTypes(t *testing.T) {
 		settings: map[string]interface{}{},
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
 	manifest := &Manifest{}
 
 	settings, err := builder.Build(manifest)
@@ -208,7 +221,7 @@ func TestDefaultSettingsBuilder_Build_OnlyFragments(t *testing.T) {
 		},
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor)
+	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
 	manifest := &Manifest{}
 
 	settings, err := builder.Build(manifest)

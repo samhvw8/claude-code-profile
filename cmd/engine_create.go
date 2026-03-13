@@ -19,6 +19,7 @@ var (
 	engineCreateFrom             string
 	engineCreateSettingFragments []string
 	engineCreateHooks            []string
+	engineCreateTemplate         string
 )
 
 var engineCreateCmd = &cobra.Command{
@@ -43,6 +44,7 @@ func init() {
 	engineCreateCmd.Flags().StringVar(&engineCreateFrom, "from", "", "Copy from existing engine")
 	engineCreateCmd.Flags().StringSliceVar(&engineCreateSettingFragments, "setting-fragments", nil, "Setting fragments to include")
 	engineCreateCmd.Flags().StringSliceVar(&engineCreateHooks, "hooks", nil, "Hooks to include")
+	engineCreateCmd.Flags().StringVar(&engineCreateTemplate, "template", "", "Settings template to use")
 	engineCmd.AddCommand(engineCreateCmd)
 }
 
@@ -74,9 +76,19 @@ func runEngineCreate(cmd *cobra.Command, args []string) error {
 		}
 		engine.Hub = source.Hub
 		engine.Data = source.Data
+		engine.SettingsTemplate = source.SettingsTemplate
 		if engineCreateDescription == "" {
 			engine.Description = fmt.Sprintf("Created from %s", engineCreateFrom)
 		}
+	}
+
+	// Apply template flag
+	if engineCreateTemplate != "" {
+		tmplMgr := hub.NewTemplateManager(paths.HubDir)
+		if !tmplMgr.Exists(engineCreateTemplate) {
+			return fmt.Errorf("settings template not found: %s", engineCreateTemplate)
+		}
+		engine.SettingsTemplate = engineCreateTemplate
 	}
 
 	// Apply CLI flags
