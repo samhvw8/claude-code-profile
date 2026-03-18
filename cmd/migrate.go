@@ -27,6 +27,7 @@ This command:
 6. Converts absolute symlinks to relative (for cross-computer portability)
 7. Converts hook.yaml to hooks.json (official Claude Code format)
 8. Moves plugin caches to shared store (marketplaces, known_marketplaces.json)
+9. Converts setting-fragments to settings templates
 
 Migrations are idempotent and safe to run multiple times.`,
 	RunE: runMigrate,
@@ -55,6 +56,7 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	hookFormatMigrator := migration.NewHookFormatMigrator(paths)
 	pluginStoreMigrator := migration.NewPluginStoreMigrator(paths)
 	linkedDirMigrator := migration.NewLinkedDirMigrator(paths)
+	templateMigrator := migration.NewTemplateMigrator(paths)
 
 	needsTOML := tomlMigrator.NeedsMigration()
 	needsV3 := tomlMigrator.NeedsV2ToV3Upgrade()
@@ -65,8 +67,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	needsHookFormat := hookFormatMigrator.NeedsMigration()
 	needsPluginStore := pluginStoreMigrator.NeedsMigration()
 	needsLinkedDirs := linkedDirMigrator.NeedsMigration()
+	needsTemplates := templateMigrator.NeedsMigration()
 
-	if !needsTOML && !needsV3 && !needsStructure && !needsSource && !needsRegistry && !needsSymlink && !needsHookFormat && !needsPluginStore && !needsLinkedDirs {
+	if !needsTOML && !needsV3 && !needsStructure && !needsSource && !needsRegistry && !needsSymlink && !needsHookFormat && !needsPluginStore && !needsLinkedDirs && !needsTemplates {
 		fmt.Println("No migrations needed - everything is up to date.")
 		return nil
 	}
@@ -99,6 +102,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if needsLinkedDirs {
 			fmt.Println("  - Track CLAUDE.md @import linked directories")
+		}
+		if needsTemplates {
+			fmt.Println("  - Convert setting-fragments → settings templates")
 		}
 		fmt.Println()
 		fmt.Println("Run without --dry-run to apply migrations.")
@@ -210,6 +216,18 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if count > 0 {
 			fmt.Printf("  Updated %d profile(s) with linked directory tracking\n", count)
+		}
+	}
+
+	// Convert setting-fragments to settings templates
+	if needsTemplates {
+		fmt.Println("Converting setting-fragments to settings templates...")
+		count, err := templateMigrator.Migrate()
+		if err != nil {
+			return fmt.Errorf("template migration failed: %w", err)
+		}
+		if count > 0 {
+			fmt.Printf("  Converted %d profile(s)/engine(s) to settings templates\n", count)
 		}
 	}
 

@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.26.0
-**Date:** 2026-03-08
+**Version:** 0.27.0
+**Date:** 2026-03-18
 **Status:** Draft
 
 ---
@@ -40,7 +40,8 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 │   │   └── principles/               # @principles/se.md → hub item
 │   ├── hooks/
 │   ├── commands/
-│   └── setting-fragments/            # Settings.json key-value fragments
+│   ├── settings-templates/           # Complete settings.json templates
+│   └── setting-fragments/            # Legacy (use settings-templates instead)
 │
 ├── store/                            # Shared downloadable resources
 │   └── plugins/
@@ -276,7 +277,7 @@ AND tool inherits directory permissions from current ~/.claude
 AND tool creates profile.yaml with selected items and sharing config
 AND tool creates symlinks for all selected hub items
 AND tool creates CLAUDE.md (composed or template)
-AND tool generates settings.json from selected setting-fragments and hooks
+AND tool generates settings.json from settings template (if set) and hooks
 AND data directories are created per sharing config (local dir or symlink to shared/)
 ```
 
@@ -451,7 +452,7 @@ GIVEN profile exists with hub hooks or symlinks
 WHEN user runs `ccp profile sync [name]`
 THEN tool regenerates symlinks for all hub items in manifest
 AND tool removes symlinks not in manifest
-AND tool regenerates settings.json with hook configurations and setting-fragments
+AND tool regenerates settings.json from settings template and hook configurations
 AND each hook includes interpreter prefix and $HOME-based paths
 AND supports --all flag to sync all profiles
 ```
@@ -545,6 +546,7 @@ name = "quickfix"
 description = "Minimal bug-fixing configuration"
 engine = "opus-full"           # Optional: reusable runtime config
 context = "coding"             # Optional: reusable prompt/capabilities
+settings-template = "opus-full" # Optional: settings template name
 linked-dirs = ["principles"]   # CLAUDE.md @import dirs (hub rules items)
 created = 2025-01-28T10:00:00Z
 updated = 2025-01-28T10:00:00Z
@@ -556,7 +558,6 @@ skills = ["debugging-core", "git-basics"]
 hooks = ["pre-commit-lint"]
 rules = ["minimal-change", "principles"]
 commands = ["quick-test"]
-setting-fragments = ["api-permissions", "model-preferences"]
 
 # Data directory sharing configuration
 # "shared" = symlink to ~/.ccp/profiles/shared/<name>
@@ -579,9 +580,9 @@ plans = "isolated"
 
 name = "opus-full"
 description = "Opus with full permissions and all MCP servers"
+settings-template = "opus-full"  # Optional: complete settings.json template
 
 [hub]
-setting-fragments = ["model-opus", "permissions-full", "mcp-all"]
 hooks = ["session-manager", "auto-compact"]
 
 [data]
@@ -617,11 +618,11 @@ Profiles can compose an **engine** (runtime config) + **context** (prompt/capabi
 
 | Layer | Hub Items | Rationale |
 |-------|-----------|-----------|
-| Engine | setting-fragments, hooks | Runtime behavior, permissions, data config |
+| Engine | hooks, settings-template | Runtime behavior, permissions, data config |
 | Context | skills, agents, rules, commands, hooks | Prompt content, capabilities |
 | Profile | Any (overrides) | Profile-specific extras on top |
 
-Resolution order (lowest to highest priority): Engine → Context → Profile. All lists are union-merged and deduplicated. Profile's `[data]` overrides engine's if specified.
+Resolution order (lowest to highest priority): Engine → Context → Profile. All lists are union-merged and deduplicated. Profile's `[data]` overrides engine's if specified. For settings templates: engine's template → profile's template (profile wins if set).
 
 ### CLAUDE.md Linked Directories
 
@@ -666,13 +667,40 @@ hub/
 ├── commands/
 │   ├── quick-test/
 │   └── deploy-staging/
-└── setting-fragments/
+├── settings-templates/
+│   ├── opus-full/
+│   │   └── settings.json
+│   └── haiku-fast/
+│       └── settings.json
+└── setting-fragments/              # Legacy
     ├── api-permissions.yaml
     ├── model-preferences.yaml
     └── allowed-tools.yaml
 ```
 
-### Setting Fragment Schema
+### Settings Template Schema
+
+Settings templates store complete `settings.json` files for profiles and engines to reference by name. Hooks are excluded from templates — they are managed separately by the hub hooks system.
+
+```
+~/.ccp/hub/settings-templates/<name>/
+└── settings.json    # Complete settings (hooks excluded)
+```
+
+Resolution order: Engine's template → Profile's template (profile wins if set). Hooks are always overlaid from hub hooks, not stored in templates.
+
+```bash
+ccp template list                            # List available templates
+ccp template show <name>                     # Display template JSON
+ccp template create <name>                   # Create new (opens $EDITOR or --from-file)
+ccp template extract <name> --from <profile> # Extract from existing profile's settings
+ccp template delete <name>
+ccp template edit <name>                     # Edit in $EDITOR
+```
+
+### Setting Fragment Schema (Legacy)
+
+> **Deprecated:** Use settings templates for new profiles. Fragments are retained for backward compatibility. Run `ccp migrate` to convert fragments to a template.
 
 Setting fragments store individual settings.json keys as YAML files for selective composition.
 
@@ -779,6 +807,17 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp plugin add <source>` | Install plugin from marketplace | `ccp plugin add owner/repo@plugin-name` |
 | `ccp plugin update [name]` | Update installed plugins | `ccp plugin update --all` |
 
+### Template Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp template list` | List settings templates | `ccp template list` |
+| `ccp template show <name>` | Display template JSON | `ccp template show opus-full` |
+| `ccp template create <name>` | Create new template | `ccp template create opus-full --from-file settings.json` |
+| `ccp template extract <name>` | Extract from profile's settings | `ccp template extract opus --from default` |
+| `ccp template edit <name>` | Edit template in $EDITOR | `ccp template edit opus-full` |
+| `ccp template delete <name>` | Delete template | `ccp template delete opus-full` |
+
 ### Engine Commands
 
 | Command | Description | Example |
@@ -846,10 +885,10 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--skills=a,b,c` — Skills to include
 - `--hooks=x,y` — Hooks to include
 - `--rules=p,q` — Rules to include
-- `--setting-fragments=s,t` — Setting fragments to include
 - `--from=<profile>` — Copy configuration from existing profile (includes engine, context, linked-dirs)
 - `--engine=<name>` — Use reusable engine for runtime config
 - `--context=<name>` — Use reusable context for prompt/capabilities
+- `--template=<name>` — Use settings template
 - `-e, --empty` — Create empty profile without hub items
 - `-i, --interactive` — Interactive picker mode (default if no flags)
 
@@ -865,12 +904,13 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--add-hooks=x,y` — Add hooks to profile
 - `--add-rules=p,q` — Add rules to profile
 - `--add-commands=c,d` — Add commands to profile
-- `--add-setting-fragments=s,t` — Add setting-fragments to profile
 - `--remove-skills=a` — Remove skills from profile
 - `--remove-hooks=x` — Remove hooks from profile
 - `--remove-rules=p` — Remove rules from profile
 - `--remove-commands=c` — Remove commands from profile
-- `--remove-setting-fragments=s` — Remove setting-fragments from profile
+- `--template=<name>` — Set settings template
+- `--engine=<name>` — Set engine
+- `--context=<name>` — Set context
 - `-i, --interactive` — Interactive picker mode (default if no flags)
 
 **`ccp auto`**
@@ -887,9 +927,16 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `-i, --interactive` — Interactive selection
 - `-l, --list` — List protected items
 
+**`ccp template create`**
+- `--from-file=<path>` — Create from existing JSON file (otherwise opens $EDITOR)
+
+**`ccp template extract`**
+- `--from=<profile>` — Profile to extract settings from (default: active profile)
+
 **`ccp engine create`**
 - `-e, --empty` — Create empty engine
-- `-i, --interactive` — Interactive picker for setting-fragments, hooks, data sharing
+- `-i, --interactive` — Interactive picker for hooks, data sharing
+- `--template=<name>` — Use settings template
 
 **`ccp engine list`**
 - `--json` — Output as JSON
@@ -977,7 +1024,8 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | **Hook Type** | Event trigger for hook execution (SessionStart, PreToolUse, etc.) |
 | **Project Config** | .ccp.yaml file in project root for automatic profile selection |
 | **Session** | Shell environment with CLAUDE_CONFIG_DIR set to a specific profile |
-| **Setting Fragment** | YAML file storing a single settings.json key-value for selective composition |
+| **Settings Template** | Complete settings.json file stored in hub, referenced by name from profiles/engines |
+| **Setting Fragment** | *(Legacy)* YAML file storing a single settings.json key-value for selective composition |
 
 ---
 
@@ -985,6 +1033,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.27.0 | 2026-03-18 | — | Added: Settings templates — complete `settings.json` templates replacing per-key setting-fragments. New CLI: `ccp template list/show/create/extract/edit/delete`. Profiles and engines reference templates by name (`settings-template` field). Resolution: engine template → profile template (profile wins). Hooks remain separately managed. `--template` flag added to `profile create`, `profile edit`, `engine create`. Added `GlobalClaudeDir` to Paths struct for reliable global `~/.claude` resolution (ignores `CLAUDE_CONFIG_DIR`). Fixed `ccp use -g` to always target `~/.claude` regardless of env override. Setting-fragments marked as legacy — `ccp migrate` converts fragments to template. |
 | 0.26.0 | 2026-03-08 | — | Added: Two-layer profile composition (engine + context). Engines bundle runtime config (setting-fragments, hooks, data sharing). Contexts bundle prompt/capabilities (skills, agents, rules, commands, hooks). Profiles compose engine + context + optional overrides. Added CLAUDE.md linked directories: `@path/file.md` imports are parsed, referenced dirs stored as reusable `rules` hub items, dual symlinks (root-level for @import resolution + standard rules/ for hub consistency). New commands: `ccp engine create/list/show/delete`, `ccp context create/list/show/delete`. Profile create gains `--engine` and `--context` flags. `ccp migrate` now detects and migrates untracked CLAUDE.md linked dirs. |
 | 0.25.2 | 2026-02-05 | — | Enhanced: `profile fix` now handles non-existent hub items by prompting user to remove them from manifest. Added `--force` flag to auto-remove without confirmation. New drift type `hub_missing` for items in manifest but missing from hub. |
 | 0.25.0 | 2026-02-03 | — | Fixed: `source update` now only updates registry timestamp when git has actual changes. Previously `git reset --hard` ran unconditionally; now it only runs when remote has new commits. |
