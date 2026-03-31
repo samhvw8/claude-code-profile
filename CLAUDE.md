@@ -37,7 +37,7 @@ go mod tidy               # Update dependencies
 ### Go Conventions
 - Standard Go formatting (gofmt)
 - Errors returned, not panicked
-- Interfaces for testability (Scanner, Manager, Detector, HookProcessor)
+- Interfaces for testability (Scanner, Manager, Detector)
 - Platform-specific code via build tags (`//go:build !windows`)
 
 ### CLI Patterns
@@ -112,7 +112,7 @@ func GenerateSettings(manifest *Manifest, hubDir string) (map[string]interface{}
 
 ## Settings Templates
 
-Complete `settings.json` templates stored in the hub. Profiles reference a template by name. Replaces the old per-key setting-fragments system.
+Complete `settings.json` templates stored in the hub. Profiles reference a template by name.
 
 ```bash
 ccp template list                          # List available templates
@@ -217,12 +217,7 @@ type HookCommand struct {
 
 ### Backward Compatibility
 
-Legacy `hook.yaml` format still supported. `GetHookManifest()` tries `hooks.json` first, falls back to `hook.yaml`.
-
-Run `ccp migrate` to convert existing `hook.yaml` to `hooks.json`:
-- Moves scripts to `scripts/` subdirectory
-- Converts paths to `${CLAUDE_PLUGIN_ROOT}`
-- Removes old `hook.yaml` after conversion
+Legacy `hook.yaml` format still supported for reading. `GetHookManifest()` tries `hooks.json` first, falls back to `hook.yaml`.
 
 ## Configuration
 

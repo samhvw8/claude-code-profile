@@ -788,10 +788,6 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 **`ccp template extract`**
 - `--from=<profile>` — Profile to extract settings from (default: active profile)
 
-
-**`ccp context delete`**
-- Warns if profiles reference the context
-
 **`ccp hub prune`**
 - `-f, --force` — Remove all orphans without confirmation
 - `-i, --interactive` — Interactive selection
@@ -830,19 +826,12 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 ---
 
-## Open Questions (Deferred to Future Phases)
+## Open Questions (Deferred)
 
-1. **CLAUDE.md composition** — Should tool support building CLAUDE.md from fragments, or just copy a complete file?
-
-2. **settings.json merging** — Same question for settings. Fragment-based composition or complete file?
-
-3. **Profile templates** — Predefined starter profiles (minimal, full-stack, docs-writer)?
-
-4. **Hub item metadata** — Should hub items have their own manifest (description, tags, dependencies)?
-
-5. **Dependency resolution** — If skill A requires hook B, should tool auto-link?
-
-6. **Profile export/import** — Package a profile for sharing (without hub dependency)?
+1. **Profile templates** — Predefined starter profiles (minimal, full-stack, docs-writer)?
+2. **Hub item metadata** — Should hub items have their own manifest (description, tags, dependencies)?
+3. **Dependency resolution** — If skill A requires hook B, should tool auto-link?
+4. **Profile export/import** — Package a profile for sharing (without hub dependency)?
 
 ---
 
