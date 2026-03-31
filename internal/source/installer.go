@@ -78,7 +78,7 @@ func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
 				Err: fmt.Errorf("item already exists: %s", dstItem)}
 		}
 
-		if err := copyTree(srcPath, dstPath); err != nil {
+		if err := CopyTree(srcPath, dstPath); err != nil {
 			return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
 		}
 
@@ -386,19 +386,22 @@ func (i *Installer) discoverFromPluginJSON(sourceDir string, data []byte, _ []st
 	}
 }
 
-func copyTree(src, dst string) error {
+// CopyTree copies a file or directory tree from src to dst.
+// If src is a directory, it copies recursively. If src is a file, it copies the single file.
+func CopyTree(src, dst string) error {
 	info, err := os.Stat(src)
 	if err != nil {
 		return err
 	}
 
 	if info.IsDir() {
-		return copyDir(src, dst)
+		return CopyDir(src, dst)
 	}
-	return copyFileItem(src, dst)
+	return CopyFileItem(src, dst)
 }
 
-func copyDir(src, dst string) error {
+// CopyDir copies a directory recursively from src to dst, resolving symlinks.
+func CopyDir(src, dst string) error {
 	if err := os.MkdirAll(dst, 0755); err != nil {
 		return err
 	}
@@ -419,11 +422,11 @@ func copyDir(src, dst string) error {
 		}
 
 		if info.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
+			if err := CopyDir(srcPath, dstPath); err != nil {
 				return err
 			}
 		} else {
-			if err := copyFileItem(srcPath, dstPath); err != nil {
+			if err := CopyFileItem(srcPath, dstPath); err != nil {
 				return err
 			}
 		}
@@ -432,7 +435,8 @@ func copyDir(src, dst string) error {
 	return nil
 }
 
-func copyFileItem(src, dst string) error {
+// CopyFileItem copies a single file from src to dst, preserving permissions.
+func CopyFileItem(src, dst string) error {
 	srcFile, err := os.Open(src)
 	if err != nil {
 		return err

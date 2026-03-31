@@ -131,6 +131,21 @@ Storage: `~/.ccp/hub/settings-templates/<name>/settings.json`
 
 Hooks are always overlaid from hub hooks, not stored in templates.
 
+## Project Setup
+
+Copy hub items into a project's `.claude/` directory for project-scoped Claude Code config. Items are copied (not symlinked) so the project is self-contained and git-committable.
+
+```bash
+ccp project add skills/coding agents/reviewer   # Copy specific items
+ccp project add -i                                # Interactive picker
+ccp project list                                  # List project's .claude/ items
+ccp project remove skills/coding                  # Remove from project
+```
+
+Detects project root via `.git/` directory (walk up from cwd). Override with `--dir`. Valid types: skills, agents, hooks, rules, commands.
+
+> ccp is the authoring tool, `.claude/` is the distribution format. One person runs `ccp project add`, commits `.claude/`, and the team uses Claude Code without needing ccp.
+
 ## Source System
 
 Unified source management for skills, agents, and plugins:

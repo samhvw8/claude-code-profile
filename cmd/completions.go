@@ -79,3 +79,64 @@ func completeLinkArgs(cmd *cobra.Command, args []string, toComplete string) ([]s
 	}
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
+
+// completeProjectAddArgs returns completion for project add (hub items, excluding settings-templates)
+func completeProjectAddArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	paths, err := config.ResolvePaths()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	if !paths.IsInitialized() {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	scanner := hub.NewScanner()
+	h, err := scanner.Scan(paths.HubDir)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	projectTypes := []config.HubItemType{
+		config.HubSkills, config.HubAgents, config.HubHooks,
+		config.HubRules, config.HubCommands,
+	}
+
+	var items []string
+	for _, itemType := range projectTypes {
+		for _, item := range h.GetItems(itemType) {
+			items = append(items, string(itemType)+"/"+item.Name)
+		}
+	}
+
+	return items, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeProjectRemoveArgs returns completion for project remove (items in .claude/)
+func completeProjectRemoveArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	dirFlag, _ := cmd.Flags().GetString("dir")
+	claudeDir, err := findProjectClaudeDir(dirFlag)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	scanner := hub.NewScanner()
+	h, err := scanner.ScanSource(claudeDir)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	projectTypes := []config.HubItemType{
+		config.HubSkills, config.HubAgents, config.HubHooks,
+		config.HubRules, config.HubCommands,
+	}
+
+	var items []string
+	for _, itemType := range projectTypes {
+		for _, item := range h.GetItems(itemType) {
+			items = append(items, string(itemType)+"/"+item.Name)
+		}
+	}
+
+	return items, cobra.ShellCompDirectiveNoFileComp
+}
