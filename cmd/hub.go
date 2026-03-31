@@ -18,7 +18,7 @@ var hubCmd = &cobra.Command{
 	Use:     "hub",
 	Aliases: []string{"h"},
 	Short:   "Manage the hub of reusable components",
-	Long:    `The hub contains all reusable skills, agents, hooks, rules, commands, and setting-fragments.`,
+	Long:    `The hub contains all reusable skills, agents, hooks, rules, and commands.`,
 }
 
 var hubListCmd = &cobra.Command{
@@ -27,7 +27,7 @@ var hubListCmd = &cobra.Command{
 	Short:   "List hub contents",
 	Long: `List all items in the hub, optionally filtered by type.
 
-Types: skills, agents, hooks, rules, commands, setting-fragments`,
+Types: skills, agents, hooks, rules, commands`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runHubList,
 }
@@ -67,7 +67,7 @@ func runHubList(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if !valid {
-			return fmt.Errorf("invalid type: %s (valid: skills, agents, hooks, rules, commands, setting-fragments)", args[0])
+			return fmt.Errorf("invalid type: %s (valid: skills, agents, hooks, rules, commands)", args[0])
 		}
 		typesToShow = []config.HubItemType{itemType}
 	} else {

@@ -107,12 +107,6 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		return nil, os.ErrExist
 	}
 
-	// Resolve engine+context composition for symlink creation
-	resolved, err := ResolveManifest(manifest, m.paths)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve engine/context: %w", err)
-	}
-
 	// Get default permissions from ~/.claude if it exists (resolved through symlink)
 	defaultPerm := os.FileMode(0755)
 	if info, err := os.Stat(m.paths.ClaudeDir); err == nil {
@@ -140,9 +134,8 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		}
 	}
 
-	// Create data directories based on resolved config
+	// Create data directories — all shared by default
 	for _, dataType := range config.AllDataItemTypes() {
-		mode := resolved.GetDataShareMode(dataType)
 		dataDir := filepath.Join(profileDir, string(dataType))
 
 		// Preserve data dir permissions from ~/.claude if they exist
@@ -152,20 +145,13 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 			dataPerm = info.Mode().Perm()
 		}
 
-		if mode == config.ShareModeShared {
-			// Create symlink to shared directory
-			sharedDir := m.paths.SharedDataDir(dataType)
-			if err := os.MkdirAll(sharedDir, dataPerm); err != nil {
-				return nil, err
-			}
-			if err := m.symMgr.Create(dataDir, sharedDir); err != nil {
-				return nil, err
-			}
-		} else {
-			// Create local directory
-			if err := os.MkdirAll(dataDir, dataPerm); err != nil {
-				return nil, err
-			}
+		// Create symlink to shared directory
+		sharedDir := m.paths.SharedDataDir(dataType)
+		if err := os.MkdirAll(sharedDir, dataPerm); err != nil {
+			return nil, err
+		}
+		if err := m.symMgr.Create(dataDir, sharedDir); err != nil {
+			return nil, err
 		}
 	}
 
@@ -185,9 +171,9 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		}
 	}
 
-	// Create symlinks for resolved hub items (merged from engine + context + profile)
+	// Create symlinks for hub items
 	for _, itemType := range config.AllHubItemTypes() {
-		for _, itemName := range resolved.GetHubItems(itemType) {
+		for _, itemName := range manifest.GetHubItems(itemType) {
 			hubItemPath := m.paths.HubItemPath(itemType, itemName)
 			profileItemPath := filepath.Join(profileDir, string(itemType), itemName)
 			if err := m.symMgr.Create(profileItemPath, hubItemPath); err != nil {
@@ -196,45 +182,16 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 		}
 	}
 
-	// Create root-level symlinks for linked dirs (CLAUDE.md @import references).
-	// These are rules hub items that need to be accessible at profile root
-	// so @principles/se.md resolves to profileDir/principles/se.md.
-	for _, dir := range manifest.LinkedDirs {
-		hubItemPath := m.paths.HubItemPath(config.HubRules, dir)
-		if _, err := os.Stat(hubItemPath); err != nil {
-			continue // Hub item doesn't exist, skip
-		}
-		rootLink := filepath.Join(profileDir, dir)
-		if err := m.symMgr.Create(rootLink, hubItemPath); err != nil {
-			return nil, fmt.Errorf("failed to create root symlink for linked dir %s: %w", dir, err)
-		}
-	}
-
-	// Copy CLAUDE.md from the source profile if using --from
-	if len(manifest.LinkedDirs) > 0 {
-		activeDir := m.paths.ClaudeDir
-		if target, err := os.Readlink(activeDir); err == nil {
-			activeDir = target
-		}
-		srcClaude := filepath.Join(activeDir, "CLAUDE.md")
-		if _, err := os.Stat(srcClaude); err == nil {
-			dstClaude := filepath.Join(profileDir, "CLAUDE.md")
-			if err := copyFile(srcClaude, dstClaude); err != nil {
-				return nil, fmt.Errorf("failed to copy CLAUDE.md: %w", err)
-			}
-		}
-	}
-
-	// Save the original manifest (with engine/context references, not resolved)
+	// Save manifest
 	manifestPath := filepath.Join(profileDir, "profile.yaml")
 	manifest.Name = name
 	if err := manifest.Save(manifestPath); err != nil {
 		return nil, err
 	}
 
-	// Generate settings.json with hooks and setting fragments from resolved manifest
-	if len(resolved.Hub.Hooks) > 0 || len(resolved.Hub.SettingFragments) > 0 {
-		if err := RegenerateSettings(m.paths, profileDir, resolved); err != nil {
+	// Generate settings.json with hooks from manifest
+	if len(manifest.Hub.Hooks) > 0 {
+		if err := RegenerateSettings(m.paths, profileDir, manifest); err != nil {
 			// Non-fatal - log and continue
 			fmt.Fprintf(os.Stderr, "Warning: failed to generate settings.json: %v\n", err)
 		}

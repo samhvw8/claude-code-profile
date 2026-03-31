@@ -11,8 +11,9 @@ import (
 )
 
 var profileCloneCmd = &cobra.Command{
-	Use:   "clone <source> <new-name>",
-	Short: "Clone an existing profile",
+	Use:    "clone <source> <new-name>",
+	Hidden: true,
+	Short:  "Clone an existing profile",
 	Long: `Create a new profile by copying an existing one.
 
 This is equivalent to: ccp profile create <new-name> --from=<source>
@@ -65,9 +66,6 @@ func runProfileClone(cmd *cobra.Command, args []string) error {
 	for _, itemType := range config.AllHubItemTypes() {
 		manifest.SetHubItems(itemType, source.Manifest.GetHubItems(itemType))
 	}
-
-	// Copy data config
-	manifest.Data = source.Manifest.Data
 
 	// Create the profile
 	p, err := mgr.Create(newName, manifest)

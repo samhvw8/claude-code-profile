@@ -15,8 +15,9 @@ import (
 )
 
 var hubOutdatedCmd = &cobra.Command{
-	Use:   "outdated",
-	Short: "Show hub items with available updates",
+	Use:    "outdated",
+	Hidden: true,
+	Short:  "Show hub items with available updates",
 	Long: `Check hub items against their source repositories for updates.
 
 Compares the installed commit SHA against the latest commit on the remote branch.

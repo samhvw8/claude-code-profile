@@ -1,251 +1,375 @@
 package profile
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/samhoang/ccp/internal/config"
 )
 
-// mockHookProcessor is a test double for HookProcessor
-type mockHookProcessorImpl struct {
-	hooks map[config.HookType][]config.SettingsHookEntry
-	err   error
-}
+func TestGenerateSettings_WithTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
 
-func (m *mockHookProcessorImpl) ProcessAll(manifest *Manifest) (map[config.HookType][]config.SettingsHookEntry, error) {
-	return m.hooks, m.err
-}
-
-// mockFragmentProcessor is a test double for FragmentProcessor
-type mockFragmentProcessorImpl struct {
-	settings map[string]interface{}
-	err      error
-}
-
-func (m *mockFragmentProcessorImpl) ProcessAll(manifest *Manifest) (map[string]interface{}, error) {
-	return m.settings, m.err
-}
-
-// mockTemplateProcessor is a test double for TemplateProcessor
-type mockTemplateProcessorImpl struct {
-	settings map[string]interface{}
-	err      error
-}
-
-func (m *mockTemplateProcessorImpl) Process(manifest *Manifest) (map[string]interface{}, error) {
-	return m.settings, m.err
-}
-
-// noopTemplateProcessor returns empty settings (used when template isn't being tested)
-var noopTemplate = &mockTemplateProcessorImpl{settings: map[string]interface{}{}}
-
-func TestDefaultSettingsBuilder_Build(t *testing.T) {
-	// Setup mock processors
-	hookProcessor := &mockHookProcessorImpl{
-		hooks: map[config.HookType][]config.SettingsHookEntry{
-			config.HookSessionStart: {
-				config.NewSettingsHookEntry("startup", "/path/to/script.sh", 60),
-			},
-		},
+	// Create template
+	tmplDir := filepath.Join(hubDir, "settings-templates", "test-tmpl")
+	if err := os.MkdirAll(tmplDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	tmplSettings := map[string]interface{}{
+		"model":       "claude-sonnet-4-20250514",
+		"temperature": 0.7,
+	}
+	data, _ := json.Marshal(tmplSettings)
+	if err := os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	fragmentProcessor := &mockFragmentProcessorImpl{
-		settings: map[string]interface{}{
-			"model":        "claude-sonnet-4-20250514",
-			"temperature": 0.7,
-		},
+	// Create hooks dir (empty)
+	if err := os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755); err != nil {
+		t.Fatal(err)
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
-	manifest := &Manifest{}
+	paths := &config.Paths{
+		CcpDir: tmpDir,
+		HubDir: hubDir,
+	}
+	manifest := &Manifest{
+		SettingsTemplate: "test-tmpl",
+	}
 
-	settings, err := builder.Build(manifest)
+	settings, err := GenerateSettings(manifest, paths, profileDir)
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatalf("GenerateSettings() error = %v", err)
 	}
 
-	// Verify fragments are included
 	if settings["model"] != "claude-sonnet-4-20250514" {
 		t.Errorf("expected model = 'claude-sonnet-4-20250514', got %v", settings["model"])
 	}
 	if settings["temperature"] != 0.7 {
 		t.Errorf("expected temperature = 0.7, got %v", settings["temperature"])
 	}
-
-	// Verify hooks are included
-	hooks, ok := settings["hooks"]
-	if !ok {
-		t.Fatal("expected hooks to be present")
-	}
-	hooksMap, ok := hooks.(map[config.HookType][]config.SettingsHookEntry)
-	if !ok {
-		t.Fatal("hooks should be map[config.HookType][]config.SettingsHookEntry")
-	}
-	if len(hooksMap[config.HookSessionStart]) != 1 {
-		t.Errorf("expected 1 SessionStart hook, got %d", len(hooksMap[config.HookSessionStart]))
-	}
 }
 
-func TestDefaultSettingsBuilder_Build_EmptyHooks(t *testing.T) {
-	hookProcessor := &mockHookProcessorImpl{
-		hooks: map[config.HookType][]config.SettingsHookEntry{},
+func TestGenerateSettings_NoTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	if err := os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(hubDir, 0755); err != nil {
+		t.Fatal(err)
 	}
 
-	fragmentProcessor := &mockFragmentProcessorImpl{
-		settings: map[string]interface{}{
-			"key": "value",
-		},
-	}
-
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
-	manifest := &Manifest{}
-
-	settings, err := builder.Build(manifest)
-	if err != nil {
-		t.Fatalf("Build() error = %v", err)
-	}
-
-	// Hooks should not be present when empty
-	if _, ok := settings["hooks"]; ok {
-		t.Error("expected hooks to not be present when empty")
-	}
-
-	// Fragment should still be present
-	if settings["key"] != "value" {
-		t.Errorf("expected key = 'value', got %v", settings["key"])
-	}
-}
-
-func TestBuilderFromPaths(t *testing.T) {
 	paths := &config.Paths{
-		HubDir: "/test/hub",
+		CcpDir: tmpDir,
+		HubDir: hubDir,
 	}
-	profileDir := "/test/profile"
-
-	builder := BuilderFromPaths(paths, profileDir)
-	if builder == nil {
-		t.Error("BuilderFromPaths() returned nil")
-	}
-}
-
-func TestDefaultSettingsBuilder_Build_ProcessorError(t *testing.T) {
-	// Test hook processor error propagation
-	hookProcessor := &mockHookProcessorImpl{
-		hooks: nil,
-		err:   errTestError,
-	}
-	fragmentProcessor := &mockFragmentProcessorImpl{
-		settings: map[string]interface{}{},
-	}
-
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
 	manifest := &Manifest{}
 
-	_, err := builder.Build(manifest)
-	if err == nil {
-		t.Error("expected error from hook processor to propagate")
+	settings, err := GenerateSettings(manifest, paths, profileDir)
+	if err != nil {
+		t.Fatalf("GenerateSettings() error = %v", err)
+	}
+
+	if _, ok := settings["hooks"]; ok {
+		t.Error("expected no hooks key when no hooks configured")
+	}
+
+	if len(settings) != 0 {
+		t.Errorf("expected 0 settings keys, got %d", len(settings))
 	}
 }
 
-func TestDefaultSettingsBuilder_Build_FragmentProcessorError(t *testing.T) {
-	// Test fragment processor error propagation
-	hookProcessor := &mockHookProcessorImpl{
-		hooks: map[config.HookType][]config.SettingsHookEntry{},
+func TestGenerateSettings_TemplateMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	if err := os.MkdirAll(hubDir, 0755); err != nil {
+		t.Fatal(err)
 	}
-	fragmentProcessor := &mockFragmentProcessorImpl{
-		settings: nil,
-		err:      errTestError,
+	if err := os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755); err != nil {
+		t.Fatal(err)
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
-	manifest := &Manifest{}
+	paths := &config.Paths{
+		CcpDir: tmpDir,
+		HubDir: hubDir,
+	}
+	manifest := &Manifest{
+		SettingsTemplate: "nonexistent",
+	}
 
-	_, err := builder.Build(manifest)
+	_, err := GenerateSettings(manifest, paths, profileDir)
 	if err == nil {
-		t.Error("expected error from fragment processor to propagate")
+		t.Error("expected error for missing template")
 	}
 }
 
-func TestDefaultSettingsBuilder_Build_MultipleHookTypes(t *testing.T) {
-	hookProcessor := &mockHookProcessorImpl{
-		hooks: map[config.HookType][]config.SettingsHookEntry{
-			config.HookSessionStart: {
-				config.NewSettingsHookEntry("startup", "/path/start.sh", 60),
-			},
+func TestGenerateSettings_NoTemplateNoHooks_EmptySettings(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	if err := os.MkdirAll(hubDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		Hub: HubLinks{}, // no hooks
+	}
+
+	settings, err := GenerateSettings(manifest, paths, profileDir)
+	if err != nil {
+		t.Fatalf("GenerateSettings() error = %v", err)
+	}
+	if len(settings) != 0 {
+		t.Errorf("expected empty settings map, got %d keys: %v", len(settings), settings)
+	}
+}
+
+func TestGenerateSettings_HooksOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	if err := os.MkdirAll(hubDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a hook in the profile's hooks dir with hooks.json
+	hookName := "my-hook"
+	hookDir := filepath.Join(profileDir, "hooks", hookName)
+	if err := os.MkdirAll(hookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	hooksJSON := config.HooksJSON{
+		Hooks: map[config.HookType][]config.HookEntry{
 			config.HookPreToolUse: {
-				config.NewSettingsHookEntry("Bash", "/path/pre-bash.sh", 30),
-				config.NewSettingsHookEntry("Edit", "/path/pre-edit.sh", 30),
-			},
-			config.HookUserPromptSubmit: {
-				config.NewSettingsHookEntry("", "/path/prompt.sh", 60),
+				{
+					Matcher: "Bash",
+					Hooks: []config.HookCommand{
+						{Type: "command", Command: "${CLAUDE_PLUGIN_ROOT}/scripts/check.sh", Timeout: 15},
+					},
+				},
 			},
 		},
 	}
-
-	fragmentProcessor := &mockFragmentProcessorImpl{
-		settings: map[string]interface{}{},
+	data, _ := json.Marshal(hooksJSON)
+	if err := os.WriteFile(filepath.Join(hookDir, "hooks.json"), data, 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
-	manifest := &Manifest{}
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		// No template
+		Hub: HubLinks{Hooks: []string{hookName}},
+	}
 
-	settings, err := builder.Build(manifest)
+	settings, err := GenerateSettings(manifest, paths, profileDir)
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatalf("GenerateSettings() error = %v", err)
 	}
 
-	hooks, ok := settings["hooks"].(map[config.HookType][]config.SettingsHookEntry)
+	hooksVal, ok := settings["hooks"]
 	if !ok {
-		t.Fatal("expected hooks map")
+		t.Fatal("expected 'hooks' key in settings")
+	}
+	hooksMap, ok := hooksVal.(map[config.HookType][]config.SettingsHookEntry)
+	if !ok {
+		t.Fatalf("hooks value has unexpected type %T", hooksVal)
+	}
+	entries, ok := hooksMap[config.HookPreToolUse]
+	if !ok || len(entries) != 1 {
+		t.Fatalf("expected 1 PreToolUse entry, got %d", len(entries))
+	}
+	if entries[0].Matcher != "Bash" {
+		t.Errorf("expected matcher 'Bash', got %q", entries[0].Matcher)
 	}
 
-	if len(hooks) != 3 {
-		t.Errorf("expected 3 hook types, got %d", len(hooks))
-	}
-
-	if len(hooks[config.HookPreToolUse]) != 2 {
-		t.Errorf("expected 2 PreToolUse hooks, got %d", len(hooks[config.HookPreToolUse]))
+	// Should have no template-derived keys
+	if _, exists := settings["model"]; exists {
+		t.Error("expected no 'model' key without template")
 	}
 }
 
-func TestDefaultSettingsBuilder_Build_OnlyFragments(t *testing.T) {
-	hookProcessor := &mockHookProcessorImpl{
-		hooks: map[config.HookType][]config.SettingsHookEntry{},
+func TestGenerateSettings_TemplateAndHooks_MergedCorrectly(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	// Create template
+	tmplDir := filepath.Join(hubDir, "settings-templates", "my-tmpl")
+	if err := os.MkdirAll(tmplDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	tmplSettings := map[string]interface{}{
+		"model":       "opus",
+		"temperature": 0.9,
+		"maxTokens":   4096.0,
+	}
+	data, _ := json.Marshal(tmplSettings)
+	if err := os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	fragmentProcessor := &mockFragmentProcessorImpl{
-		settings: map[string]interface{}{
-			"model":                  "claude-sonnet-4-20250514",
-			"temperature":            0.5,
-			"permissions.allow_edit": true,
+	// Create a hook
+	hookName := "session-hook"
+	hookDir := filepath.Join(profileDir, "hooks", hookName)
+	if err := os.MkdirAll(hookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	hooksJSON := config.HooksJSON{
+		Hooks: map[config.HookType][]config.HookEntry{
+			config.HookSessionStart: {
+				{
+					Matcher: "startup",
+					Hooks: []config.HookCommand{
+						{Type: "command", Command: "${CLAUDE_PLUGIN_ROOT}/scripts/init.sh", Timeout: 45},
+					},
+				},
+			},
 		},
 	}
+	hookData, _ := json.Marshal(hooksJSON)
+	if err := os.WriteFile(filepath.Join(hookDir, "hooks.json"), hookData, 0644); err != nil {
+		t.Fatal(err)
+	}
 
-	builder := NewSettingsBuilder(hookProcessor, fragmentProcessor, noopTemplate)
-	manifest := &Manifest{}
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		SettingsTemplate: "my-tmpl",
+		Hub:              HubLinks{Hooks: []string{hookName}},
+	}
 
-	settings, err := builder.Build(manifest)
+	settings, err := GenerateSettings(manifest, paths, profileDir)
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatalf("GenerateSettings() error = %v", err)
 	}
 
-	// Should have 3 fragment keys, no hooks key
-	if len(settings) != 3 {
-		t.Errorf("expected 3 settings keys, got %d", len(settings))
+	// Template keys should be present
+	if settings["model"] != "opus" {
+		t.Errorf("model = %v, want 'opus'", settings["model"])
+	}
+	if settings["temperature"] != 0.9 {
+		t.Errorf("temperature = %v, want 0.9", settings["temperature"])
+	}
+	if settings["maxTokens"] != 4096.0 {
+		t.Errorf("maxTokens = %v, want 4096", settings["maxTokens"])
 	}
 
-	if _, hasHooks := settings["hooks"]; hasHooks {
-		t.Error("expected no hooks key when hooks are empty")
+	// Hooks should also be present
+	hooksVal, ok := settings["hooks"]
+	if !ok {
+		t.Fatal("expected 'hooks' key in settings")
+	}
+	hooksMap := hooksVal.(map[config.HookType][]config.SettingsHookEntry)
+	entries := hooksMap[config.HookSessionStart]
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 SessionStart entry, got %d", len(entries))
+	}
+	if entries[0].Matcher != "startup" {
+		t.Errorf("expected matcher 'startup', got %q", entries[0].Matcher)
 	}
 }
 
-// Error for testing
-var errTestError = &testError{msg: "test error"}
+func TestGenerateSettings_HookDirNotFound_GracefulSkip(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
 
-type testError struct {
-	msg string
+	if err := os.MkdirAll(hubDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Do NOT create the hooks dir at all
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		Hub: HubLinks{Hooks: []string{"nonexistent-hook"}},
+	}
+
+	settings, err := GenerateSettings(manifest, paths, profileDir)
+	if err != nil {
+		t.Fatalf("GenerateSettings() should not error for missing hook dir, got: %v", err)
+	}
+
+	// No hooks should be in the result (skipped gracefully)
+	if _, ok := settings["hooks"]; ok {
+		t.Error("expected no hooks key when hook directory is missing")
+	}
 }
 
-func (e *testError) Error() string {
-	return e.msg
+func TestGenerateSettings_TemplateWithHooksKey_OverriddenByGeneratedHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	// Create template that includes a "hooks" key (should be overridden)
+	tmplDir := filepath.Join(hubDir, "settings-templates", "with-hooks")
+	if err := os.MkdirAll(tmplDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	tmplSettings := map[string]interface{}{
+		"model": "sonnet",
+		"hooks": map[string]interface{}{
+			"SessionStart": []interface{}{},
+		},
+	}
+	data, _ := json.Marshal(tmplSettings)
+	if err := os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a real hook
+	hookName := "real-hook"
+	hookDir := filepath.Join(profileDir, "hooks", hookName)
+	if err := os.MkdirAll(hookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	hooksJSON := config.HooksJSON{
+		Hooks: map[config.HookType][]config.HookEntry{
+			config.HookStop: {
+				{
+					Hooks: []config.HookCommand{
+						{Type: "command", Command: "/bin/cleanup.sh", Timeout: 10},
+					},
+				},
+			},
+		},
+	}
+	hookData, _ := json.Marshal(hooksJSON)
+	if err := os.WriteFile(filepath.Join(hookDir, "hooks.json"), hookData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		SettingsTemplate: "with-hooks",
+		Hub:              HubLinks{Hooks: []string{hookName}},
+	}
+
+	settings, err := GenerateSettings(manifest, paths, profileDir)
+	if err != nil {
+		t.Fatalf("GenerateSettings() error = %v", err)
+	}
+
+	// The hooks key should be the generated hooks, not the template's
+	hooksVal := settings["hooks"]
+	hooksMap, ok := hooksVal.(map[config.HookType][]config.SettingsHookEntry)
+	if !ok {
+		t.Fatalf("hooks should be generated type, got %T", hooksVal)
+	}
+	if _, hasStop := hooksMap[config.HookStop]; !hasStop {
+		t.Error("expected Stop hook from generated hooks")
+	}
 }

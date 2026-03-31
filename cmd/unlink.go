@@ -51,7 +51,7 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if !valid {
-		return fmt.Errorf("invalid item type: %s (valid: skills, agents, hooks, rules, commands, setting-fragments)", parts[0])
+		return fmt.Errorf("invalid item type: %s (valid: skills, agents, hooks, rules, commands)", parts[0])
 	}
 
 	paths, err := config.ResolvePaths()

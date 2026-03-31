@@ -106,7 +106,7 @@ func runLink(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if !valid {
-		return fmt.Errorf("invalid item type: %s (valid: skills, agents, hooks, rules, commands, setting-fragments)", parts[0])
+		return fmt.Errorf("invalid item type: %s (valid: skills, agents, hooks, rules, commands)", parts[0])
 	}
 
 	// Verify hub item exists
@@ -266,8 +266,8 @@ func syncLinkChanges(paths *config.Paths, p *profile.Profile) error {
 		}
 	}
 
-	// Regenerate settings.json for hooks and setting fragments
-	if len(p.Manifest.Hub.Hooks) > 0 || len(p.Manifest.Hub.SettingFragments) > 0 {
+	// Regenerate settings.json for hooks
+	if len(p.Manifest.Hub.Hooks) > 0 {
 		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
 			return fmt.Errorf("failed to regenerate settings.json: %w", err)
 		}

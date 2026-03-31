@@ -180,7 +180,7 @@ func TestMigrator_Plan_WithHooks(t *testing.T) {
 	}
 }
 
-func TestMigrator_Plan_WithSettingFragments(t *testing.T) {
+func TestMigrator_Plan_WithSettingsTemplate(t *testing.T) {
 	paths, _ := setupTestPaths(t)
 
 	// Create claude dir
@@ -203,8 +203,8 @@ func TestMigrator_Plan_WithSettingFragments(t *testing.T) {
 		t.Fatalf("Plan failed: %v", err)
 	}
 
-	if len(plan.SettingFragments) != 2 {
-		t.Errorf("expected 2 setting fragments, got %d", len(plan.SettingFragments))
+	if len(plan.SettingsTemplate) != 2 {
+		t.Errorf("expected 2 settings template keys, got %d", len(plan.SettingsTemplate))
 	}
 }
 

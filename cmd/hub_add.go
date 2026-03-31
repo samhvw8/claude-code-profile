@@ -31,7 +31,7 @@ With one argument:
   - If it's a type: Error (requires name-or-path)
 With two arguments: Add item of <type> from <name-or-path>
 
-Types: skills, agents, hooks, rules, commands, setting-fragments
+Types: skills, agents, hooks, rules, commands
 
 Examples:
   # Interactive mode (promote local items to hub, symlink back)
@@ -87,7 +87,7 @@ func runHubAdd(cmd *cobra.Command, args []string) error {
 		// Two args: Original behavior (type + name-or-path)
 		itemType := config.HubItemType(args[0])
 		if !isValidHubType(itemType) {
-			return fmt.Errorf("invalid type: %s (valid: skills, agents, hooks, rules, commands, setting-fragments)", args[0])
+			return fmt.Errorf("invalid type: %s (valid: skills, agents, hooks, rules, commands)", args[0])
 		}
 		if hubAddFromProfile != "" {
 			return runHubAddFromProfile(paths, itemType, args[1])
@@ -437,7 +437,7 @@ func runInteractiveHubAdd(paths *config.Paths, profileName string) error {
 		}
 
 		// Track if settings regeneration is needed
-		if itemType == config.HubHooks || itemType == config.HubSettingFragments {
+		if itemType == config.HubHooks {
 			needsSettingsRegen = true
 		}
 	}
@@ -448,7 +448,7 @@ func runInteractiveHubAdd(paths *config.Paths, profileName string) error {
 		return fmt.Errorf("failed to save manifest: %w", err)
 	}
 
-	// Regenerate settings.json if hooks or fragments were promoted
+	// Regenerate settings.json if hooks were promoted
 	if needsSettingsRegen {
 		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
 			fmt.Printf("Warning: failed to regenerate settings.json: %v\n", err)

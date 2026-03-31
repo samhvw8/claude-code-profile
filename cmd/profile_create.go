@@ -13,18 +13,15 @@ import (
 )
 
 var (
-	createSkills           []string
-	createHooks            []string
-	createRules            []string
-	createCommands         []string
-	createSettingFragments []string
-	createFrom             string
-	createInteractive      bool
-	createEmpty            bool
-	createDescription      string
-	createEngine           string
-	createContext          string
-	createTemplate         string
+	createSkills      []string
+	createHooks       []string
+	createRules       []string
+	createCommands    []string
+	createFrom        string
+	createInteractive bool
+	createEmpty       bool
+	createDescription string
+	createTemplate    string
 )
 
 var profileCreateCmd = &cobra.Command{
@@ -47,13 +44,10 @@ func init() {
 	profileCreateCmd.Flags().StringSliceVar(&createHooks, "hooks", nil, "Hooks to include")
 	profileCreateCmd.Flags().StringSliceVar(&createRules, "rules", nil, "Rules to include")
 	profileCreateCmd.Flags().StringSliceVar(&createCommands, "commands", nil, "Commands to include")
-	profileCreateCmd.Flags().StringSliceVar(&createSettingFragments, "setting-fragments", nil, "Setting fragments to include")
 	profileCreateCmd.Flags().StringVar(&createFrom, "from", "", "Copy configuration from existing profile")
 	profileCreateCmd.Flags().BoolVarP(&createInteractive, "interactive", "i", false, "Interactive picker mode")
 	profileCreateCmd.Flags().BoolVarP(&createEmpty, "empty", "e", false, "Create empty profile without hub items")
 	profileCreateCmd.Flags().StringVarP(&createDescription, "description", "d", "", "Profile description")
-	profileCreateCmd.Flags().StringVar(&createEngine, "engine", "", "Engine to use (runtime config layer)")
-	profileCreateCmd.Flags().StringVar(&createContext, "context", "", "Context to use (prompt/capability layer)")
 	profileCreateCmd.Flags().StringVar(&createTemplate, "template", "", "Settings template to use")
 	profileCmd.AddCommand(profileCreateCmd)
 }
@@ -80,24 +74,6 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 	// Create manifest
 	manifest := profile.NewManifest(profileName, createDescription)
 
-	// Validate and assign engine
-	if createEngine != "" {
-		engineMgr := profile.NewEngineManager(paths)
-		if !engineMgr.Exists(createEngine) {
-			return fmt.Errorf("engine not found: %s", createEngine)
-		}
-		manifest.Engine = createEngine
-	}
-
-	// Validate and assign context
-	if createContext != "" {
-		ctxMgr := profile.NewContextManager(paths)
-		if !ctxMgr.Exists(createContext) {
-			return fmt.Errorf("context not found: %s", createContext)
-		}
-		manifest.Context = createContext
-	}
-
 	// Validate and assign settings template
 	if createTemplate != "" {
 		tmplMgr := hub.NewTemplateManager(paths.HubDir)
@@ -122,19 +98,7 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 			manifest.SetHubItems(itemType, sourceProfile.Manifest.GetHubItems(itemType))
 		}
 
-		// Copy data config
-		manifest.Data = sourceProfile.Manifest.Data
-
-		// Copy linked dirs (CLAUDE.md @import references)
-		manifest.LinkedDirs = sourceProfile.Manifest.LinkedDirs
-
-		// Copy engine/context/template if not overridden by flags
-		if createEngine == "" && sourceProfile.Manifest.Engine != "" {
-			manifest.Engine = sourceProfile.Manifest.Engine
-		}
-		if createContext == "" && sourceProfile.Manifest.Context != "" {
-			manifest.Context = sourceProfile.Manifest.Context
-		}
+		// Copy template if not overridden by flags
 		if createTemplate == "" && sourceProfile.Manifest.SettingsTemplate != "" {
 			manifest.SettingsTemplate = sourceProfile.Manifest.SettingsTemplate
 		}
@@ -157,14 +121,10 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 	if len(createCommands) > 0 {
 		manifest.Hub.Commands = createCommands
 	}
-	if len(createSettingFragments) > 0 {
-		manifest.Hub.SettingFragments = createSettingFragments
-	}
 
 	// Interactive mode
 	hasAnyFlags := len(createSkills) > 0 || len(createHooks) > 0 || len(createRules) > 0 ||
-		len(createCommands) > 0 || len(createSettingFragments) > 0 || createFrom != "" || createEmpty ||
-		createEngine != "" || createContext != "" || createTemplate != ""
+		len(createCommands) > 0 || createFrom != "" || createEmpty || createTemplate != ""
 
 	if createInteractive || !hasAnyFlags {
 		// Scan hub for available items
@@ -204,28 +164,6 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 			})
 		}
 
-		// Add data sharing tab
-		var dataItems []picker.Item
-		defaultConfig := config.DefaultDataConfig()
-		for _, dataType := range config.AllDataItemTypes() {
-			isShared := defaultConfig[dataType] == config.ShareModeShared
-			label := string(dataType)
-			if isShared {
-				label = fmt.Sprintf("%s (default: shared)", dataType)
-			} else {
-				label = fmt.Sprintf("%s (default: isolated)", dataType)
-			}
-			dataItems = append(dataItems, picker.Item{
-				ID:       string(dataType),
-				Label:    label,
-				Selected: isShared,
-			})
-		}
-		tabs = append(tabs, picker.Tab{
-			Name:  "data-sharing",
-			Items: dataItems,
-		})
-
 		// Run tabbed picker
 		selections, err := picker.RunTabbed(tabs)
 		if err != nil {
@@ -240,21 +178,6 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 		for _, itemType := range config.AllHubItemTypes() {
 			if items, ok := selections[string(itemType)]; ok {
 				manifest.SetHubItems(itemType, items)
-			}
-		}
-
-		// Apply data sharing selections
-		sharedSet := make(map[string]bool)
-		if dataItems, ok := selections["data-sharing"]; ok {
-			for _, dt := range dataItems {
-				sharedSet[dt] = true
-			}
-		}
-		for _, dataType := range config.AllDataItemTypes() {
-			if sharedSet[string(dataType)] {
-				manifest.SetDataShareMode(dataType, config.ShareModeShared)
-			} else {
-				manifest.SetDataShareMode(dataType, config.ShareModeIsolated)
 			}
 		}
 
@@ -284,22 +207,6 @@ func runProfileCreate(cmd *cobra.Command, args []string) error {
 	}
 	if len(summaryParts) > 0 {
 		fmt.Printf("Linked: %s\n", strings.Join(summaryParts, ", "))
-	}
-
-	// Print data sharing summary
-	var sharedData, isolatedData []string
-	for _, dataType := range config.AllDataItemTypes() {
-		if manifest.GetDataShareMode(dataType) == config.ShareModeShared {
-			sharedData = append(sharedData, string(dataType))
-		} else {
-			isolatedData = append(isolatedData, string(dataType))
-		}
-	}
-	if len(sharedData) > 0 {
-		fmt.Printf("Shared data: %s\n", strings.Join(sharedData, ", "))
-	}
-	if len(isolatedData) > 0 {
-		fmt.Printf("Isolated data: %s\n", strings.Join(isolatedData, ", "))
 	}
 
 	fmt.Println()

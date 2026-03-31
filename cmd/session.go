@@ -12,8 +12,9 @@ import (
 )
 
 var sessionCmd = &cobra.Command{
-	Use:   "session <profile>",
-	Short: "Start a shell session with a profile active",
+	Use:    "session <profile>",
+	Hidden: true,
+	Short:  "Start a shell session with a profile active",
 	Long: `Start a new shell with CLAUDE_CONFIG_DIR set to the specified profile.
 
 Exit the shell to return to your previous environment.

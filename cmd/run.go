@@ -12,8 +12,9 @@ import (
 )
 
 var runCmd = &cobra.Command{
-	Use:   "run <profile> -- <command> [args...]",
-	Short: "Run a command with a specific profile active",
+	Use:    "run <profile> -- <command> [args...]",
+	Hidden: true,
+	Short:  "Run a command with a specific profile active",
 	Long: `Execute a command with CLAUDE_CONFIG_DIR set to the specified profile.
 
 Examples:

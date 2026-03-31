@@ -87,10 +87,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\n  Config files: %v\n", plan.FilesToCopy)
 	}
 
-	if len(plan.LinkedDirs) > 0 {
-		fmt.Printf("\n  CLAUDE.md linked dirs: %v\n", plan.LinkedDirs)
-	}
-
 	if len(plan.DataDirs) > 0 {
 		fmt.Printf("  Data directories: %v\n", plan.DataDirs)
 	}
@@ -114,8 +110,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create store structure
-	pluginStoreMigrator := migration.NewPluginStoreMigrator(paths)
-	if err := pluginStoreMigrator.CreateStoreStructure(); err != nil {
+	storePluginsDir := paths.StorePluginsDir()
+	if err := os.MkdirAll(storePluginsDir, 0755); err != nil {
 		fmt.Printf("Warning: could not create store structure: %v\n", err)
 	}
 

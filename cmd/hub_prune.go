@@ -23,8 +23,9 @@ var (
 )
 
 var hubPruneCmd = &cobra.Command{
-	Use:   "prune",
-	Short: "Remove unused hub items",
+	Use:    "prune",
+	Hidden: true,
+	Short:  "Remove unused hub items",
 	Long: `Remove hub items that are not used by any profile.
 
 By default, shows a list of orphaned items and asks for confirmation.

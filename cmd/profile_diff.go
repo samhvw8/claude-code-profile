@@ -14,8 +14,9 @@ import (
 )
 
 var profileDiffCmd = &cobra.Command{
-	Use:   "diff <profile-a> [profile-b]",
-	Short: "Compare two profiles",
+	Use:    "diff <profile-a> [profile-b]",
+	Hidden: true,
+	Short:  "Compare two profiles",
 	Long: `Show differences between two profiles.
 
 If only one profile is specified, compares against the active profile.
@@ -99,29 +100,6 @@ func runProfileDiff(cmd *cobra.Command, args []string) error {
 			fmt.Println()
 		}
 	}
-
-	// Compare data config
-	dataA := a.Manifest.Data
-	dataB := b.Manifest.Data
-	dataDiff := false
-
-	for _, dataType := range config.AllDataItemTypes() {
-		modeA := a.Manifest.GetDataShareMode(dataType)
-		modeB := b.Manifest.GetDataShareMode(dataType)
-		if modeA != modeB {
-			if !dataDiff {
-				fmt.Println("=== Data Sharing ===")
-				dataDiff = true
-				hasDiff = true
-			}
-			fmt.Printf("  %s: %s (%s) vs %s (%s)\n", dataType, modeA, profileA, modeB, profileB)
-		}
-	}
-	if dataDiff {
-		fmt.Println()
-	}
-	_ = dataA
-	_ = dataB
 
 	if !hasDiff {
 		fmt.Println("Profiles are identical")

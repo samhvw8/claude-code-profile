@@ -16,8 +16,9 @@ import (
 )
 
 var usageCmd = &cobra.Command{
-	Use:   "usage",
-	Short: "Show hub item usage across profiles",
+	Use:    "usage",
+	Hidden: true,
+	Short:  "Show hub item usage across profiles",
 	Long: `Display which hub items are used by which profiles.
 
 Helps identify:

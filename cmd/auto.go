@@ -13,8 +13,9 @@ import (
 )
 
 var autoCmd = &cobra.Command{
-	Use:   "auto",
-	Short: "Auto-select profile based on project config",
+	Use:    "auto",
+	Hidden: true,
+	Short:  "Auto-select profile based on project config",
 	Long: `Detect and display the profile for the current project.
 
 Looks for .ccp.yaml in the current directory or parent directories.

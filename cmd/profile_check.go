@@ -11,8 +11,9 @@ import (
 )
 
 var profileCheckCmd = &cobra.Command{
-	Use:   "check <name>",
-	Short: "Validate profile against its manifest",
+	Use:    "check <name>",
+	Hidden: true,
+	Short:  "Validate profile against its manifest",
 	Long: `Check if a profile directory matches its profile.yaml manifest.
 
 Reports:

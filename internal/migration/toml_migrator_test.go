@@ -160,50 +160,6 @@ plans = "isolated"
 	}
 }
 
-func TestStructureMigrator(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	paths := &config.Paths{
-		CcpDir:      tmpDir,
-		EnginesDir:  filepath.Join(tmpDir, "engines"),
-		ContextsDir: filepath.Join(tmpDir, "contexts"),
-	}
-
-	migrator := NewStructureMigrator(paths)
-
-	if !migrator.NeedsMigration() {
-		t.Error("expected NeedsMigration to return true")
-	}
-
-	count, err := migrator.Migrate()
-	if err != nil {
-		t.Fatalf("Migrate failed: %v", err)
-	}
-	if count != 2 {
-		t.Errorf("expected 2 dirs created, got %d", count)
-	}
-
-	// Verify dirs exist
-	if _, err := os.Stat(paths.EnginesDir); os.IsNotExist(err) {
-		t.Error("engines dir should exist")
-	}
-	if _, err := os.Stat(paths.ContextsDir); os.IsNotExist(err) {
-		t.Error("contexts dir should exist")
-	}
-
-	// Idempotent
-	if migrator.NeedsMigration() {
-		t.Error("expected NeedsMigration to return false after migration")
-	}
-
-	count, err = migrator.Migrate()
-	if err != nil {
-		t.Fatalf("second Migrate failed: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("expected 0 dirs created on second run, got %d", count)
-	}
-}
 
 func TestTOMLMigrator_SkipsAlreadyMigrated(t *testing.T) {
 	tmpDir := t.TempDir()

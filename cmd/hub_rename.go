@@ -14,8 +14,9 @@ import (
 )
 
 var hubRenameCmd = &cobra.Command{
-	Use:   "rename <type>/<old-name> <new-name>",
-	Short: "Rename a hub item and update all profile symlinks",
+	Use:    "rename <type>/<old-name> <new-name>",
+	Hidden: true,
+	Short:  "Rename a hub item and update all profile symlinks",
 	Long: `Rename a hub item and automatically update all profile symlinks.
 
 Examples:

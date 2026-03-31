@@ -215,42 +215,6 @@ func TestGenerateSettingsHooks_WithHooksJSON(t *testing.T) {
 	}
 }
 
-func TestMergeSettingFragments(t *testing.T) {
-	hubDir := t.TempDir()
-	fragmentsDir := filepath.Join(hubDir, "setting-fragments")
-	if err := os.MkdirAll(fragmentsDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-
-	// Create test fragment
-	fragmentContent := `name: test-fragment
-description: A test fragment
-key: testKey
-value: testValue
-`
-	if err := os.WriteFile(filepath.Join(fragmentsDir, "test.yaml"), []byte(fragmentContent), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	settings, err := mergeSettingFragments(hubDir, []string{"test"})
-	if err != nil {
-		t.Fatalf("mergeSettingFragments() error = %v", err)
-	}
-
-	if val, ok := settings["testKey"]; !ok || val != "testValue" {
-		t.Errorf("expected settings[testKey] = 'testValue', got %v", settings["testKey"])
-	}
-}
-
-func TestMergeSettingFragments_NotFound(t *testing.T) {
-	hubDir := t.TempDir()
-
-	_, err := mergeSettingFragments(hubDir, []string{"nonexistent"})
-	if err == nil {
-		t.Error("expected error for nonexistent fragment")
-	}
-}
-
 func TestGenerateSettingsHooks_MultipleHooksPerType(t *testing.T) {
 	// Setup temp directories
 	profileDir := t.TempDir()
@@ -397,59 +361,240 @@ func TestResolvePluginRootPath_MultipleOccurrences(t *testing.T) {
 	}
 }
 
-func TestMergeSettingFragments_MultipleFragments(t *testing.T) {
-	hubDir := t.TempDir()
-	fragmentsDir := filepath.Join(hubDir, "setting-fragments")
-	if err := os.MkdirAll(fragmentsDir, 0755); err != nil {
-		t.Fatal(err)
+func TestRegenerateSettings_WritesValidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	os.MkdirAll(hubDir, 0755)
+	os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		Hub: HubLinks{},
 	}
 
-	// Create multiple fragments
-	fragments := map[string]string{
-		"model": `name: model-config
-key: model
-value: claude-sonnet-4-20250514
-`,
-		"temp": `name: temp-config
-key: temperature
-value: 0.7
-`,
-		"perms": `name: perms-config
-key: permissions
-value:
-  allow_edit: true
-  allow_bash: false
-`,
+	if err := RegenerateSettings(paths, profileDir, manifest); err != nil {
+		t.Fatalf("RegenerateSettings() error: %v", err)
 	}
 
-	for name, content := range fragments {
-		if err := os.WriteFile(filepath.Join(fragmentsDir, name+".yaml"), []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	settings, err := mergeSettingFragments(hubDir, []string{"model", "temp", "perms"})
+	// Verify settings.json was written
+	settingsPath := filepath.Join(profileDir, "settings.json")
+	data, err := os.ReadFile(settingsPath)
 	if err != nil {
-		t.Fatalf("mergeSettingFragments() error = %v", err)
+		t.Fatalf("settings.json not created: %v", err)
 	}
 
-	if len(settings) != 3 {
-		t.Errorf("expected 3 settings, got %d", len(settings))
-	}
-
-	if settings["model"] != "claude-sonnet-4-20250514" {
-		t.Errorf("expected model = 'claude-sonnet-4-20250514', got %v", settings["model"])
-	}
-
-	if settings["temperature"] != 0.7 {
-		t.Errorf("expected temperature = 0.7, got %v", settings["temperature"])
-	}
-
-	perms, ok := settings["permissions"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("expected permissions to be a map, got %T", settings["permissions"])
-	}
-	if perms["allow_edit"] != true {
-		t.Errorf("expected permissions.allow_edit = true, got %v", perms["allow_edit"])
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("settings.json is not valid JSON: %v", err)
 	}
 }
+
+func TestRegenerateSettings_WithTemplateAndHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	// Create template
+	tmplDir := filepath.Join(hubDir, "settings-templates", "regen-tmpl")
+	os.MkdirAll(tmplDir, 0755)
+	tmplSettings := map[string]interface{}{
+		"model":       "opus",
+		"temperature": 0.5,
+	}
+	tmplData, _ := json.Marshal(tmplSettings)
+	os.WriteFile(filepath.Join(tmplDir, "settings.json"), tmplData, 0644)
+
+	// Create a hook
+	hookDir := filepath.Join(profileDir, "hooks", "regen-hook")
+	os.MkdirAll(hookDir, 0755)
+	hooksJSON := config.HooksJSON{
+		Hooks: map[config.HookType][]config.HookEntry{
+			config.HookSessionStart: {
+				{
+					Matcher: "startup",
+					Hooks: []config.HookCommand{
+						{Type: "command", Command: "${CLAUDE_PLUGIN_ROOT}/scripts/start.sh", Timeout: 30},
+					},
+				},
+			},
+		},
+	}
+	hookData, _ := json.Marshal(hooksJSON)
+	os.WriteFile(filepath.Join(hookDir, "hooks.json"), hookData, 0644)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		SettingsTemplate: "regen-tmpl",
+		Hub:              HubLinks{Hooks: []string{"regen-hook"}},
+	}
+
+	if err := RegenerateSettings(paths, profileDir, manifest); err != nil {
+		t.Fatalf("RegenerateSettings() error: %v", err)
+	}
+
+	// Read and verify
+	data, err := os.ReadFile(filepath.Join(profileDir, "settings.json"))
+	if err != nil {
+		t.Fatalf("settings.json not created: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("json.Unmarshal error: %v", err)
+	}
+
+	if parsed["model"] != "opus" {
+		t.Errorf("model = %v, want 'opus'", parsed["model"])
+	}
+	if _, ok := parsed["hooks"]; !ok {
+		t.Error("expected 'hooks' key in settings.json")
+	}
+}
+
+func TestWriteJSONFile_NoHTMLEscaping(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "test.json")
+
+	data := map[string]interface{}{
+		"url": "https://example.com?foo=bar&baz=qux",
+		"tag": "<script>alert('xss')</script>",
+	}
+
+	if err := writeJSONFile(outPath, data); err != nil {
+		t.Fatalf("writeJSONFile() error: %v", err)
+	}
+
+	content, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile error: %v", err)
+	}
+
+	// Verify no HTML escaping happened
+	s := string(content)
+	if !contains(s, "&") {
+		t.Error("expected literal '&' in output, got HTML-escaped version")
+	}
+	if !contains(s, "<script>") {
+		t.Error("expected literal '<script>' in output, got HTML-escaped version")
+	}
+
+	// Verify it's valid JSON
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(content, &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestProcessLegacyHook(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("cannot get home dir")
+	}
+
+	profileHooksDir := filepath.Join(home, ".ccp", "profiles", "test", "hooks")
+
+	tests := []struct {
+		name        string
+		manifest    *hub.HookManifest
+		hookName    string
+		wantType    config.HookType
+		wantMatcher string
+	}{
+		{
+			name: "basic hook with command",
+			manifest: &hub.HookManifest{
+				Name:    "test-hook",
+				Type:    config.HookSessionStart,
+				Timeout: 30,
+				Command: "start.sh",
+				Matcher: "startup",
+			},
+			hookName:    "test-hook",
+			wantType:    config.HookSessionStart,
+			wantMatcher: "startup",
+		},
+		{
+			name: "hook with interpreter",
+			manifest: &hub.HookManifest{
+				Name:        "node-hook",
+				Type:        config.HookPreToolUse,
+				Command:     "check.js",
+				Interpreter: "node",
+				Matcher:     "Bash",
+			},
+			hookName:    "node-hook",
+			wantType:    config.HookPreToolUse,
+			wantMatcher: "Bash",
+		},
+		{
+			name: "inline hook",
+			manifest: &hub.HookManifest{
+				Name:   "inline-hook",
+				Type:   config.HookStop,
+				Inline: "echo goodbye",
+			},
+			hookName:    "inline-hook",
+			wantType:    config.HookStop,
+			wantMatcher: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hooks := make(map[config.HookType][]config.SettingsHookEntry)
+			processLegacyHook(tt.manifest, profileHooksDir, tt.hookName, hooks)
+
+			entries, ok := hooks[tt.wantType]
+			if !ok {
+				t.Fatalf("expected hook type %s in result", tt.wantType)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("expected 1 entry, got %d", len(entries))
+			}
+			if entries[0].Matcher != tt.wantMatcher {
+				t.Errorf("Matcher = %q, want %q", entries[0].Matcher, tt.wantMatcher)
+			}
+			if len(entries[0].Hooks) != 1 {
+				t.Fatalf("expected 1 hook command, got %d", len(entries[0].Hooks))
+			}
+		})
+	}
+}
+
+func TestWriteJSONFile_EmptyMap(t *testing.T) {
+	tmpDir := t.TempDir()
+	outPath := filepath.Join(tmpDir, "empty.json")
+
+	if err := writeJSONFile(outPath, map[string]interface{}{}); err != nil {
+		t.Fatalf("writeJSONFile() error: %v", err)
+	}
+
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("ReadFile error: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+	if len(parsed) != 0 {
+		t.Errorf("expected empty map, got %v", parsed)
+	}
+}
+

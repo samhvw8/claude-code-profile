@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.27.0**
+**Current version: v0.28.0**
 
 ## Project Context
 
@@ -11,12 +11,12 @@ Go CLI tool for managing Claude Code profiles via a central hub. Uses Cobra for 
 ```
 internal/
 ├── config/     # Path resolution, types, CcpConfig (ccp.toml)
-├── errors/     # Custom error types (ProfileError, HubError, DriftError)
-├── hub/        # Hub scanning, item management, settings templates, fragment processing (legacy)
+├── errors/     # Custom error types
+├── hub/        # Hub scanning, item management, settings templates
 ├── source/     # Unified source system (providers, registries, installer)
-├── profile/    # Profile CRUD, manifest, engines, contexts, resolver, settings, drift
-├── symlink/    # Platform-specific symlink operations (unix/windows)
-├── migration/  # YAML→TOML migration, source migration, rollback
+├── profile/    # Profile CRUD, manifest, settings generation, sync, drift
+├── symlink/    # Platform-specific symlink operations
+├── migration/  # YAML→TOML migration, flatten migration, rollback
 └── picker/     # Bubble Tea multi-select TUI
 
 cmd/            # Cobra commands (one file per command/subcommand)
@@ -37,7 +37,7 @@ go mod tidy               # Update dependencies
 ### Go Conventions
 - Standard Go formatting (gofmt)
 - Errors returned, not panicked
-- Interfaces for testability (Scanner, Manager, Detector, FragmentReader, HookProcessor)
+- Interfaces for testability (Scanner, Manager, Detector, HookProcessor)
 - Platform-specific code via build tags (`//go:build !windows`)
 
 ### CLI Patterns
@@ -62,47 +62,26 @@ go mod tidy               # Update dependencies
 ```go
 // internal/config/paths.go
 type Paths struct {
-    CcpDir         string // ~/.ccp (ccp data directory)
-    ClaudeDir      string // ~/.claude or $CLAUDE_CONFIG_DIR (may be project-specific)
+    CcpDir          string // ~/.ccp (ccp data directory)
+    ClaudeDir       string // ~/.claude or $CLAUDE_CONFIG_DIR (may be project-specific)
     GlobalClaudeDir string // ~/.claude (always global, ignores CLAUDE_CONFIG_DIR)
-    HubDir         string // ~/.ccp/hub
-    ProfilesDir string // ~/.ccp/profiles
-    SharedDir   string // ~/.ccp/profiles/shared
-    StoreDir    string // ~/.ccp/store (shared downloadable resources)
-    EnginesDir  string // ~/.ccp/engines
-    ContextsDir string // ~/.ccp/contexts
+    HubDir          string // ~/.ccp/hub
+    ProfilesDir     string // ~/.ccp/profiles
+    SharedDir       string // ~/.ccp/profiles/shared
+    StoreDir        string // ~/.ccp/store (shared downloadable resources)
 }
 
-type HubItemType string      // skills, agents, hooks, rules, commands, setting-fragments
+type HubItemType string      // skills, agents, hooks, rules, commands
 type DataItemType string     // tasks, todos, history, etc.
-type ShareMode string        // shared, isolated
 type PluginStoreItem string  // marketplaces, cache, known_marketplaces.json
 
 // internal/profile/manifest.go
 type Manifest struct {
-    Version           int           // 3 = current (engine/context), 2 = TOML, 1 = YAML
+    Version           int           // 3 = current, 2 = TOML, 1 = YAML
     Name, Description string
-    Engine            string        // Optional engine reference
-    Context           string        // Optional context reference
     SettingsTemplate  string        // Optional settings template name
     Created, Updated  time.Time
-    Hub               HubLinks      // What hub items to link (overrides)
-    Data              DataConfig    // Shared vs isolated data dirs
-    LinkedDirs        []string      // Dirs referenced by @imports in CLAUDE.md
-}
-
-// internal/profile/engine.go
-type Engine struct {
-    Name, Description string
-    SettingsTemplate  string        // Optional settings template name
-    Hub               EngineHub     // hooks (+ legacy setting-fragments)
-    Data              DataConfig    // Data sharing config
-}
-
-// internal/profile/context.go
-type Context struct {
-    Name, Description string
-    Hub               ContextHub    // skills, agents, rules, commands, hooks
+    Hub               HubLinks      // What hub items to link
 }
 
 // internal/source/types.go
@@ -126,31 +105,14 @@ type Template struct {
     Settings map[string]interface{} // Complete settings.json content (hooks excluded)
 }
 
-// internal/hub/fragment.go (LEGACY — use templates for new code)
-type Fragment struct {
-    Name        string      // Fragment identifier
-    Description string      // Human-readable description
-    Key         string      // Settings key to set
-    Value       interface{} // Value to set
-}
-
 // internal/profile/generator.go
-type HookProcessor interface {
-    ProcessAll(manifest *Manifest) (map[HookType][]SettingsHookEntry, error)
-}
-
-type FragmentProcessor interface {
-    ProcessAll(manifest *Manifest) (map[string]interface{}, error)
-}
-
-type SettingsBuilder interface {
-    Build(manifest *Manifest) (map[string]interface{}, error)
-}
+// Single function replaces previous processor interfaces:
+func GenerateSettings(manifest *Manifest, hubDir string) (map[string]interface{}, error)
 ```
 
 ## Settings Templates
 
-Complete `settings.json` templates stored in the hub. Profiles and engines reference a template by name. Replaces the old per-key setting-fragments system.
+Complete `settings.json` templates stored in the hub. Profiles reference a template by name. Replaces the old per-key setting-fragments system.
 
 ```bash
 ccp template list                          # List available templates
@@ -160,47 +122,14 @@ ccp template extract <name> --from <profile>  # Extract from existing profile's 
 ccp template delete <name>
 ccp template edit <name>                   # Edit in $EDITOR
 
-# Use with profiles and engines
+# Use with profiles
 ccp profile create <name> --template opus-full
-ccp engine create <name> --template haiku-fast
 ccp profile edit <name> --template minimal
 ```
 
 Storage: `~/.ccp/hub/settings-templates/<name>/settings.json`
 
-Resolution order: Engine's template → Profile's template (profile wins if set). Hooks are always overlaid from hub hooks, not stored in templates.
-
-## Two-Layer Profile Composition
-
-Profiles can compose an **engine** (runtime config) + **context** (prompt/capabilities):
-
-| Layer | Hub Items | Rationale |
-|-------|-----------|-----------|
-| Engine | setting-fragments, hooks | Runtime behavior, permissions |
-| Context | skills, agents, rules, commands, hooks | Prompt content, capabilities |
-| Profile | Any (overrides) | Profile-specific extras |
-
-Resolution order (lowest to highest priority): Engine → Context → Profile (union-merged, deduplicated).
-
-```bash
-# Engine CRUD
-ccp engine create <name> [-e | -i]
-ccp engine list [--json]
-ccp engine show <name>
-ccp engine delete <name>
-
-# Context CRUD
-ccp context create <name> [-e | -i]
-ccp context list [--json]
-ccp context show <name>
-ccp context delete <name>
-
-# Profile composition
-ccp profile create <name> --engine opus-full --context coding
-ccp profile edit <name> --engine haiku-fast
-```
-
-Engine and context fields are **optional** — profiles without them work as before (inline hub items).
+Hooks are always overlaid from hub hooks, not stored in templates.
 
 ## Source System
 
@@ -226,18 +155,6 @@ ccp source remove <name>                # Remove source
 3. `install <owner/repo> skills/<name>` installs a specific skill directly without picker
 4. `install` (no args) syncs all sources from ccp.toml - clones missing sources and reinstalls items
 5. `source add` tries skills.sh first, falls back to GitHub with default branch
-
-## CLAUDE.md Linked Directories
-
-Claude Code supports `@path/to/file.md` imports in CLAUDE.md. ccp parses these references, stores the directories as reusable `rules` hub items, and creates root-level symlinks so `@` imports resolve correctly.
-
-- **Parser**: `internal/claudemd/parser.go` extracts `@path` references (skips code blocks and annotations)
-- **Hub storage**: Referenced dirs (e.g., `principles/`) are stored as `hub/rules/principles/` — reusable across profiles
-- **Dual symlinks**: Each linked dir gets both `profileDir/rules/{name}` (standard) and `profileDir/{name}` (root-level for `@` resolution)
-- **Manifest tracking**: `linked-dirs` field identifies which rules items need root-level symlinks
-- **Init**: During `ccp init`, referenced dirs are moved to hub/rules and symlinked
-- **Profile create**: `--from` copies linked-dirs + CLAUDE.md; hub items are shared via symlinks
-- **Migrate**: `ccp migrate` moves existing profile dirs to hub/rules and creates symlinks
 
 ## Hooks Format
 
@@ -340,20 +257,13 @@ Generate default config: `ccp config init`
 
 ```
 ~/.ccp/
-├── engines/                    # Reusable runtime config layers
-│   └── {name}/
-│       └── engine.toml
-├── contexts/                   # Reusable prompt/capability layers
-│   └── {name}/
-│       └── context.toml
 ├── hub/                        # Human-configurable (ccp-managed)
 │   ├── skills/
 │   ├── agents/
 │   ├── hooks/
 │   ├── rules/
 │   ├── commands/
-│   ├── settings-templates/     # Complete settings.json templates
-│   └── setting-fragments/      # Legacy (use settings-templates instead)
+│   └── settings-templates/     # Complete settings.json templates
 ├── store/                      # Shared downloadable resources
 │   └── plugins/
 │       ├── marketplaces/       # Downloaded marketplace repos
@@ -362,13 +272,13 @@ Generate default config: `ccp config init`
 │       └── install-counts-cache.json
 ├── sources/                    # Cloned source repositories
 ├── profiles/
-│   ├── shared/                 # Shared runtime data
+│   ├── shared/                 # Shared runtime data (all data dirs default here)
 │   │   ├── tasks/
 │   │   ├── todos/
 │   │   ├── paste-cache/
 │   │   └── projects/
 │   └── {name}/                 # Individual profile
-│       ├── profile.toml        # Profile manifest (may ref engine + context)
+│       ├── profile.toml        # Profile manifest
 │       ├── skills/ → hub/skills/{linked}
 │       ├── agents/ → hub/agents/{linked}
 │       ├── plugins/
@@ -385,7 +295,7 @@ Generate default config: `ccp config init`
 |------|----------|----------|---------|
 | Hub items (skills, agents, hooks) | Human-config | `~/.ccp/hub/` | Linked per profile |
 | Plugin cache (marketplaces, cache) | Human-config | `~/.ccp/store/plugins/` | Shared via symlinks |
-| Runtime data (tasks, todos, history) | Runtime | `~/.ccp/profiles/shared/` or profile | Configurable |
+| Runtime data (tasks, todos, history) | Runtime | `~/.ccp/profiles/shared/` | Always shared |
 | Plugin state (installed_plugins.json) | Runtime | Profile `plugins/` | Isolated |
 
 ## Before Making Changes

@@ -235,17 +235,13 @@ func syncAddedLinks(paths *config.Paths, p *profile.Profile, selections map[stri
 		}
 	}
 
-	// Regenerate settings.json if hooks or setting fragments were added
+	// Regenerate settings.json if hooks were added
 	hasHooks := false
-	hasFragments := false
 	if items, ok := selections["hooks"]; ok && len(items) > 0 {
 		hasHooks = true
 	}
-	if items, ok := selections["setting-fragments"]; ok && len(items) > 0 {
-		hasFragments = true
-	}
 
-	if hasHooks || hasFragments {
+	if hasHooks {
 		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
 			return fmt.Errorf("failed to regenerate settings.json: %w", err)
 		}

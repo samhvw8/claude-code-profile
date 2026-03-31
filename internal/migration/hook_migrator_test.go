@@ -23,8 +23,6 @@ func setupTestPaths(t *testing.T) (*config.Paths, string) {
 		HubDir:      filepath.Join(ccpDir, "hub"),
 		ProfilesDir: filepath.Join(ccpDir, "profiles"),
 		SharedDir:   filepath.Join(ccpDir, "profiles", "shared"),
-		EnginesDir:  filepath.Join(ccpDir, "engines"),
-		ContextsDir: filepath.Join(ccpDir, "contexts"),
 	}
 
 	return paths, tmpDir

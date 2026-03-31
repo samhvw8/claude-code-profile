@@ -104,71 +104,17 @@ func buildLegacyCommand(hookManifest *hub.HookManifest, profileHooksDir, hookNam
 	return config.ToPortablePath(absPath)
 }
 
-// RegenerateSettings regenerates settings.json with updated hook paths and setting fragments
-// Note: This rebuilds settings from fragments, removing keys that are no longer in any fragment
+// RegenerateSettings regenerates settings.json with updated hook paths and settings template
 func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manifest) error {
 	settingsPath := filepath.Join(profileDir, "settings.json")
 
-	// Start with empty settings - we'll build from fragments
-	settings := make(map[string]interface{})
-
-	// Read existing settings to preserve non-fragment keys (like hooks from previous runs)
-	data, err := os.ReadFile(settingsPath)
-	if err == nil {
-		var existingSettings map[string]interface{}
-		if err := json.Unmarshal(data, &existingSettings); err == nil {
-			// Only preserve hooks - fragments are the source of truth for other keys
-			if hooks, ok := existingSettings["hooks"]; ok {
-				settings["hooks"] = hooks
-			}
-		}
-	}
-
-	// Load settings template (new system — takes priority)
-	if manifest.SettingsTemplate != "" {
-		tmplMgr := hub.NewTemplateManager(paths.HubDir)
-		t, err := tmplMgr.Load(manifest.SettingsTemplate)
-		if err != nil {
-			return err
-		}
-		for key, value := range t.Settings {
-			settings[key] = value
-		}
-	}
-
-	// Merge setting fragments from hub (legacy — will be removed after migration)
-	if len(manifest.Hub.SettingFragments) > 0 {
-		fragmentSettings, err := mergeSettingFragments(paths.HubDir, manifest.Hub.SettingFragments)
-		if err != nil {
-			return err
-		}
-		for key, value := range fragmentSettings {
-			settings[key] = value
-		}
-	}
-
-	// Generate hooks section
-	hooks, err := GenerateSettingsHooks(paths, profileDir, manifest)
+	settings, err := GenerateSettings(manifest, paths, profileDir)
 	if err != nil {
 		return err
 	}
 
-	// Only update hooks if there are any
-	if len(hooks) > 0 {
-		settings["hooks"] = hooks
-	}
-
 	// Write back with pretty printing (no HTML escaping)
 	return writeJSONFile(settingsPath, settings)
-}
-
-// settingFragment is deprecated - use hub.Fragment instead
-// Kept temporarily for backward compatibility during migration
-
-// mergeSettingFragments merges multiple fragments into a settings map
-// Uses hub.MergeFragmentsFromHub for the actual implementation
-func mergeSettingFragments(hubDir string, fragmentNames []string) (map[string]interface{}, error) {
-	return hub.MergeFragmentsFromHub(hubDir, fragmentNames)
 }
 
 // writeJSONFile writes data as JSON without HTML escaping

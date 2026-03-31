@@ -16,8 +16,9 @@ var (
 )
 
 var envCmd = &cobra.Command{
-	Use:   "env <profile>",
-	Short: "Configure project environment to use a profile",
+	Use:    "env <profile>",
+	Hidden: true,
+	Short:  "Configure project environment to use a profile",
 	Long: `Update project configuration files to use a specific profile.
 
 Supported formats:

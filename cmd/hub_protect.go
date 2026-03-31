@@ -15,8 +15,9 @@ import (
 )
 
 var hubProtectCmd = &cobra.Command{
-	Use:   "protect [type/name...]",
-	Short: "Protect hub items from pruning",
+	Use:    "protect [type/name...]",
+	Hidden: true,
+	Short:  "Protect hub items from pruning",
 	Long: `Mark hub items as protected so they won't be removed by 'hub prune'.
 
 Protected items are kept even if unused by any profile.
@@ -30,8 +31,9 @@ Examples:
 }
 
 var hubUnprotectCmd = &cobra.Command{
-	Use:   "unprotect [type/name...]",
-	Short: "Remove protection from hub items",
+	Use:    "unprotect [type/name...]",
+	Hidden: true,
+	Short:  "Remove protection from hub items",
 	Long: `Remove protection from hub items, allowing them to be pruned.
 
 Examples:

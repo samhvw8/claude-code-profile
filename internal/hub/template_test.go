@@ -131,3 +131,154 @@ func TestExtractFromSettings(t *testing.T) {
 		t.Errorf("expected 2 keys, got %d", len(settings))
 	}
 }
+
+func TestExtractFromSettings_NoHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "settings.json")
+
+	content := `{"model": "sonnet", "temperature": 0.3}`
+	os.WriteFile(settingsPath, []byte(content), 0644)
+
+	settings, err := ExtractFromSettings(settingsPath)
+	if err != nil {
+		t.Fatalf("ExtractFromSettings() error = %v", err)
+	}
+	if len(settings) != 2 {
+		t.Errorf("expected 2 keys, got %d", len(settings))
+	}
+}
+
+func TestExtractFromSettings_MissingFile(t *testing.T) {
+	_, err := ExtractFromSettings("/nonexistent/settings.json")
+	if err == nil {
+		t.Error("expected error for missing file")
+	}
+}
+
+func TestExtractFromSettings_InvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "settings.json")
+	os.WriteFile(settingsPath, []byte("not valid json{{{"), 0644)
+
+	_, err := ExtractFromSettings(settingsPath)
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestTemplateManager_List_MultipleTemplates(t *testing.T) {
+	hubDir := t.TempDir()
+	mgr := NewTemplateManager(hubDir)
+
+	// Save three templates
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		mgr.Save(&Template{
+			Name: name,
+			Settings: map[string]interface{}{
+				"model": name + "-model",
+			},
+		})
+	}
+
+	templates, err := mgr.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(templates) != 3 {
+		t.Errorf("expected 3 templates, got %d", len(templates))
+	}
+
+	// Verify each loaded correctly
+	names := map[string]bool{}
+	for _, tmpl := range templates {
+		names[tmpl.Name] = true
+		if tmpl.Settings["model"] != tmpl.Name+"-model" {
+			t.Errorf("template %s model = %v, want %s-model", tmpl.Name, tmpl.Settings["model"], tmpl.Name)
+		}
+	}
+	for _, expected := range []string{"alpha", "beta", "gamma"} {
+		if !names[expected] {
+			t.Errorf("template %q not found in list", expected)
+		}
+	}
+}
+
+func TestTemplateManager_List_SkipsInvalid(t *testing.T) {
+	hubDir := t.TempDir()
+	mgr := NewTemplateManager(hubDir)
+
+	// Save a valid template
+	mgr.Save(&Template{Name: "valid", Settings: map[string]interface{}{"k": "v"}})
+
+	// Create an invalid template (directory without valid settings.json)
+	invalidDir := filepath.Join(hubDir, "settings-templates", "invalid")
+	os.MkdirAll(invalidDir, 0755)
+	os.WriteFile(filepath.Join(invalidDir, "settings.json"), []byte("not json"), 0644)
+
+	// Create a non-directory entry (should be skipped)
+	os.WriteFile(filepath.Join(hubDir, "settings-templates", "not-a-dir"), []byte("file"), 0644)
+
+	templates, err := mgr.List()
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	// Only "valid" should be returned; "invalid" has bad JSON, "not-a-dir" is a file
+	if len(templates) != 1 {
+		t.Errorf("expected 1 valid template, got %d", len(templates))
+	}
+	if templates[0].Name != "valid" {
+		t.Errorf("expected 'valid', got %q", templates[0].Name)
+	}
+}
+
+func TestTemplateManager_Load_InvalidJSON(t *testing.T) {
+	hubDir := t.TempDir()
+	tmplDir := filepath.Join(hubDir, "settings-templates", "bad")
+	os.MkdirAll(tmplDir, 0755)
+	os.WriteFile(filepath.Join(tmplDir, "settings.json"), []byte("{{invalid json"), 0644)
+
+	mgr := NewTemplateManager(hubDir)
+	_, err := mgr.Load("bad")
+	if err == nil {
+		t.Error("expected error loading invalid JSON template")
+	}
+}
+
+func TestTemplateManager_Save_ComplexSettings(t *testing.T) {
+	hubDir := t.TempDir()
+	mgr := NewTemplateManager(hubDir)
+
+	tmpl := &Template{
+		Name: "complex",
+		Settings: map[string]interface{}{
+			"model":       "opus",
+			"temperature": 0.9,
+			"maxTokens":   4096.0,
+			"nested": map[string]interface{}{
+				"key1": "value1",
+				"key2": true,
+			},
+			"list": []interface{}{"a", "b", "c"},
+		},
+	}
+
+	if err := mgr.Save(tmpl); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	loaded, err := mgr.Load("complex")
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+
+	if loaded.Settings["model"] != "opus" {
+		t.Errorf("model = %v, want 'opus'", loaded.Settings["model"])
+	}
+	nested, ok := loaded.Settings["nested"].(map[string]interface{})
+	if !ok {
+		t.Fatal("nested should be a map")
+	}
+	if nested["key1"] != "value1" {
+		t.Errorf("nested.key1 = %v, want 'value1'", nested["key1"])
+	}
+}

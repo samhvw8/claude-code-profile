@@ -19,46 +19,30 @@ const ManifestVersionV2 = 2
 
 // Manifest represents the profile.toml file
 type Manifest struct {
-	Version     int                 `toml:"version" yaml:"-"`
-	Name        string              `toml:"name" yaml:"name"`
-	Description string              `toml:"description,omitempty" yaml:"description,omitempty"`
-	Engine           string              `toml:"engine,omitempty" yaml:"engine,omitempty"`
-	Context          string              `toml:"context,omitempty" yaml:"context,omitempty"`
+	Version          int                 `toml:"version" yaml:"-"`
+	Name             string              `toml:"name" yaml:"name"`
+	Description      string              `toml:"description,omitempty" yaml:"description,omitempty"`
+	Engine           string              `toml:"engine,omitempty" yaml:"engine,omitempty"`     // Deprecated: flattened by migration
+	Context          string              `toml:"context,omitempty" yaml:"context,omitempty"`   // Deprecated: flattened by migration
 	SettingsTemplate string              `toml:"settings-template,omitempty" yaml:"settings-template,omitempty"`
-	Created     time.Time           `toml:"created" yaml:"created"`
-	Updated     time.Time           `toml:"updated" yaml:"updated"`
-	Hub         HubLinks            `toml:"hub" yaml:"hub"`
-	Data        DataConfig          `toml:"data" yaml:"data"`
-	LinkedDirs  []string            `toml:"linked-dirs,omitempty" yaml:"linked-dirs,omitempty"`
-	Hooks       []config.HookConfig `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
+	Created          time.Time           `toml:"created" yaml:"created"`
+	Updated          time.Time           `toml:"updated" yaml:"updated"`
+	Hub   HubLinks            `toml:"hub" yaml:"hub"`
+	Hooks []config.HookConfig `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
 }
 
 // HubLinks defines which hub items are linked to this profile
 type HubLinks struct {
-	Skills           []string `toml:"skills,omitempty" yaml:"skills,omitempty"`
-	Agents           []string `toml:"agents,omitempty" yaml:"agents,omitempty"`
-	Hooks            []string `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
-	Rules            []string `toml:"rules,omitempty" yaml:"rules,omitempty"`
-	Commands         []string `toml:"commands,omitempty" yaml:"commands,omitempty"`
-	SettingFragments []string `toml:"setting-fragments,omitempty" yaml:"setting-fragments,omitempty"`
-}
-
-// DataConfig defines sharing mode for data directories
-type DataConfig struct {
-	Tasks       config.ShareMode `toml:"tasks" yaml:"tasks"`
-	Todos       config.ShareMode `toml:"todos" yaml:"todos"`
-	PasteCache  config.ShareMode `toml:"paste-cache" yaml:"paste-cache"`
-	History     config.ShareMode `toml:"history" yaml:"history"`
-	FileHistory config.ShareMode `toml:"file-history" yaml:"file-history"`
-	SessionEnv  config.ShareMode `toml:"session-env" yaml:"session-env"`
-	Projects    config.ShareMode `toml:"projects" yaml:"projects"`
-	Plans       config.ShareMode `toml:"plans" yaml:"plans"`
+	Skills   []string `toml:"skills,omitempty" yaml:"skills,omitempty"`
+	Agents   []string `toml:"agents,omitempty" yaml:"agents,omitempty"`
+	Hooks    []string `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
+	Rules    []string `toml:"rules,omitempty" yaml:"rules,omitempty"`
+	Commands []string `toml:"commands,omitempty" yaml:"commands,omitempty"`
 }
 
 // NewManifest creates a new manifest with defaults
 func NewManifest(name, description string) *Manifest {
 	now := time.Now()
-	defaults := config.DefaultDataConfig()
 
 	return &Manifest{
 		Version:     ManifestVersion,
@@ -67,16 +51,6 @@ func NewManifest(name, description string) *Manifest {
 		Created:     now,
 		Updated:     now,
 		Hub:         HubLinks{},
-		Data: DataConfig{
-			Tasks:       defaults[config.DataTasks],
-			Todos:       defaults[config.DataTodos],
-			PasteCache:  defaults[config.DataPasteCache],
-			History:     defaults[config.DataHistory],
-			FileHistory: defaults[config.DataFileHistory],
-			SessionEnv:  defaults[config.DataSessionEnv],
-			Projects:    defaults[config.DataProjects],
-			Plans:       defaults[config.DataPlans],
-		},
 	}
 }
 
@@ -131,11 +105,6 @@ func (m *Manifest) NeedsMigration() bool {
 	return m.Version < ManifestVersionV2
 }
 
-// UsesComposition returns true if the manifest references an engine or context
-func (m *Manifest) UsesComposition() bool {
-	return m.Engine != "" || m.Context != ""
-}
-
 // ManifestPath returns the path to the manifest file
 // Checks for .toml first, falls back to .yaml
 func ManifestPath(profileDir string) string {
@@ -159,8 +128,6 @@ func (m *Manifest) GetHubItems(itemType config.HubItemType) []string {
 		return m.Hub.Rules
 	case config.HubCommands:
 		return m.Hub.Commands
-	case config.HubSettingFragments:
-		return m.Hub.SettingFragments
 	default:
 		return nil
 	}
@@ -179,8 +146,6 @@ func (m *Manifest) SetHubItems(itemType config.HubItemType, items []string) {
 		m.Hub.Rules = items
 	case config.HubCommands:
 		m.Hub.Commands = items
-	case config.HubSettingFragments:
-		m.Hub.SettingFragments = items
 	}
 }
 
@@ -205,52 +170,6 @@ func (m *Manifest) RemoveHubItem(itemType config.HubItemType, name string) bool 
 		}
 	}
 	return false
-}
-
-// GetDataShareMode returns the share mode for a data type
-func (m *Manifest) GetDataShareMode(dataType config.DataItemType) config.ShareMode {
-	switch dataType {
-	case config.DataTasks:
-		return m.Data.Tasks
-	case config.DataTodos:
-		return m.Data.Todos
-	case config.DataPasteCache:
-		return m.Data.PasteCache
-	case config.DataHistory:
-		return m.Data.History
-	case config.DataFileHistory:
-		return m.Data.FileHistory
-	case config.DataSessionEnv:
-		return m.Data.SessionEnv
-	case config.DataProjects:
-		return m.Data.Projects
-	case config.DataPlans:
-		return m.Data.Plans
-	default:
-		return config.ShareModeIsolated
-	}
-}
-
-// SetDataShareMode sets the share mode for a data type
-func (m *Manifest) SetDataShareMode(dataType config.DataItemType, mode config.ShareMode) {
-	switch dataType {
-	case config.DataTasks:
-		m.Data.Tasks = mode
-	case config.DataTodos:
-		m.Data.Todos = mode
-	case config.DataPasteCache:
-		m.Data.PasteCache = mode
-	case config.DataHistory:
-		m.Data.History = mode
-	case config.DataFileHistory:
-		m.Data.FileHistory = mode
-	case config.DataSessionEnv:
-		m.Data.SessionEnv = mode
-	case config.DataProjects:
-		m.Data.Projects = mode
-	case config.DataPlans:
-		m.Data.Plans = mode
-	}
 }
 
 // AllHubItemsFlat returns all hub items as type/name pairs

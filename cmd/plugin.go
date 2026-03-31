@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -19,4 +21,8 @@ var pluginCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(pluginCmd)
+}
+
+func printDeprecationNotice(old, new string) {
+	fmt.Printf("Warning: 'ccp %s' is deprecated. Use 'ccp %s' instead.\n\n", old, new)
 }
