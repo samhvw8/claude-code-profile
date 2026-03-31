@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
 **Version:** 0.28.0
-**Date:** 2026-03-27
+**Date:** 2026-03-31
 **Status:** Draft
 
 ---

@@ -321,3 +321,35 @@ Generate default config: `ccp config init`
 - **Never force-update tags** (`git tag -f` or `git push --tags -f`)
 - Force-updating tags prevents GitHub CI from re-running
 - Always increment version and create a new tag
+
+## Self-Maintenance: CLAUDE.md and .claude/rules/
+
+These files are the project's **long-term memory**. Treat them like a dreaming state: periodically consolidate, prune, and synthesize.
+
+### What Lives Where
+
+| File | Purpose | Volatility |
+|------|---------|------------|
+| `CLAUDE.md` | Dev reference — types, architecture, commands, patterns | Changes with code |
+| `.claude/rules/01-project-identity.md` | What ccp is, core concepts, what was removed | Stable |
+| `.claude/rules/02-design-principles.md` | How to make decisions in this codebase | Stable |
+| `.claude/rules/03-workflow.md` | Release flow, testing, CLI patterns | Semi-stable |
+| `.claude/rules/04-key-decisions.md` | Decision log with rationale — why we chose X | Append-only |
+| `.claude/rules/05-anti-patterns.md` | What failed and must not return | Append-only |
+
+### Maintenance Cycle
+
+After significant changes (new features, refactors, simplifications):
+
+1. **Prune** — Remove rules/docs that no longer apply. Dead knowledge is worse than no knowledge.
+2. **Consolidate** — If multiple rules say similar things, merge them. Reduce duplication across CLAUDE.md and rules/.
+3. **Synthesize** — Extract new patterns from the work. What did we learn? Add to decisions or anti-patterns.
+4. **Verify** — Does CLAUDE.md still match the code? Do the types, commands, and architecture reflect reality?
+
+### Signals That Maintenance Is Needed
+
+- A rule references a type/function that no longer exists
+- CLAUDE.md describes a feature that was removed
+- The same guidance appears in both CLAUDE.md and a rules file
+- A new pattern has emerged but isn't documented anywhere
+- Decision rationale is lost (we know *what* but not *why*)
