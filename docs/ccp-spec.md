@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.28.0
-**Date:** 2026-03-31
+**Version:** 0.29.0
+**Date:** 2026-04-01
 **Status:** Draft
 
 ---
@@ -669,13 +669,13 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp hub protect [type/name...]` | Protect items from pruning | `ccp hub protect skills/debug` |
 | `ccp hub unprotect [type/name...]` | Remove protection | `ccp hub unprotect skills/debug` |
 
-### Skills Commands
+### Project Commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `ccp skills find <query>` | Search skills.sh for installable skills | `ccp skills find debugging` |
-| `ccp skills add <source>` | Install skill from GitHub | `ccp skills add vercel-labs/agent-skills@debugging` |
-| `ccp skills update [name]` | Update installed skills from GitHub | `ccp skills update --all` |
+| `ccp project add [items...] [-i]` | Copy hub items into project's `.claude/` | `ccp project add skills/coding agents/reviewer` |
+| `ccp project list` | List items in project's `.claude/` | `ccp project list` |
+| `ccp project remove [items...]` | Remove items from project's `.claude/` | `ccp project remove skills/coding` |
 
 ### Plugin Commands
 
@@ -854,6 +854,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.29.0 | 2026-04-01 | — | Added: `ccp project` command group for project-scoped `.claude/` setup. `ccp project add` copies hub items into the current project's `.claude/` directory (copies, not symlinks — git-friendly). Interactive picker via `-i`. `ccp project list` scans `.claude/`. `ccp project remove` deletes items. Detects project root via `.git/` walk-up. Exported `CopyTree`/`CopyDir`/`CopyFileItem` in source/installer for reuse. Rewrote README.md for v0.28+ simplified architecture. |
 | 0.28.0 | 2026-03-31 | — | **Simplification release.** Removed: engines, contexts (flattened into profile hub items via `ccp migrate`), setting-fragments (replaced by settings templates in v0.27), linked-dirs (@import parsing), per-data-type sharing config (all data dirs now always shared). Collapsed settings generation pipeline from 3 processor interfaces to single `GenerateSettings()` function. Hidden 13 power-user commands from default help. Removed `ccp skills` commands (redundant with `find`/`install`). Cleaned up 8 completed migration files. Net: ~6K LOC removed, concepts reduced from 14 to 5 (hub, profile, settings template, source, activation). |
 | 0.27.0 | 2026-03-18 | — | Added: Settings templates — complete `settings.json` templates replacing per-key setting-fragments. New CLI: `ccp template list/show/create/extract/edit/delete`. Profiles and engines reference templates by name (`settings-template` field). Resolution: engine template → profile template (profile wins). Hooks remain separately managed. `--template` flag added to `profile create`, `profile edit`, `engine create`. Added `GlobalClaudeDir` to Paths struct for reliable global `~/.claude` resolution (ignores `CLAUDE_CONFIG_DIR`). Fixed `ccp use -g` to always target `~/.claude` regardless of env override. Setting-fragments marked as legacy — `ccp migrate` converts fragments to template. |
 | 0.26.0 | 2026-03-08 | — | Added: Two-layer profile composition (engine + context). Engines bundle runtime config (setting-fragments, hooks, data sharing). Contexts bundle prompt/capabilities (skills, agents, rules, commands, hooks). Profiles compose engine + context + optional overrides. Added CLAUDE.md linked directories: `@path/file.md` imports are parsed, referenced dirs stored as reusable `rules` hub items, dual symlinks (root-level for @import resolution + standard rules/ for hub consistency). New commands: `ccp engine create/list/show/delete`, `ccp context create/list/show/delete`. Profile create gains `--engine` and `--context` flags. `ccp migrate` now detects and migrates untracked CLAUDE.md linked dirs. |

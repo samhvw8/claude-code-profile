@@ -6,14 +6,13 @@ A CLI tool for managing multiple Claude Code **configuration profiles** via a ce
 
 **ccp** solves the configuration management problem for Claude Code power users:
 
-- **Central Hub**: Store all your skills, agents, hooks, rules, and settings in one place (`~/.ccp/hub/`)
+- **Central Hub**: Store all your skills, agents, hooks, rules, and commands in one place (`~/.ccp/hub/`)
 - **Multiple Profiles**: Create purpose-specific configurations (quickfix, full-stack-dev, documentation)
-- **Two-Layer Composition**: Split profiles into reusable **engines** (runtime config) + **contexts** (prompt/capabilities)
-- **CLAUDE.md Linked Dirs**: `@path/file.md` imports are auto-tracked as hub rules, shared across profiles via symlinks
+- **Settings Templates**: Complete `settings.json` templates referenced by name — what you see is what you get
+- **Project Setup**: Copy hub items into any project's `.claude/` for team-shareable, git-committable config
 - **Concurrent Profiles**: Run different profiles simultaneously in different projects via mise/direnv
 - **Symlink Architecture**: Profiles link to hub items, ensuring single-source-of-truth maintenance
 - **Instant Switching**: Switch between profiles globally or per-project via `CLAUDE_CONFIG_DIR`
-- **Shared Data**: Share tasks/todos across profiles while keeping history isolated
 
 ## Problem
 
@@ -43,9 +42,6 @@ ccp init
 ccp find debugging
 ccp install owner/repo
 
-# List profiles
-ccp profile list
-
 # Create a new profile
 ccp profile create quickfix --skills=debugging-core,git-basics
 
@@ -55,50 +51,41 @@ ccp profile create dev -i
 # Switch active profile
 ccp use quickfix
 
-# Show current profile
-ccp use --show
+# Copy hub items into a project's .claude/
+ccp project add skills/coding agents/reviewer
 ```
 
 ## Architecture
 
 ```
-~/.ccp/                               # CCP data directory
-├── engines/                          # Reusable runtime config layers
-│   └── opus-full/
-│       └── engine.toml
-├── contexts/                         # Reusable prompt/capability layers
-│   └── coding/
-│       └── context.toml
+~/.ccp/
 ├── hub/                              # Single source of truth
 │   ├── skills/
 │   ├── agents/
 │   ├── hooks/
-│   ├── rules/                        # Includes CLAUDE.md linked dirs
-│   │   └── principles/               # @principles/se.md → hub item
+│   ├── rules/
 │   ├── commands/
-│   └── setting-fragments/
+│   └── settings-templates/           # Complete settings.json templates
 │
 ├── store/                            # Shared downloadable resources
 │   └── plugins/
 │       ├── marketplaces/
 │       └── cache/
 │
+├── sources/                          # Cloned source repositories
+│
 ├── profiles/
 │   ├── default/                      # Migrated from original ~/.claude
 │   │   ├── CLAUDE.md
 │   │   ├── settings.json
-│   │   ├── principles → hub/rules/principles  # Root symlink for @imports
 │   │   ├── skills/                   # Symlinks → hub/skills/*
 │   │   ├── agents/                   # Symlinks → hub/agents/*
 │   │   ├── hooks/
-│   │   ├── rules/                    # Also has rules/principles symlink
-│   │   ├── profile.toml              # Manifest (may ref engine + context)
+│   │   ├── rules/
+│   │   ├── profile.toml              # Manifest
 │   │   └── ...
 │   │
-│   ├── quickfix/                     # Purpose-specific profile
-│   │   └── ...
-│   │
-│   └── shared/                       # Shared data namespace
+│   └── shared/                       # Shared data (tasks, todos, etc.)
 │       ├── tasks/
 │       ├── todos/
 │       └── ...
@@ -112,81 +99,71 @@ ccp use --show
 
 ### Core
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `ccp init` | | Migrate existing ~/.claude to ~/.ccp structure |
-| `ccp migrate` | | Run migrations from older ccp versions |
-| `ccp use <profile>` | `u` | Set default profile (~/.claude symlink) |
-| `ccp use --show` | | Show current default profile |
-| `ccp which` | `w` | Show current active profile |
-| `ccp status` | `st` | Show ccp status and health |
-| `ccp status --json` | | Output status as JSON |
-| `ccp doctor` | | Diagnose and fix common issues |
+| Command | Description |
+|---------|-------------|
+| `ccp init` | Migrate existing ~/.claude to ~/.ccp structure |
+| `ccp migrate` | Run migrations from older ccp versions |
+| `ccp use <profile> [-g]` | Switch profile (project or global) |
+| `ccp which` | Show current active profile |
+| `ccp status` | Show ccp status and health |
+| `ccp doctor [--fix]` | Diagnose and fix common issues |
 
 ### Profile Management
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `ccp profile` | `p` | Profile commands |
-| `ccp profile create <name>` | `p c` | Create new profile |
-| `ccp profile list` | `p l` | List all profiles |
-| `ccp profile list --json` | | Output profiles as JSON |
-| `ccp profile edit <name> -i` | | Interactive hub item selection |
-| `ccp profile check <name>` | | Validate profile against manifest |
-| `ccp profile fix <name>` | | Reconcile profile to match manifest |
-| `ccp profile fix <name> --force` | | Auto-remove non-existent hub items |
-| `ccp profile sync [name]` | | Regenerate symlinks and settings |
-| `ccp profile delete <name>` | | Delete a profile |
+| Command | Description |
+|---------|-------------|
+| `ccp profile create <name>` | Create new profile (flags or `-i` interactive) |
+| `ccp profile list` | List all profiles |
+| `ccp profile edit <name>` | Add/remove hub items |
+| `ccp profile sync [--all]` | Regenerate symlinks and settings |
+| `ccp profile fix <name>` | Reconcile profile to match manifest |
+| `ccp profile delete <name>` | Delete a profile |
 
 ### Hub Management
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `ccp hub` | `h` | Hub commands |
-| `ccp hub list [type]` | `h l` | List hub contents |
-| `ccp hub list --json` | | Output hub contents as JSON |
-| `ccp hub link [profile]` | `h ln` | Interactive add hub items to profile |
-| `ccp hub add` | | Interactive promote local items to hub |
-| `ccp hub add <type> <path>` | | Add item to hub from filesystem |
-| `ccp hub show <type/name>` | | Show hub item details |
-| `ccp hub remove <type/name>` | | Remove item from hub |
-| `ccp link [profile] [path]` | `l` | Add/edit hub items in profile |
-| `ccp unlink <profile> <path>` | `ul` | Remove hub item from profile |
+| Command | Description |
+|---------|-------------|
+| `ccp hub list [type]` | List hub contents |
+| `ccp hub add <type> <path>` | Add item to hub |
+| `ccp hub show <type/name>` | Show hub item details |
+| `ccp hub remove <type/name>` | Remove item from hub |
+| `ccp link [profile] [item]` | Link hub item to profile |
+| `ccp unlink <profile> <item>` | Unlink hub item from profile |
 
-### Engine & Context (Two-Layer Composition)
+### Project Setup
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `ccp engine create <name>` | `e c` | Create reusable engine (runtime config) |
-| `ccp engine list` | `e l` | List engines |
-| `ccp engine show <name>` | | Show engine details |
-| `ccp engine delete <name>` | | Delete engine |
-| `ccp context create <name>` | `ctx c` | Create reusable context (prompt/capabilities) |
-| `ccp context list` | `ctx l` | List contexts |
-| `ccp context show <name>` | | Show context details |
-| `ccp context delete <name>` | | Delete context |
+| Command | Description |
+|---------|-------------|
+| `ccp project add [items...] [-i]` | Copy hub items into project's `.claude/` |
+| `ccp project list` | List items in project's `.claude/` |
+| `ccp project remove [items...]` | Remove items from project's `.claude/` |
 
 ### Package Management
 
-| Command | Alias | Description |
-|---------|-------|-------------|
-| `ccp find <query>` | `search` | Search skills.sh for packages |
-| `ccp install` | `i` | Sync all sources from ccp.toml |
-| `ccp install <owner/repo>` | | Install from package (interactive picker) |
-| `ccp install <owner/repo> skills/<name>` | | Install specific skill directly |
-| `ccp source` | `s` | Advanced source management |
-| `ccp source add <owner/repo>` | | Add source without installing |
-| `ccp source list` | | List installed sources |
-| `ccp source list --json` | | Output sources as JSON |
-| `ccp source update` | | Update installed sources |
-| `ccp source remove <name>` | | Remove a source |
+| Command | Description |
+|---------|-------------|
+| `ccp find <query>` | Search skills.sh for packages |
+| `ccp install [owner/repo]` | Install from package or sync all |
+| `ccp source list` | List installed sources |
+| `ccp source update` | Update installed sources |
+| `ccp source remove <name>` | Remove a source |
+
+### Settings Templates
+
+| Command | Description |
+|---------|-------------|
+| `ccp template list` | List settings templates |
+| `ccp template show <name>` | Display template JSON |
+| `ccp template create <name>` | Create new template |
+| `ccp template edit <name>` | Edit in $EDITOR |
+| `ccp template extract <name>` | Extract from profile's settings |
 
 ## Profile Activation
 
-### Default (symlink)
+### Global (symlink)
 
 ```bash
-ccp use quickfix
+ccp use quickfix -g
 # ~/.claude → ~/.ccp/profiles/quickfix
 ```
 
@@ -205,12 +182,6 @@ CLAUDE_CONFIG_DIR = "~/.ccp/profiles/dev"
 export CLAUDE_CONFIG_DIR="$HOME/.ccp/profiles/dev"
 ```
 
-### Inline
-
-```bash
-CLAUDE_CONFIG_DIR=~/.ccp/profiles/quickfix claude "fix the bug"
-```
-
 ## Profile Manifest
 
 Each profile has a `profile.toml` manifest:
@@ -219,22 +190,16 @@ Each profile has a `profile.toml` manifest:
 version = 3
 name = "quickfix"
 description = "Minimal bug-fixing configuration"
-engine = "opus-full"           # Optional: reusable runtime config
-context = "coding"             # Optional: reusable prompt/capabilities
-linked-dirs = ["principles"]   # CLAUDE.md @import dirs (hub rules items)
+settings-template = "opus-full"   # Optional settings template
 
 [hub]
 skills = ["debugging-core", "git-basics"]
 hooks = ["pre-commit-lint"]
-rules = ["minimal-change", "principles"]
-commands = []
-setting-fragments = []
-
-[data]
-tasks = "shared"
-todos = "shared"
-history = "isolated"
+rules = ["minimal-change"]
+commands = ["quick-test"]
 ```
+
+Data directories (tasks, todos, history) are always shared across profiles.
 
 ## Shell Completion
 
@@ -249,51 +214,24 @@ ccp completion zsh > "${fpath[1]}/_ccp"
 ccp completion fish | source
 ```
 
-## Machine Migration (chezmoi)
-
-ccp stores all configuration in `~/.ccp/ccp.toml` and `~/.ccp/hub/`, making it easy to sync across machines:
+## Machine Migration
 
 ```bash
-# On source machine - add to chezmoi
-chezmoi add ~/.ccp/ccp.toml
-chezmoi add ~/.ccp/hub
+# Sync with chezmoi
+chezmoi add ~/.ccp/ccp.toml ~/.ccp/hub
 
-# On new machine - restore
+# On new machine
 chezmoi apply
-ccp source install  # Syncs all sources from ccp.toml
+ccp install  # Syncs all sources from ccp.toml
 ```
-
-The `ccp install` command (with no arguments) will:
-- Clone any missing source repositories
-- Reinstall hub items listed in `ccp.toml`
 
 ## Development
 
 ```bash
-# Run tests
-go test ./...
-
-# Build
-go build -o ccp .
-
-# Install locally
-go install .
+go test ./...      # Run tests
+go build -o ccp .  # Build
+go install .       # Install locally
 ```
-
-## Inspiration
-
-Inspired by [CCS (Claude Code Switch)](https://github.com/kaitranntt/ccs) which provides profile switching for Claude subscriptions and API proxies.
-
-**ccp** manages **complete configuration profiles** including skills, agents, hooks, and settings. It also supports Claude subscription and proxy switching via environment variables in `settings.json`.
-
-| Capability | CCS | ccp |
-|------------|-----|-----|
-| Claude subscription switching | ✓ | ✓ (via settings env) |
-| API proxy configuration | ✓ | ✓ (via settings env) |
-| Multiple AI providers (Gemini, etc.) | ✓ | ✓ (manual via env + proxy) |
-| Skills, agents, hooks management | — | ✓ |
-| Hub-based component reuse | — | ✓ |
-| Per-project profiles (mise/direnv) | — | ✓ |
 
 ## License
 
