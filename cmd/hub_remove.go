@@ -57,9 +57,9 @@ func runHubRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid type: %s", parts[0])
 	}
 
-	// Check if item exists
-	itemPath := paths.HubItemPath(itemType, itemName)
-	if _, err := os.Stat(itemPath); os.IsNotExist(err) {
+	// Check if item exists (try exact path, then common extensions)
+	itemPath := resolveHubItemPath(paths, itemType, itemName)
+	if itemPath == "" {
 		return fmt.Errorf("item not found: %s/%s", itemType, itemName)
 	}
 
@@ -93,6 +93,27 @@ func runHubRemove(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Removed %s/%s\n", itemType, itemName)
 	return nil
+}
+
+// resolveHubItemPath finds the actual path of a hub item, trying the exact name
+// first, then common file extensions (.md, .yaml, .yml, .sh, .json)
+func resolveHubItemPath(paths *config.Paths, itemType config.HubItemType, name string) string {
+	// Try exact path first (works for directories and files with extension in name)
+	exact := paths.HubItemPath(itemType, name)
+	if _, err := os.Stat(exact); err == nil {
+		return exact
+	}
+
+	// Try common extensions
+	dir := paths.HubItemDir(itemType)
+	for _, ext := range []string{".md", ".yaml", ".yml", ".sh", ".json"} {
+		candidate := filepath.Join(dir, name+ext)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	return ""
 }
 
 func findProfilesUsingItem(paths *config.Paths, itemType config.HubItemType, itemName string) ([]string, error) {

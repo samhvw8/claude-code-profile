@@ -51,11 +51,11 @@ func runHubShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid type: %s", parts[0])
 	}
 
-	itemPath := paths.HubItemPath(itemType, itemName)
-	info, err := os.Stat(itemPath)
-	if os.IsNotExist(err) {
+	itemPath := resolveHubItemPath(paths, itemType, itemName)
+	if itemPath == "" {
 		return fmt.Errorf("item not found: %s/%s", itemType, itemName)
 	}
+	info, err := os.Stat(itemPath)
 	if err != nil {
 		return err
 	}
