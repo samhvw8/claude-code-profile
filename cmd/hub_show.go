@@ -9,22 +9,30 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/hub"
+	"github.com/samhoang/ccp/internal/picker"
 	"github.com/samhoang/ccp/internal/profile"
 )
 
+var (
+	hubShowInteractive bool
+)
+
 var hubShowCmd = &cobra.Command{
-	Use:   "show <type>/<name>",
+	Use:   "show [type/name]",
 	Short: "Show hub item contents and usage",
 	Long: `Display the contents of a hub item and which profiles use it.
 
 Examples:
-  ccp hub show skills/my-skill.md
-  ccp hub show agents/my-agent`,
-	Args: cobra.ExactArgs(1),
+  ccp hub show skills/my-skill
+  ccp hub show agents/my-agent
+  ccp hub show -i                   # Interactive picker`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: runHubShow,
 }
 
 func init() {
+	hubShowCmd.Flags().BoolVarP(&hubShowInteractive, "interactive", "i", false, "Interactive picker for hub items to show")
 	hubCmd.AddCommand(hubShowCmd)
 }
 
@@ -38,7 +46,12 @@ func runHubShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ccp not initialized: run 'ccp init' first")
 	}
 
-	// Parse type/name
+	// Interactive mode
+	if hubShowInteractive || len(args) == 0 {
+		return runHubShowInteractive(paths)
+	}
+
+	// Direct mode
 	parts := strings.SplitN(args[0], "/", 2)
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid format: use <type>/<name>")
@@ -51,6 +64,46 @@ func runHubShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid type: %s", parts[0])
 	}
 
+	return showHubItem(paths, itemType, itemName)
+}
+
+func runHubShowInteractive(paths *config.Paths) error {
+	scanner := hub.NewScanner()
+	h, err := scanner.Scan(paths.HubDir)
+	if err != nil {
+		return fmt.Errorf("failed to scan hub: %w", err)
+	}
+
+	// Build flat list of all items for single-select picker
+	var items []picker.Item
+	for _, itemType := range config.AllHubItemTypes() {
+		for _, item := range h.GetItems(itemType) {
+			items = append(items, picker.Item{
+				ID:    fmt.Sprintf("%s/%s", itemType, item.Name),
+				Label: fmt.Sprintf("%s/%s", itemType, item.Name),
+			})
+		}
+	}
+
+	if len(items) == 0 {
+		fmt.Println("No hub items available")
+		return nil
+	}
+
+	selected, err := picker.RunSingle("Select a hub item to show", items)
+	if err != nil {
+		return fmt.Errorf("picker error: %w", err)
+	}
+	if selected == "" {
+		fmt.Println("Cancelled")
+		return nil
+	}
+
+	parts := strings.SplitN(selected, "/", 2)
+	return showHubItem(paths, config.HubItemType(parts[0]), parts[1])
+}
+
+func showHubItem(paths *config.Paths, itemType config.HubItemType, itemName string) error {
 	itemPath := resolveHubItemPath(paths, itemType, itemName)
 	if itemPath == "" {
 		return fmt.Errorf("item not found: %s/%s", itemType, itemName)
