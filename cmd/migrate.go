@@ -22,6 +22,7 @@ This command:
 1. Migrates profile manifests from YAML to TOML (profile.yaml → profile.toml)
 2. Upgrades v2 manifests to v3
 3. Flattens engine/context references into inline profile hub items
+4. Converts setting-fragments to a settings template
 
 Migrations are idempotent and safe to run multiple times.`,
 	RunE: runMigrate,
@@ -44,12 +45,14 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 
 	tomlMigrator := migration.NewTOMLMigrator(paths)
 	flattenMigrator := migration.NewFlattenMigrator(paths)
+	fragmentMigrator := migration.NewFragmentMigrator(paths)
 
 	needsTOML := tomlMigrator.NeedsMigration()
 	needsV3 := tomlMigrator.NeedsV2ToV3Upgrade()
 	needsFlatten := flattenMigrator.NeedsMigration()
+	needsFragments := fragmentMigrator.NeedsMigration()
 
-	if !needsTOML && !needsV3 && !needsFlatten {
+	if !needsTOML && !needsV3 && !needsFlatten && !needsFragments {
 		fmt.Println("No migrations needed - everything is up to date.")
 		return nil
 	}
@@ -64,6 +67,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if needsFlatten {
 			fmt.Println("  - Flatten engine/context references into profile hub items")
+		}
+		if needsFragments {
+			fmt.Println("  - Convert setting-fragments to settings template")
 		}
 		fmt.Println()
 		fmt.Println("Run without --dry-run to apply migrations.")
@@ -103,6 +109,18 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if count > 0 {
 			fmt.Printf("  Flattened %d profile(s)\n", count)
+		}
+	}
+
+	// Convert setting-fragments to settings template
+	if needsFragments {
+		fmt.Println("Converting setting-fragments to settings template...")
+		count, err := fragmentMigrator.Migrate()
+		if err != nil {
+			return fmt.Errorf("fragment migration failed: %w", err)
+		}
+		if count > 0 {
+			fmt.Printf("  Merged %d fragment(s) into settings template\n", count)
 		}
 	}
 

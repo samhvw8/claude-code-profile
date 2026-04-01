@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.29.0
+**Version:** 0.29.1
 **Date:** 2026-04-01
 **Status:** Draft
 
@@ -854,6 +854,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.29.1 | 2026-04-01 | — | Added: `FragmentMigrator` in `ccp migrate` — reads legacy `hub/setting-fragments/*.yaml`, merges into a `migrated-fragments` settings template, sets on profiles without a template, removes fragments dir. Ensures users upgrading from v0.27 or earlier can migrate cleanly. |
 | 0.29.0 | 2026-04-01 | — | Added: `ccp project` command group for project-scoped `.claude/` setup. `ccp project add` copies hub items into the current project's `.claude/` directory (copies, not symlinks — git-friendly). Interactive picker via `-i`. `ccp project list` scans `.claude/`. `ccp project remove` deletes items. Detects project root via `.git/` walk-up. Exported `CopyTree`/`CopyDir`/`CopyFileItem` in source/installer for reuse. Rewrote README.md for v0.28+ simplified architecture. |
 | 0.28.0 | 2026-03-31 | — | **Simplification release.** Removed: engines, contexts (flattened into profile hub items via `ccp migrate`), setting-fragments (replaced by settings templates in v0.27), linked-dirs (@import parsing), per-data-type sharing config (all data dirs now always shared). Collapsed settings generation pipeline from 3 processor interfaces to single `GenerateSettings()` function. Hidden 13 power-user commands from default help. Removed `ccp skills` commands (redundant with `find`/`install`). Cleaned up 8 completed migration files. Net: ~6K LOC removed, concepts reduced from 14 to 5 (hub, profile, settings template, source, activation). |
 | 0.27.0 | 2026-03-18 | — | Added: Settings templates — complete `settings.json` templates replacing per-key setting-fragments. New CLI: `ccp template list/show/create/extract/edit/delete`. Profiles and engines reference templates by name (`settings-template` field). Resolution: engine template → profile template (profile wins). Hooks remain separately managed. `--template` flag added to `profile create`, `profile edit`, `engine create`. Added `GlobalClaudeDir` to Paths struct for reliable global `~/.claude` resolution (ignores `CLAUDE_CONFIG_DIR`). Fixed `ccp use -g` to always target `~/.claude` regardless of env override. Setting-fragments marked as legacy — `ccp migrate` converts fragments to template. |
