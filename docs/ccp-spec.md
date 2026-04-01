@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.29.1
+**Version:** 0.30.0
 **Date:** 2026-04-01
 **Status:** Draft
 
@@ -662,9 +662,9 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp hub update [type/name]` | Update hub items from GitHub source | `ccp hub update --all` |
 | `ccp hub add <type> <path>` | Add item to hub | `ccp hub add skills ./my-skill.md` |
 | `ccp hub add <type> <name> --from-profile` | Promote profile item to hub | `ccp hub add skills my-skill --from-profile=default` |
-| `ccp hub show <type>/<name>` | Show hub item details | `ccp hub show skills/git-basics` |
+| `ccp hub show [type/name] [-i]` | Show hub item details | `ccp hub show skills/git-basics` |
 | `ccp hub edit <type>/<name>` | Edit hub item in $EDITOR | `ccp hub edit hooks/pre-commit.sh` |
-| `ccp hub remove <type>/<name>` | Remove item from hub | `ccp hub remove skills/old-skill` |
+| `ccp hub remove [type/name] [-i]` | Remove item from hub | `ccp hub remove skills/old-skill` |
 | `ccp hub rename <type>/<name> <new>` | Rename hub item | `ccp hub rename skills/old new` |
 | `ccp hub protect [type/name...]` | Protect items from pruning | `ccp hub protect skills/debug` |
 | `ccp hub unprotect [type/name...]` | Remove protection | `ccp hub unprotect skills/debug` |
@@ -776,7 +776,11 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 - `--replace` — Replace existing hub item if it exists
 
 **`ccp hub remove`**
+- `-i, --interactive` — Interactive picker for items to remove
 - `--force` — Skip confirmation and usage check
+
+**`ccp hub show`**
+- `-i, --interactive` — Interactive picker to browse hub items
 
 **`ccp hub protect`**
 - `-i, --interactive` — Interactive selection
@@ -854,6 +858,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.30.0 | 2026-04-01 | — | Enhanced: `hub remove` and `hub show` now resolve single-file hub items (try exact path then common extensions .md/.yaml/.sh/.json). Added `-i` interactive mode to both commands (tabbed picker for remove, single-select for show). Both default to interactive when called without arguments. Fixed "item not found" error when removing/showing file-based hub items. |
 | 0.29.1 | 2026-04-01 | — | Added: `FragmentMigrator` in `ccp migrate` — reads legacy `hub/setting-fragments/*.yaml`, merges into a `migrated-fragments` settings template, sets on profiles without a template, removes fragments dir. Ensures users upgrading from v0.27 or earlier can migrate cleanly. |
 | 0.29.0 | 2026-04-01 | — | Added: `ccp project` command group for project-scoped `.claude/` setup. `ccp project add` copies hub items into the current project's `.claude/` directory (copies, not symlinks — git-friendly). Interactive picker via `-i`. `ccp project list` scans `.claude/`. `ccp project remove` deletes items. Detects project root via `.git/` walk-up. Exported `CopyTree`/`CopyDir`/`CopyFileItem` in source/installer for reuse. Rewrote README.md for v0.28+ simplified architecture. |
 | 0.28.0 | 2026-03-31 | — | **Simplification release.** Removed: engines, contexts (flattened into profile hub items via `ccp migrate`), setting-fragments (replaced by settings templates in v0.27), linked-dirs (@import parsing), per-data-type sharing config (all data dirs now always shared). Collapsed settings generation pipeline from 3 processor interfaces to single `GenerateSettings()` function. Hidden 13 power-user commands from default help. Removed `ccp skills` commands (redundant with `find`/`install`). Cleaned up 8 completed migration files. Net: ~6K LOC removed, concepts reduced from 14 to 5 (hub, profile, settings template, source, activation). |
