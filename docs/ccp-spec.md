@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.30.0
-**Date:** 2026-04-01
+**Version:** 0.31.0
+**Date:** 2026-04-03
 **Status:** Draft
 
 ---
@@ -300,6 +300,12 @@ WHEN user runs `ccp profile fix <name>`
 THEN tool reconciles directory to match profile.yaml
 AND tool reports all changes made
 AND user can pass --dry-run to preview without changes
+
+GIVEN multiple profiles exist
+WHEN user runs `ccp profile fix --all`
+THEN tool fixes all profiles, skipping hub_missing items without prompting
+AND --force auto-removes hub_missing items from manifests
+AND per-profile errors are warned but do not stop iteration
 ```
 
 ### AC-7: Profile List Command
@@ -646,7 +652,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp profile create <name>` | Create new profile | `ccp profile create quickfix` |
 | `ccp profile list` | List all profiles | `ccp profile list` |
 | `ccp profile check <name>` | Validate profile against manifest | `ccp profile check quickfix` |
-| `ccp profile fix <name>` | Reconcile profile to match manifest | `ccp profile fix quickfix --dry-run` |
+| `ccp profile fix [name]` | Reconcile profile to match manifest | `ccp profile fix quickfix --dry-run` |
 | `ccp profile delete <name>` | Delete a profile | `ccp profile delete quickfix` |
 | `ccp profile rename <old> <new>` | Rename a profile | `ccp profile rename dev development` |
 | `ccp profile clone <src> <new>` | Clone an existing profile | `ccp profile clone default dev` |
@@ -752,6 +758,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 **`ccp profile fix`**
 - `--dry-run` — Show changes without executing
 - `-f, --force` — Auto-remove non-existent hub items from manifest without confirmation
+- `--all` — Fix all profiles (skips hub_missing prompts; use with --force to auto-remove)
 
 **`ccp profile sync`**
 - `--all` — Sync all profiles
@@ -858,6 +865,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.31.0 | 2026-04-03 | — | Added `--all` flag to `ccp profile fix` — fixes all profiles in one command, matching the `profile sync --all` pattern. Without `--force`, hub_missing items are skipped (no interactive prompt per profile). With `--force`, hub_missing items are auto-removed. Per-profile errors warn and continue. |
 | 0.30.0 | 2026-04-01 | — | Enhanced: `hub remove` and `hub show` now resolve single-file hub items (try exact path then common extensions .md/.yaml/.sh/.json). Added `-i` interactive mode to both commands (tabbed picker for remove, single-select for show). Both default to interactive when called without arguments. Fixed "item not found" error when removing/showing file-based hub items. |
 | 0.29.1 | 2026-04-01 | — | Added: `FragmentMigrator` in `ccp migrate` — reads legacy `hub/setting-fragments/*.yaml`, merges into a `migrated-fragments` settings template, sets on profiles without a template, removes fragments dir. Ensures users upgrading from v0.27 or earlier can migrate cleanly. |
 | 0.29.0 | 2026-04-01 | — | Added: `ccp project` command group for project-scoped `.claude/` setup. `ccp project add` copies hub items into the current project's `.claude/` directory (copies, not symlinks — git-friendly). Interactive picker via `-i`. `ccp project list` scans `.claude/`. `ccp project remove` deletes items. Detects project root via `.git/` walk-up. Exported `CopyTree`/`CopyDir`/`CopyFileItem` in source/installer for reuse. Rewrote README.md for v0.28+ simplified architecture. |

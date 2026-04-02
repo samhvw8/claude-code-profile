@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.30.0**
+**Current version: v0.31.0**
 
 ## Project Context
 
