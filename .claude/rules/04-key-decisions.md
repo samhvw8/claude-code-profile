@@ -26,6 +26,12 @@ Decisions that future sessions must respect. Do not re-open these without user r
 **Why:** 8-mode DataConfig added complexity nobody used. Shared is the right default.
 **Implication:** No `[data]` section in profile.toml. Old ones are silently ignored.
 
+## Hub Remove Copy-to-Profile (2026-04-15)
+
+**Decision:** Three-choice prompt (copy/delete/cancel) when removing hub items used by profiles.
+**Why:** Binary "Remove anyway? [y/N]" was destructive — choosing "y" left profiles with broken symlinks. Users need a way to keep their profile working after hub cleanup.
+**Implication:** Copy replaces symlink with local files and removes item from profile's `[hub]` manifest. `--copy` flag for scripting. `--force` still skips everything.
+
 ## Command Surface (2026-03-31)
 
 **Decision:** ~18 visible commands, power-user commands hidden.

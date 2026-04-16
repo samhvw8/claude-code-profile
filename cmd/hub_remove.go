@@ -18,6 +18,7 @@ import (
 var (
 	hubRemoveForce       bool
 	hubRemoveInteractive bool
+	hubRemoveCopy        bool
 )
 
 var hubRemoveCmd = &cobra.Command{
@@ -36,6 +37,7 @@ Examples:
 func init() {
 	hubRemoveCmd.Flags().BoolVarP(&hubRemoveForce, "force", "f", false, "Skip confirmation and usage check")
 	hubRemoveCmd.Flags().BoolVarP(&hubRemoveInteractive, "interactive", "i", false, "Interactive picker for hub items to remove")
+	hubRemoveCmd.Flags().BoolVar(&hubRemoveCopy, "copy", false, "Copy item to affected profiles before removing")
 	hubCmd.AddCommand(hubRemoveCmd)
 }
 
@@ -144,17 +146,37 @@ func removeHubItem(paths *config.Paths, itemType config.HubItemType, itemName st
 		}
 
 		if len(usedBy) > 0 {
-			fmt.Printf("Warning: %s/%s is used by profiles: %s\n", itemType, itemName, strings.Join(usedBy, ", "))
-			fmt.Print("Remove anyway? [y/N] ")
-			reader := bufio.NewReader(os.Stdin)
-			response, err := reader.ReadString('\n')
-			if err != nil {
-				return err
-			}
-			response = strings.TrimSpace(strings.ToLower(response))
-			if response != "y" && response != "yes" {
-				fmt.Println("Skipped")
-				return nil
+			if hubRemoveCopy {
+				// --copy flag: copy to all affected profiles without prompting
+				if err := copyHubItemToProfiles(paths, itemType, itemName, itemPath, usedBy); err != nil {
+					return err
+				}
+			} else {
+				fmt.Printf("Warning: %s/%s is used by profiles: %s\n", itemType, itemName, strings.Join(usedBy, ", "))
+				fmt.Println()
+				fmt.Println("Choose an action:")
+				fmt.Println("  [c] Copy to profiles — make local copies, then remove from hub")
+				fmt.Println("  [d] Delete anyway    — remove from hub (profiles will have broken links)")
+				fmt.Println("  [n] Cancel           — abort removal")
+				fmt.Println()
+				fmt.Print("Action [c/d/N]: ")
+				reader := bufio.NewReader(os.Stdin)
+				response, err := reader.ReadString('\n')
+				if err != nil {
+					return err
+				}
+				response = strings.TrimSpace(strings.ToLower(response))
+				switch response {
+				case "c", "copy":
+					if err := copyHubItemToProfiles(paths, itemType, itemName, itemPath, usedBy); err != nil {
+						return err
+					}
+				case "d", "delete", "y", "yes":
+					// proceed to deletion
+				default:
+					fmt.Println("Cancelled")
+					return nil
+				}
 			}
 		}
 	}
@@ -217,4 +239,66 @@ func findProfilesUsingItem(paths *config.Paths, itemType config.HubItemType, ite
 	}
 
 	return usedBy, nil
+}
+
+func copyHubItemToProfiles(paths *config.Paths, itemType config.HubItemType, itemName string, hubItemPath string, profileNames []string) error {
+	info, err := os.Stat(hubItemPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat hub item: %w", err)
+	}
+	isDir := info.IsDir()
+
+	for _, profileName := range profileNames {
+		profileDir := filepath.Join(paths.ProfilesDir, profileName)
+		profileItemPath := filepath.Join(profileDir, string(itemType), itemName)
+
+		// Check what's at the profile path
+		linkInfo, err := os.Lstat(profileItemPath)
+		if err == nil {
+			if linkInfo.Mode()&os.ModeSymlink != 0 {
+				// It's a symlink — remove it before copying
+				if err := os.Remove(profileItemPath); err != nil {
+					return fmt.Errorf("failed to remove symlink in profile %s: %w", profileName, err)
+				}
+			} else {
+				// Already a local copy, skip
+				fmt.Printf("  Skipped profile '%s' — already has local %s/%s\n", profileName, itemType, itemName)
+				continue
+			}
+		}
+		// If path doesn't exist at all, that's fine — just copy
+
+		// Copy hub item to profile
+		if isDir {
+			if err := copyDirRecursive(hubItemPath, profileItemPath); err != nil {
+				return fmt.Errorf("failed to copy to profile %s: %w", profileName, err)
+			}
+		} else {
+			if err := copyFileSimple(hubItemPath, profileItemPath); err != nil {
+				return fmt.Errorf("failed to copy to profile %s: %w", profileName, err)
+			}
+		}
+
+		// Update manifest: remove from hub links
+		manifestPath := profile.ManifestPath(profileDir)
+		manifest, err := profile.LoadManifest(manifestPath)
+		if err != nil {
+			return fmt.Errorf("failed to load manifest for profile %s: %w", profileName, err)
+		}
+		manifest.RemoveHubItem(itemType, itemName)
+		if err := manifest.Save(manifestPath); err != nil {
+			return fmt.Errorf("failed to save manifest for profile %s: %w", profileName, err)
+		}
+
+		// Regenerate settings if hooks changed
+		if itemType == config.HubHooks {
+			if err := profile.RegenerateSettings(paths, profileDir, manifest); err != nil {
+				fmt.Printf("  Warning: failed to regenerate settings for profile %s: %v\n", profileName, err)
+			}
+		}
+
+		fmt.Printf("  Copied %s/%s → profile '%s' (now local)\n", itemType, itemName, profileName)
+	}
+
+	return nil
 }
