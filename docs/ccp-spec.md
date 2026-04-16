@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.31.0
-**Date:** 2026-04-03
+**Version:** 0.32.0
+**Date:** 2026-04-15
 **Status:** Draft
 
 ---
@@ -479,8 +479,13 @@ AND tool suggests linking the item back to the profile
 ```gherkin
 GIVEN hub item exists
 WHEN user runs `ccp hub remove <type>/<name>`
-THEN tool warns if item is used by profiles
-AND tool removes item from hub after confirmation (or with --force)
+AND item is used by profiles
+THEN tool shows three-choice prompt: copy to profiles / delete anyway / cancel
+AND "copy" copies hub item into each affected profile as local item, removes hub link from manifest
+AND "delete" removes from hub leaving broken links (backward-compatible with old "y")
+AND "cancel" aborts removal
+AND --copy flag copies to all affected profiles without prompting
+AND --force skips all checks and deletes immediately
 ```
 
 ### AC-23: Hub Show Command
@@ -670,7 +675,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp hub add <type> <name> --from-profile` | Promote profile item to hub | `ccp hub add skills my-skill --from-profile=default` |
 | `ccp hub show [type/name] [-i]` | Show hub item details | `ccp hub show skills/git-basics` |
 | `ccp hub edit <type>/<name>` | Edit hub item in $EDITOR | `ccp hub edit hooks/pre-commit.sh` |
-| `ccp hub remove [type/name] [-i]` | Remove item from hub | `ccp hub remove skills/old-skill` |
+| `ccp hub remove [type/name] [-i]` | Remove item from hub (offers copy to profiles) | `ccp hub remove skills/old-skill` |
 | `ccp hub rename <type>/<name> <new>` | Rename hub item | `ccp hub rename skills/old new` |
 | `ccp hub protect [type/name...]` | Protect items from pruning | `ccp hub protect skills/debug` |
 | `ccp hub unprotect [type/name...]` | Remove protection | `ccp hub unprotect skills/debug` |
@@ -785,6 +790,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 **`ccp hub remove`**
 - `-i, --interactive` — Interactive picker for items to remove
 - `--force` — Skip confirmation and usage check
+- `--copy` — Copy item to affected profiles before removing (no prompt)
 
 **`ccp hub show`**
 - `-i, --interactive` — Interactive picker to browse hub items
@@ -865,6 +871,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.32.0 | 2026-04-15 | — | Enhanced: `hub remove` now offers copy-to-profile option when removing items used by profiles. Three-choice prompt (copy/delete/cancel) replaces binary "Remove anyway?" prompt. Added `--copy` flag for scripting. Copy operation replaces symlink with local files and updates profile manifest. |
 | 0.31.0 | 2026-04-03 | — | Added `--all` flag to `ccp profile fix` — fixes all profiles in one command, matching the `profile sync --all` pattern. Without `--force`, hub_missing items are skipped (no interactive prompt per profile). With `--force`, hub_missing items are auto-removed. Per-profile errors warn and continue. |
 | 0.30.0 | 2026-04-01 | — | Enhanced: `hub remove` and `hub show` now resolve single-file hub items (try exact path then common extensions .md/.yaml/.sh/.json). Added `-i` interactive mode to both commands (tabbed picker for remove, single-select for show). Both default to interactive when called without arguments. Fixed "item not found" error when removing/showing file-based hub items. |
 | 0.29.1 | 2026-04-01 | — | Added: `FragmentMigrator` in `ccp migrate` — reads legacy `hub/setting-fragments/*.yaml`, merges into a `migrated-fragments` settings template, sets on profiles without a template, removes fragments dir. Ensures users upgrading from v0.27 or earlier can migrate cleanly. |
