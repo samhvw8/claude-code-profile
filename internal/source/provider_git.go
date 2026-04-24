@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -63,8 +64,16 @@ func (p *GitProvider) Update(ctx context.Context, sourcePath string, opts Update
 	result := &UpdateResult{}
 	result.OldCommit = p.getCommit(sourcePath)
 
-	fetchCmd := exec.CommandContext(ctx, "git", "-C", sourcePath, "fetch", "origin")
-	if err := fetchCmd.Run(); err != nil {
+	fetchArgs := []string{"-C", sourcePath, "fetch", "--depth", "1", "origin"}
+	if opts.Ref != "" {
+		fetchArgs = append(fetchArgs, opts.Ref)
+	}
+	fetchCmd := exec.CommandContext(ctx, "git", fetchArgs...)
+	if output, err := fetchCmd.CombinedOutput(); err != nil {
+		detail := strings.TrimSpace(string(output))
+		if detail != "" {
+			return nil, &SourceError{Op: "git fetch", Source: sourcePath, Err: fmt.Errorf("%w: %s", err, detail)}
+		}
 		return nil, &SourceError{Op: "git fetch", Source: sourcePath, Err: err}
 	}
 

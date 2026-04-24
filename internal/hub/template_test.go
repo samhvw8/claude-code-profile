@@ -155,6 +155,73 @@ func TestExtractFromSettings_MissingFile(t *testing.T) {
 	}
 }
 
+func TestExtractFromSettings_WithKeys(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "settings.json")
+
+	content := `{
+  "model": "opus",
+  "temperature": 0.5,
+  "env": {"FOO": "bar"},
+  "hooks": {"SessionStart": []}
+}`
+	os.WriteFile(settingsPath, []byte(content), 0644)
+
+	settings, err := ExtractFromSettings(settingsPath, "model", "env")
+	if err != nil {
+		t.Fatalf("ExtractFromSettings() error = %v", err)
+	}
+
+	if len(settings) != 2 {
+		t.Errorf("expected 2 keys, got %d", len(settings))
+	}
+	if settings["model"] != "opus" {
+		t.Errorf("model = %v, want 'opus'", settings["model"])
+	}
+	if _, ok := settings["env"]; !ok {
+		t.Error("env should be present")
+	}
+	if _, ok := settings["temperature"]; ok {
+		t.Error("temperature should NOT be present when not in keys")
+	}
+	if _, ok := settings["hooks"]; ok {
+		t.Error("hooks should always be excluded")
+	}
+}
+
+func TestExtractFromSettings_WithKeys_HooksIgnored(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "settings.json")
+
+	content := `{"model": "opus", "hooks": {"SessionStart": []}}`
+	os.WriteFile(settingsPath, []byte(content), 0644)
+
+	// Requesting "hooks" explicitly should still exclude it (not error)
+	settings, err := ExtractFromSettings(settingsPath, "model", "hooks")
+	if err != nil {
+		t.Fatalf("ExtractFromSettings() error = %v", err)
+	}
+	if len(settings) != 1 {
+		t.Errorf("expected 1 key, got %d", len(settings))
+	}
+	if _, ok := settings["hooks"]; ok {
+		t.Error("hooks should be silently dropped even when requested")
+	}
+}
+
+func TestExtractFromSettings_WithKeys_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsPath := filepath.Join(tmpDir, "settings.json")
+
+	content := `{"model": "opus"}`
+	os.WriteFile(settingsPath, []byte(content), 0644)
+
+	_, err := ExtractFromSettings(settingsPath, "model", "nonexistent")
+	if err == nil {
+		t.Error("expected error for missing key")
+	}
+}
+
 func TestExtractFromSettings_InvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsPath := filepath.Join(tmpDir, "settings.json")

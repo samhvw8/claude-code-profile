@@ -3,15 +3,21 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 
 	"github.com/spf13/cobra"
 
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/hub"
+	"github.com/samhoang/ccp/internal/picker"
 	"github.com/samhoang/ccp/internal/profile"
 )
 
-var templateExtractFrom string
+var (
+	templateExtractFrom string
+	templateExtractKeys []string
+	templateExtractPick bool
+)
 
 var templateExtractCmd = &cobra.Command{
 	Use:   "extract <name>",
@@ -20,20 +26,31 @@ var templateExtractCmd = &cobra.Command{
 
 Hooks are excluded from the template (they are managed separately).
 
+By default all top-level keys are included. Use --keys to cherry-pick
+specific keys, or --pick to select interactively.
+
 Examples:
-  ccp template extract my-template                    # From active profile
-  ccp template extract my-template --from=default    # From specific profile`,
+  ccp template extract my-template                               # All keys from active profile
+  ccp template extract my-template --from=default               # From specific profile
+  ccp template extract base --keys=model,env,permissions         # Only listed keys
+  ccp template extract base --pick                               # Interactive picker`,
 	Args: cobra.ExactArgs(1),
 	RunE: runTemplateExtract,
 }
 
 func init() {
 	templateExtractCmd.Flags().StringVar(&templateExtractFrom, "from", "", "Profile to extract from (default: active profile)")
+	templateExtractCmd.Flags().StringSliceVar(&templateExtractKeys, "keys", nil, "Comma-separated top-level keys to include (default: all except hooks)")
+	templateExtractCmd.Flags().BoolVar(&templateExtractPick, "pick", false, "Interactively pick which keys to include")
 	templateCmd.AddCommand(templateExtractCmd)
 }
 
 func runTemplateExtract(cmd *cobra.Command, args []string) error {
 	name := args[0]
+
+	if templateExtractPick && len(templateExtractKeys) > 0 {
+		return fmt.Errorf("--pick and --keys are mutually exclusive")
+	}
 
 	paths, err := config.ResolvePaths()
 	if err != nil {
@@ -51,7 +68,6 @@ func runTemplateExtract(cmd *cobra.Command, args []string) error {
 
 	mgr := profile.NewManager(paths)
 
-	// Determine source profile
 	var profileName string
 	if templateExtractFrom != "" {
 		profileName = templateExtractFrom
@@ -75,7 +91,37 @@ func runTemplateExtract(cmd *cobra.Command, args []string) error {
 	}
 
 	settingsPath := filepath.Join(p.Path, "settings.json")
-	settings, err := hub.ExtractFromSettings(settingsPath)
+
+	keys := templateExtractKeys
+	if templateExtractPick {
+		all, err := hub.ExtractFromSettings(settingsPath)
+		if err != nil {
+			return fmt.Errorf("failed to read settings: %w", err)
+		}
+		if len(all) == 0 {
+			fmt.Println("No settings found (or only hooks, which are managed separately)")
+			return nil
+		}
+		items := make([]picker.Item, 0, len(all))
+		for k := range all {
+			items = append(items, picker.Item{ID: k, Label: k, Selected: true})
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+
+		picked, err := picker.Run(fmt.Sprintf("Select keys for template '%s'", name), items)
+		if err != nil {
+			return fmt.Errorf("picker failed: %w", err)
+		}
+		if picked == nil {
+			return fmt.Errorf("cancelled")
+		}
+		if len(picked) == 0 {
+			return fmt.Errorf("no keys selected")
+		}
+		keys = picked
+	}
+
+	settings, err := hub.ExtractFromSettings(settingsPath, keys...)
 	if err != nil {
 		return fmt.Errorf("failed to extract settings: %w", err)
 	}

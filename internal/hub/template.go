@@ -2,6 +2,7 @@ package hub
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -105,8 +106,10 @@ func (m *TemplateManager) Exists(name string) bool {
 }
 
 // ExtractFromSettings creates a template from a settings.json file,
-// excluding hooks (which are managed separately by the hub hooks system)
-func ExtractFromSettings(settingsPath string) (map[string]interface{}, error) {
+// excluding hooks (which are managed separately by the hub hooks system).
+// If keys is non-empty, only those top-level keys are included; any key
+// not present in the settings produces an error.
+func ExtractFromSettings(settingsPath string, keys ...string) (map[string]interface{}, error) {
 	data, err := os.ReadFile(settingsPath)
 	if err != nil {
 		return nil, err
@@ -117,8 +120,22 @@ func ExtractFromSettings(settingsPath string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	// Remove hooks — they are managed separately
 	delete(settings, "hooks")
 
-	return settings, nil
+	if len(keys) == 0 {
+		return settings, nil
+	}
+
+	filtered := make(map[string]interface{}, len(keys))
+	for _, k := range keys {
+		if k == "hooks" {
+			continue
+		}
+		v, ok := settings[k]
+		if !ok {
+			return nil, fmt.Errorf("key not found in settings: %s", k)
+		}
+		filtered[k] = v
+	}
+	return filtered, nil
 }
