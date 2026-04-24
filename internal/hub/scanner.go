@@ -3,6 +3,7 @@ package hub
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/samhoang/ccp/internal/config"
 )
@@ -84,6 +85,15 @@ func (s *Scanner) scanItemDir(dir string, itemType config.HubItemType) ([]Item, 
 
 		name := entry.Name()
 
+		// Rules: flatten directories into individual .md files
+		if itemType == config.HubRules && entry.IsDir() {
+			subItems, err := s.flattenRuleDir(filepath.Join(dir, name), name)
+			if err == nil && len(subItems) > 0 {
+				items = append(items, subItems...)
+				continue
+			}
+		}
+
 		item := Item{
 			Name:  name,
 			Type:  itemType,
@@ -101,5 +111,31 @@ func (s *Scanner) scanItemDir(dir string, itemType config.HubItemType) ([]Item, 
 		items = append(items, item)
 	}
 
+	return items, nil
+}
+
+// flattenRuleDir expands a rule directory into individual .md file items.
+// groupName is used as a prefix: groupName/file.md
+func (s *Scanner) flattenRuleDir(dirPath string, groupName string) ([]Item, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var items []Item
+	for _, entry := range entries {
+		if entry.IsDir() || entry.Name()[0] == '.' {
+			continue
+		}
+		if !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+		items = append(items, Item{
+			Name:  groupName + "/" + entry.Name(),
+			Type:  config.HubRules,
+			Path:  filepath.Join(dirPath, entry.Name()),
+			IsDir: false,
+		})
+	}
 	return items, nil
 }
