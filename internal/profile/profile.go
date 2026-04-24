@@ -183,9 +183,8 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 	}
 
 	// Save manifest
-	manifestPath := filepath.Join(profileDir, "profile.yaml")
 	manifest.Name = name
-	if err := manifest.Save(manifestPath); err != nil {
+	if err := manifest.SaveTOML(profileDir); err != nil {
 		return nil, err
 	}
 
@@ -258,8 +257,7 @@ func (m *Manager) LinkHubItem(profileName string, itemType config.HubItemType, i
 
 	// Update manifest
 	profile.Manifest.AddHubItem(itemType, itemName)
-	manifestPath := filepath.Join(profile.Path, "profile.yaml")
-	return profile.Manifest.Save(manifestPath)
+	return profile.Manifest.Save(ManifestPath(profile.Path))
 }
 
 // UnlinkHubItem removes a hub item from a profile
@@ -284,8 +282,7 @@ func (m *Manager) UnlinkHubItem(profileName string, itemType config.HubItemType,
 
 	// Update manifest
 	profile.Manifest.RemoveHubItem(itemType, itemName)
-	manifestPath := filepath.Join(profile.Path, "profile.yaml")
-	return profile.Manifest.Save(manifestPath)
+	return profile.Manifest.Save(ManifestPath(profile.Path))
 }
 
 // GetActive returns the currently active profile (via symlink)

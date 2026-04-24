@@ -14,7 +14,7 @@ var profileCheckCmd = &cobra.Command{
 	Use:    "check <name>",
 	Hidden: true,
 	Short:  "Validate profile against its manifest",
-	Long: `Check if a profile directory matches its profile.yaml manifest.
+	Long: `Check if a profile directory matches its profile.toml manifest.
 
 Reports:
   - missing: items in manifest but not in directory

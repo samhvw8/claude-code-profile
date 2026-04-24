@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,7 +17,7 @@ import (
 var profileSyncCmd = &cobra.Command{
 	Use:   "sync [name]",
 	Short: "Regenerate profile symlinks and settings.json",
-	Long: `Sync a profile by regenerating hub item symlinks and settings.json based on profile.yaml.
+	Long: `Sync a profile by regenerating hub item symlinks and settings.json based on profile.toml.
 
 This command is useful when:
 - Hub items have been added/removed and you want to update the profile
@@ -33,10 +35,14 @@ Examples:
 	RunE:              runProfileSync,
 }
 
-var syncAll bool
+var (
+	syncAll   bool
+	syncForce bool
+)
 
 func init() {
 	profileSyncCmd.Flags().BoolVar(&syncAll, "all", false, "Sync all profiles")
+	profileSyncCmd.Flags().BoolVarP(&syncForce, "force", "f", false, "Apply settings changes without confirmation")
 	profileCmd.AddCommand(profileSyncCmd)
 }
 
@@ -61,7 +67,7 @@ func runProfileSync(cmd *cobra.Command, args []string) error {
 
 		for _, p := range profiles {
 			fmt.Printf("Syncing profile: %s\n", p.Name)
-			if err := syncProfile(paths, p); err != nil {
+			if err := syncProfile(paths, p, syncForce || syncAll); err != nil {
 				fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 			} else {
 				fmt.Println("  Done")
@@ -95,7 +101,7 @@ func runProfileSync(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Syncing profile: %s\n", p.Name)
-	if err := syncProfile(paths, p); err != nil {
+	if err := syncProfile(paths, p, syncForce); err != nil {
 		return err
 	}
 	fmt.Println("Done")
@@ -103,7 +109,7 @@ func runProfileSync(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func syncProfile(paths *config.Paths, p *profile.Profile) error {
+func syncProfile(paths *config.Paths, p *profile.Profile, force bool) error {
 	symMgr := symlink.New()
 
 	// Sync hub item symlinks
@@ -176,16 +182,45 @@ func syncProfile(paths *config.Paths, p *profile.Profile) error {
 	}
 
 	// Regenerate settings.json
-	if len(p.Manifest.Hub.Hooks) > 0 || p.Manifest.SettingsTemplate != "" {
-		fmt.Println("  Regenerating settings.json...")
-		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
-			return fmt.Errorf("failed to regenerate settings.json: %w", err)
+	hasFragment := profile.FragmentExists(p.Path)
+	hasSources := len(p.Manifest.Hub.Hooks) > 0 || p.Manifest.SettingsTemplate != "" || hasFragment
+
+	if hasSources {
+		changed, err := profile.SettingsChanged(paths, p.Path, p.Manifest)
+		if err != nil {
+			return fmt.Errorf("failed to check settings: %w", err)
 		}
-		if p.Manifest.SettingsTemplate != "" {
-			fmt.Printf("  Applied settings template: %s\n", p.Manifest.SettingsTemplate)
+
+		if changed && !force {
+			fmt.Println("  Settings changes detected.")
+			fmt.Print("  Apply changes to settings.json? [y/N]: ")
+			reader := bufio.NewReader(os.Stdin)
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return err
+			}
+			if answer := strings.TrimSpace(strings.ToLower(input)); answer != "y" && answer != "yes" {
+				fmt.Println("  Skipped settings update")
+				return nil
+			}
 		}
-		if len(p.Manifest.Hub.Hooks) > 0 {
-			fmt.Printf("  Configured %d hooks\n", len(p.Manifest.Hub.Hooks))
+
+		if changed {
+			fmt.Println("  Regenerating settings.json...")
+			if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
+				return fmt.Errorf("failed to regenerate settings.json: %w", err)
+			}
+			if p.Manifest.SettingsTemplate != "" {
+				fmt.Printf("  Applied settings template: %s\n", p.Manifest.SettingsTemplate)
+			}
+			if hasFragment {
+				fmt.Println("  Applied settings fragment")
+			}
+			if len(p.Manifest.Hub.Hooks) > 0 {
+				fmt.Printf("  Configured %d hub hooks\n", len(p.Manifest.Hub.Hooks))
+			}
+		} else {
+			fmt.Println("  Settings up to date")
 		}
 	} else if len(p.Manifest.Hooks) > 0 {
 		// Legacy: Sync hooks from old-style manifest.Hooks

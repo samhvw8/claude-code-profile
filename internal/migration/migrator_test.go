@@ -275,9 +275,17 @@ func TestMigrator_Execute_HappyPath(t *testing.T) {
 		t.Error("CLAUDE.md should be copied to default profile")
 	}
 
-	// Verify manifest was created
-	if _, err := os.Stat(filepath.Join(defaultProfile, "profile.yaml")); os.IsNotExist(err) {
-		t.Error("profile.yaml should exist")
+	// Verify manifest was created (toml or yaml)
+	tomlExists := false
+	yamlExists := false
+	if _, err := os.Stat(filepath.Join(defaultProfile, "profile.toml")); err == nil {
+		tomlExists = true
+	}
+	if _, err := os.Stat(filepath.Join(defaultProfile, "profile.yaml")); err == nil {
+		yamlExists = true
+	}
+	if !tomlExists && !yamlExists {
+		t.Error("profile manifest (toml or yaml) should exist")
 	}
 
 	// Verify ~/.claude is now a symlink

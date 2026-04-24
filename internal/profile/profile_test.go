@@ -921,12 +921,24 @@ func TestManifestPath_TOMLExists(t *testing.T) {
 
 func TestManifestPath_FallbackToYAML(t *testing.T) {
 	testDir := t.TempDir()
-	// No .toml file, should fall back to .yaml
-	expected := filepath.Join(testDir, "profile.yaml")
+	// Create profile.yaml so fallback finds it
+	yamlPath := filepath.Join(testDir, "profile.yaml")
+	os.WriteFile(yamlPath, []byte("name: test"), 0644)
+
+	got := ManifestPath(testDir)
+	if got != yamlPath {
+		t.Errorf("ManifestPath() = %q, want %q (should fall back to YAML)", got, yamlPath)
+	}
+}
+
+func TestManifestPath_DefaultsToTOML(t *testing.T) {
+	testDir := t.TempDir()
+	// No files exist — should default to .toml
+	expected := filepath.Join(testDir, "profile.toml")
 
 	got := ManifestPath(testDir)
 	if got != expected {
-		t.Errorf("ManifestPath() = %q, want %q (should fall back to YAML)", got, expected)
+		t.Errorf("ManifestPath() = %q, want %q (should default to TOML)", got, expected)
 	}
 }
 

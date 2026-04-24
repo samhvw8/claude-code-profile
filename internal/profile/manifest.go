@@ -106,13 +106,17 @@ func (m *Manifest) NeedsMigration() bool {
 }
 
 // ManifestPath returns the path to the manifest file
-// Checks for .toml first, falls back to .yaml
+// Checks for .toml first, falls back to .yaml for legacy profiles
 func ManifestPath(profileDir string) string {
 	tomlPath := filepath.Join(profileDir, "profile.toml")
 	if _, err := os.Stat(tomlPath); err == nil {
 		return tomlPath
 	}
-	return filepath.Join(profileDir, "profile.yaml")
+	yamlPath := filepath.Join(profileDir, "profile.yaml")
+	if _, err := os.Stat(yamlPath); err == nil {
+		return yamlPath
+	}
+	return tomlPath
 }
 
 // GetHubItems returns all hub item names for a given type

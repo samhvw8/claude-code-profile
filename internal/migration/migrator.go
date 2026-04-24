@@ -170,7 +170,7 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 
 		// Update manifest with migrated hook names
 		if len(migratedHooks) > 0 {
-			manifestPath := filepath.Join(defaultDir, "profile.yaml")
+			manifestPath := profile.ManifestPath(defaultDir)
 			manifest, err := profile.LoadManifest(manifestPath)
 			if err != nil {
 				return m.rollbackAndReturn(fmt.Errorf("failed to load manifest for hook update: %w", err))
@@ -196,7 +196,7 @@ func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
 	// Step 6.6: Set settings template on default profile manifest
 	if len(plan.SettingsTemplate) > 0 {
 		defaultDir := m.paths.ProfileDir("default")
-		manifestPath := filepath.Join(defaultDir, "profile.yaml")
+		manifestPath := profile.ManifestPath(defaultDir)
 		manifest, err := profile.LoadManifest(manifestPath)
 		if err != nil {
 			return m.rollbackAndReturn(fmt.Errorf("failed to load manifest for settings template: %w", err))
@@ -377,7 +377,7 @@ func (m *Migrator) createDefaultProfile(plan *MigrationPlan) error {
 	}
 
 	// Save manifest
-	manifestPath := filepath.Join(defaultDir, "profile.yaml")
+	manifestPath := profile.ManifestPath(defaultDir)
 	if err := manifest.Save(manifestPath); err != nil {
 		return fmt.Errorf("failed to save manifest: %w", err)
 	}
@@ -434,6 +434,7 @@ func (m *Migrator) moveRemainingItems(profileDir string) error {
 	knownNames["CLAUDE.md"] = true
 	knownNames["settings.json"] = true
 	knownNames["settings.local.json"] = true
+	knownNames["profile.toml"] = true
 	knownNames["profile.yaml"] = true
 
 	for _, entry := range entries {

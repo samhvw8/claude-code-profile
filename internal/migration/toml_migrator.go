@@ -170,6 +170,66 @@ func (m *TOMLMigrator) UpgradeV2ToV3() ([]string, error) {
 	return upgraded, nil
 }
 
+// CleanupYAML removes stale profile.yaml and profile.yaml.bak files
+// from profiles that already have profile.toml.
+func (m *TOMLMigrator) CleanupYAML() ([]string, error) {
+	var cleaned []string
+
+	entries, err := os.ReadDir(m.paths.ProfilesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "shared" {
+			continue
+		}
+
+		profileDir := filepath.Join(m.paths.ProfilesDir, entry.Name())
+		tomlPath := filepath.Join(profileDir, "profile.toml")
+		if _, err := os.Stat(tomlPath); err != nil {
+			continue
+		}
+
+		removed := false
+		for _, suffix := range []string{"profile.yaml", "profile.yaml.bak"} {
+			p := filepath.Join(profileDir, suffix)
+			if _, err := os.Stat(p); err == nil {
+				os.Remove(p)
+				removed = true
+			}
+		}
+		if removed {
+			cleaned = append(cleaned, entry.Name())
+		}
+	}
+
+	return cleaned, nil
+}
+
+// NeedsYAMLCleanup checks if any profiles have stale profile.yaml files.
+func (m *TOMLMigrator) NeedsYAMLCleanup() bool {
+	entries, _ := os.ReadDir(m.paths.ProfilesDir)
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "shared" {
+			continue
+		}
+		profileDir := filepath.Join(m.paths.ProfilesDir, entry.Name())
+		tomlPath := filepath.Join(profileDir, "profile.toml")
+		if _, err := os.Stat(tomlPath); err != nil {
+			continue
+		}
+		yamlPath := filepath.Join(profileDir, "profile.yaml")
+		if _, err := os.Stat(yamlPath); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // NeedsV2ToV3Upgrade checks if any profiles need version upgrade
 func (m *TOMLMigrator) NeedsV2ToV3Upgrade() bool {
 	entries, _ := os.ReadDir(m.paths.ProfilesDir)

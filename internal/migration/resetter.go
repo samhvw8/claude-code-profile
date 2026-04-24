@@ -101,8 +101,8 @@ func (r *Resetter) copyDirResolvingSymlinks(srcDir, dstDir string, isRoot bool) 
 		srcPath := filepath.Join(srcDir, entry.Name())
 		dstPath := filepath.Join(dstDir, entry.Name())
 
-		// Skip profile.yaml at root - it's ccp-specific
-		if isRoot && entry.Name() == "profile.yaml" {
+		// Skip profile manifest at root - it's ccp-specific
+		if isRoot && (entry.Name() == "profile.toml" || entry.Name() == "profile.yaml") {
 			continue
 		}
 

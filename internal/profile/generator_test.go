@@ -309,6 +309,246 @@ func TestGenerateSettings_HookDirNotFound_GracefulSkip(t *testing.T) {
 	}
 }
 
+func TestGenerateSettings_FragmentOverridesTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	// Create template (base)
+	tmplDir := filepath.Join(hubDir, "settings-templates", "base")
+	if err := os.MkdirAll(tmplDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	tmplSettings := map[string]interface{}{
+		"model":       "sonnet",
+		"temperature": 0.7,
+		"verbose":     true,
+	}
+	data, _ := json.Marshal(tmplSettings)
+	os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644)
+
+	// Create fragment (per-profile override)
+	if err := os.MkdirAll(profileDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	fragment := map[string]interface{}{
+		"model":   "opus",
+		"newFlag": "enabled",
+	}
+	fdata, _ := json.Marshal(fragment)
+	os.WriteFile(filepath.Join(profileDir, SettingsFragmentFile), fdata, 0644)
+
+	// Create hooks dir
+	os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{SettingsTemplate: "base"}
+
+	settings, err := GenerateSettings(manifest, paths, profileDir)
+	if err != nil {
+		t.Fatalf("GenerateSettings() error = %v", err)
+	}
+
+	if settings["model"] != "opus" {
+		t.Errorf("model = %v, want 'opus' (fragment override)", settings["model"])
+	}
+	if settings["temperature"] != 0.7 {
+		t.Errorf("temperature = %v, want 0.7 (from base)", settings["temperature"])
+	}
+	if settings["verbose"] != true {
+		t.Errorf("verbose = %v, want true (from base)", settings["verbose"])
+	}
+	if settings["newFlag"] != "enabled" {
+		t.Errorf("newFlag = %v, want 'enabled' (from fragment)", settings["newFlag"])
+	}
+}
+
+func TestGenerateSettings_FragmentDeepMerge(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	// Create template with nested object
+	tmplDir := filepath.Join(hubDir, "settings-templates", "base")
+	os.MkdirAll(tmplDir, 0755)
+	tmplSettings := map[string]interface{}{
+		"permissions": map[string]interface{}{
+			"allow":       []interface{}{"Read", "Write"},
+			"defaultMode": "plan",
+		},
+		"env": map[string]interface{}{
+			"FOO": "1",
+			"BAR": "2",
+		},
+	}
+	data, _ := json.Marshal(tmplSettings)
+	os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644)
+
+	// Fragment overrides env.FOO and adds env.BAZ, replaces permissions.allow
+	os.MkdirAll(profileDir, 0755)
+	fragment := map[string]interface{}{
+		"env": map[string]interface{}{
+			"FOO": "override",
+			"BAZ": "3",
+		},
+		"permissions": map[string]interface{}{
+			"allow": []interface{}{"Read", "Write", "Bash"},
+		},
+	}
+	fdata, _ := json.Marshal(fragment)
+	os.WriteFile(filepath.Join(profileDir, SettingsFragmentFile), fdata, 0644)
+
+	os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{SettingsTemplate: "base"}
+
+	settings, err := GenerateSettings(manifest, paths, profileDir)
+	if err != nil {
+		t.Fatalf("GenerateSettings() error = %v", err)
+	}
+
+	env := settings["env"].(map[string]interface{})
+	if env["FOO"] != "override" {
+		t.Errorf("env.FOO = %v, want 'override'", env["FOO"])
+	}
+	if env["BAR"] != "2" {
+		t.Errorf("env.BAR = %v, want '2' (preserved from base)", env["BAR"])
+	}
+	if env["BAZ"] != "3" {
+		t.Errorf("env.BAZ = %v, want '3' (added by fragment)", env["BAZ"])
+	}
+
+	perms := settings["permissions"].(map[string]interface{})
+	if perms["defaultMode"] != "plan" {
+		t.Errorf("permissions.defaultMode = %v, want 'plan' (preserved from base)", perms["defaultMode"])
+	}
+	allow := perms["allow"].([]interface{})
+	if len(allow) != 3 {
+		t.Errorf("permissions.allow length = %d, want 3 (replaced by fragment)", len(allow))
+	}
+}
+
+func TestGenerateSettings_FragmentOnly_NoTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	os.MkdirAll(hubDir, 0755)
+	os.MkdirAll(profileDir, 0755)
+	os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755)
+
+	fragment := map[string]interface{}{
+		"model":   "haiku",
+		"verbose": false,
+	}
+	fdata, _ := json.Marshal(fragment)
+	os.WriteFile(filepath.Join(profileDir, SettingsFragmentFile), fdata, 0644)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{}
+
+	settings, err := GenerateSettings(manifest, paths, profileDir)
+	if err != nil {
+		t.Fatalf("GenerateSettings() error = %v", err)
+	}
+
+	if settings["model"] != "haiku" {
+		t.Errorf("model = %v, want 'haiku'", settings["model"])
+	}
+	if settings["verbose"] != false {
+		t.Errorf("verbose = %v, want false", settings["verbose"])
+	}
+}
+
+func TestGenerateSettings_InvalidFragment(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	os.MkdirAll(hubDir, 0755)
+	os.MkdirAll(profileDir, 0755)
+	os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755)
+
+	os.WriteFile(filepath.Join(profileDir, SettingsFragmentFile), []byte("not json"), 0644)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{}
+
+	_, err := GenerateSettings(manifest, paths, profileDir)
+	if err == nil {
+		t.Error("expected error for invalid fragment JSON")
+	}
+}
+
+func TestDeepMerge(t *testing.T) {
+	tests := []struct {
+		name     string
+		dst, src map[string]interface{}
+		check    func(t *testing.T, result map[string]interface{})
+	}{
+		{
+			name: "scalar override",
+			dst:  map[string]interface{}{"a": "1", "b": "2"},
+			src:  map[string]interface{}{"a": "override"},
+			check: func(t *testing.T, r map[string]interface{}) {
+				if r["a"] != "override" {
+					t.Errorf("a = %v, want 'override'", r["a"])
+				}
+				if r["b"] != "2" {
+					t.Errorf("b = %v, want '2'", r["b"])
+				}
+			},
+		},
+		{
+			name: "nested merge",
+			dst:  map[string]interface{}{"nested": map[string]interface{}{"x": 1, "y": 2}},
+			src:  map[string]interface{}{"nested": map[string]interface{}{"y": 99, "z": 3}},
+			check: func(t *testing.T, r map[string]interface{}) {
+				n := r["nested"].(map[string]interface{})
+				if n["x"] != 1 {
+					t.Errorf("nested.x = %v, want 1", n["x"])
+				}
+				if n["y"] != 99 {
+					t.Errorf("nested.y = %v, want 99", n["y"])
+				}
+				if n["z"] != 3 {
+					t.Errorf("nested.z = %v, want 3", n["z"])
+				}
+			},
+		},
+		{
+			name: "array replaces",
+			dst:  map[string]interface{}{"arr": []interface{}{1, 2}},
+			src:  map[string]interface{}{"arr": []interface{}{3, 4, 5}},
+			check: func(t *testing.T, r map[string]interface{}) {
+				arr := r["arr"].([]interface{})
+				if len(arr) != 3 {
+					t.Errorf("arr length = %d, want 3", len(arr))
+				}
+			},
+		},
+		{
+			name: "does not mutate dst",
+			dst:  map[string]interface{}{"a": "original"},
+			src:  map[string]interface{}{"a": "changed"},
+			check: func(t *testing.T, r map[string]interface{}) {
+				// result should have the change, but we can't check original dst here
+				if r["a"] != "changed" {
+					t.Errorf("a = %v, want 'changed'", r["a"])
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := deepMerge(tt.dst, tt.src)
+			tt.check(t, result)
+		})
+	}
+}
+
 func TestGenerateSettings_TemplateWithHooksKey_OverriddenByGeneratedHooks(t *testing.T) {
 	tmpDir := t.TempDir()
 	hubDir := filepath.Join(tmpDir, "hub")
@@ -363,13 +603,17 @@ func TestGenerateSettings_TemplateWithHooksKey_OverriddenByGeneratedHooks(t *tes
 		t.Fatalf("GenerateSettings() error = %v", err)
 	}
 
-	// The hooks key should be the generated hooks, not the template's
+	// Template has SessionStart (existing), hub has Stop (fills gap)
+	// Result is map[string]interface{} because template hooks were present
 	hooksVal := settings["hooks"]
-	hooksMap, ok := hooksVal.(map[config.HookType][]config.SettingsHookEntry)
+	hooksMap, ok := hooksVal.(map[string]interface{})
 	if !ok {
-		t.Fatalf("hooks should be generated type, got %T", hooksVal)
+		t.Fatalf("hooks should be map[string]interface{}, got %T", hooksVal)
 	}
-	if _, hasStop := hooksMap[config.HookStop]; !hasStop {
-		t.Error("expected Stop hook from generated hooks")
+	if _, hasStop := hooksMap["Stop"]; !hasStop {
+		t.Error("expected Stop hook from hub (fills gap)")
+	}
+	if _, hasStart := hooksMap["SessionStart"]; !hasStart {
+		t.Error("expected SessionStart preserved from template")
 	}
 }

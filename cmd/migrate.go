@@ -23,6 +23,7 @@ This command:
 2. Upgrades v2 manifests to v3
 3. Flattens engine/context references into inline profile hub items
 4. Converts setting-fragments to a settings template
+5. Cleans up stale profile.yaml files
 
 Migrations are idempotent and safe to run multiple times.`,
 	RunE: runMigrate,
@@ -51,8 +52,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	needsV3 := tomlMigrator.NeedsV2ToV3Upgrade()
 	needsFlatten := flattenMigrator.NeedsMigration()
 	needsFragments := fragmentMigrator.NeedsMigration()
+	needsYAMLCleanup := tomlMigrator.NeedsYAMLCleanup()
 
-	if !needsTOML && !needsV3 && !needsFlatten && !needsFragments {
+	if !needsTOML && !needsV3 && !needsFlatten && !needsFragments && !needsYAMLCleanup {
 		fmt.Println("No migrations needed - everything is up to date.")
 		return nil
 	}
@@ -70,6 +72,9 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if needsFragments {
 			fmt.Println("  - Convert setting-fragments to settings template")
+		}
+		if needsYAMLCleanup {
+			fmt.Println("  - Clean up stale profile.yaml files")
 		}
 		fmt.Println()
 		fmt.Println("Run without --dry-run to apply migrations.")
@@ -121,6 +126,18 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 		}
 		if count > 0 {
 			fmt.Printf("  Merged %d fragment(s) into settings template\n", count)
+		}
+	}
+
+	// Clean up stale profile.yaml files
+	if needsYAMLCleanup {
+		fmt.Println("Cleaning up stale profile.yaml files...")
+		cleaned, err := tomlMigrator.CleanupYAML()
+		if err != nil {
+			return fmt.Errorf("YAML cleanup failed: %w", err)
+		}
+		if len(cleaned) > 0 {
+			fmt.Printf("  Cleaned %d profile(s): %v\n", len(cleaned), cleaned)
 		}
 	}
 

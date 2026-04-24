@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -76,16 +75,11 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 	}
 
 	// Update manifest with new name
-	manifestPath := filepath.Join(newPath, "profile.yaml")
+	manifestPath := profile.ManifestPath(newPath)
 	manifest, err := profile.LoadManifest(manifestPath)
 	if err != nil {
-		// Try TOML format
-		manifestPath = profile.ManifestPath(newPath)
-		manifest, err = profile.LoadManifest(manifestPath)
-		if err != nil {
-			// Non-fatal - profile still renamed
-			fmt.Fprintf(os.Stderr, "Warning: could not update manifest name: %v\n", err)
-		}
+		// Non-fatal - profile still renamed
+		fmt.Fprintf(os.Stderr, "Warning: could not update manifest name: %v\n", err)
 	}
 
 	if manifest != nil {

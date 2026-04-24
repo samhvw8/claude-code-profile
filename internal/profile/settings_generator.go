@@ -104,27 +104,64 @@ func buildLegacyCommand(hookManifest *hub.HookManifest, profileHooksDir, hookNam
 	return config.ToPortablePath(absPath)
 }
 
+// PreviewSettings generates what settings.json would contain without writing it.
+func PreviewSettings(paths *config.Paths, profileDir string, manifest *Manifest) ([]byte, error) {
+	settings, err := GenerateSettings(manifest, paths, profileDir)
+	if err != nil {
+		return nil, err
+	}
+	return marshalJSON(settings)
+}
+
+// SettingsChanged returns true if the generated settings differ from the current settings.json.
+func SettingsChanged(paths *config.Paths, profileDir string, manifest *Manifest) (bool, error) {
+	settingsPath := filepath.Join(profileDir, "settings.json")
+
+	newData, err := PreviewSettings(paths, profileDir, manifest)
+	if err != nil {
+		return false, err
+	}
+
+	oldData, err := os.ReadFile(settingsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, err
+	}
+
+	return string(oldData) != string(newData), nil
+}
+
 // RegenerateSettings regenerates settings.json with updated hook paths and settings template
 func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manifest) error {
 	settingsPath := filepath.Join(profileDir, "settings.json")
 
-	settings, err := GenerateSettings(manifest, paths, profileDir)
+	data, err := PreviewSettings(paths, profileDir, manifest)
 	if err != nil {
 		return err
 	}
 
-	// Write back with pretty printing (no HTML escaping)
-	return writeJSONFile(settingsPath, settings)
+	return os.WriteFile(settingsPath, data, 0644)
 }
 
-// writeJSONFile writes data as JSON without HTML escaping
-func writeJSONFile(path string, data interface{}) error {
+// marshalJSON serializes data as pretty JSON without HTML escaping
+func marshalJSON(data interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(data); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// writeJSONFile writes data as JSON without HTML escaping
+func writeJSONFile(path string, data interface{}) error {
+	b, err := marshalJSON(data)
+	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, buf.Bytes(), 0644)
+	return os.WriteFile(path, b, 0644)
 }
