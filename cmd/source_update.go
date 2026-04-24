@@ -66,6 +66,7 @@ func runSourceUpdate(cmd *cobra.Command, args []string) error {
 
 		result, err := provider.Update(ctx, entry.Source.Path, source.UpdateOptions{
 			Ref: entry.Source.Ref,
+			URL: entry.Source.URL,
 		})
 		if err != nil {
 			fmt.Printf("  %s: %v\n", entry.ID, err)

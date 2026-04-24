@@ -54,4 +54,5 @@ type AuthConfig struct {
 // UpdateOptions for Provider.Update
 type UpdateOptions struct {
 	Ref string // new ref to update to
+	URL string // source URL, used to re-clone if local clone is missing
 }

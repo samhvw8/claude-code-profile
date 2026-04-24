@@ -62,6 +62,19 @@ func (p *GitProvider) Fetch(ctx context.Context, url string, destPath string, op
 
 func (p *GitProvider) Update(ctx context.Context, sourcePath string, opts UpdateOptions) (*UpdateResult, error) {
 	result := &UpdateResult{}
+
+	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+		if opts.URL == "" {
+			return nil, &SourceError{Op: "git update", Source: sourcePath, Err: fmt.Errorf("source directory missing and no URL to re-clone")}
+		}
+		if err := p.Fetch(ctx, opts.URL, sourcePath, FetchOptions{Ref: opts.Ref}); err != nil {
+			return nil, err
+		}
+		result.NewCommit = p.getCommit(sourcePath)
+		result.Updated = true
+		return result, nil
+	}
+
 	result.OldCommit = p.getCommit(sourcePath)
 
 	fetchArgs := []string{"-C", sourcePath, "fetch", "--depth", "1", "origin"}
