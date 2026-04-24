@@ -99,16 +99,27 @@ func (d *Detector) Detect(profile *Profile) (*DriftReport, error) {
 func (d *Detector) detectItemTypeDrift(profile *Profile, itemType config.HubItemType) ([]DriftItem, error) {
 	var issues []DriftItem
 
+	// manifestItems maps hub name -> link name (basename for rules)
 	manifestItems := make(map[string]bool)
+	manifestLinkNames := make(map[string]bool)
 	for _, name := range profile.Manifest.GetHubItems(itemType) {
 		manifestItems[name] = true
+		linkName := name
+		if itemType == config.HubRules {
+			linkName = filepath.Base(name)
+		}
+		manifestLinkNames[linkName] = true
 	}
 
 	itemDir := filepath.Join(profile.Path, string(itemType))
 
 	// Check for missing items (in manifest but not in directory)
 	for name := range manifestItems {
-		itemPath := filepath.Join(itemDir, name)
+		linkName := name
+		if itemType == config.HubRules {
+			linkName = filepath.Base(name)
+		}
+		itemPath := filepath.Join(itemDir, linkName)
 		hubPath := d.paths.HubItemPath(itemType, name)
 
 		// Check if hub item exists first
@@ -180,7 +191,7 @@ func (d *Detector) detectItemTypeDrift(profile *Profile, itemType config.HubItem
 			continue
 		}
 
-		if !manifestItems[name] {
+		if !manifestLinkNames[name] {
 			issues = append(issues, DriftItem{
 				Type:     DriftExtra,
 				ItemType: itemType,
@@ -260,7 +271,11 @@ func (d *Detector) Fix(profile *Profile, report *DriftReport, opts FixOptions) (
 
 // fixIssue fixes a single drift issue
 func (d *Detector) fixIssue(profile *Profile, issue DriftItem, dryRun bool) (string, error) {
-	itemPath := filepath.Join(profile.Path, string(issue.ItemType), issue.ItemName)
+	linkName := issue.ItemName
+	if issue.ItemType == config.HubRules {
+		linkName = filepath.Base(issue.ItemName)
+	}
+	itemPath := filepath.Join(profile.Path, string(issue.ItemType), linkName)
 	hubPath := d.paths.HubItemPath(issue.ItemType, issue.ItemName)
 
 	switch issue.Type {

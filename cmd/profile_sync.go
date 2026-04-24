@@ -115,10 +115,14 @@ func syncProfile(paths *config.Paths, p *profile.Profile) error {
 			return fmt.Errorf("failed to create %s directory: %w", itemType, err)
 		}
 
-		// Get items from manifest
-		manifestItems := make(map[string]bool)
+		// Get items from manifest — for rules, use basename as the link name
+		manifestLinks := make(map[string]bool)
 		for _, name := range p.Manifest.GetHubItems(itemType) {
-			manifestItems[name] = true
+			linkName := name
+			if itemType == config.HubRules {
+				linkName = filepath.Base(name)
+			}
+			manifestLinks[linkName] = true
 		}
 
 		// Remove symlinks not in manifest
@@ -128,7 +132,7 @@ func syncProfile(paths *config.Paths, p *profile.Profile) error {
 		}
 
 		for _, entry := range entries {
-			if !manifestItems[entry.Name()] {
+			if !manifestLinks[entry.Name()] {
 				linkPath := filepath.Join(itemDir, entry.Name())
 				isLink, _ := symMgr.IsSymlink(linkPath)
 				if isLink {
@@ -141,7 +145,11 @@ func syncProfile(paths *config.Paths, p *profile.Profile) error {
 		// Create missing symlinks
 		for _, itemName := range p.Manifest.GetHubItems(itemType) {
 			hubItemPath := paths.HubItemPath(itemType, itemName)
-			profileItemPath := filepath.Join(itemDir, itemName)
+			linkName := itemName
+			if itemType == config.HubRules {
+				linkName = filepath.Base(itemName)
+			}
+			profileItemPath := filepath.Join(itemDir, linkName)
 
 			// Check if hub item exists
 			if _, err := os.Stat(hubItemPath); err != nil {

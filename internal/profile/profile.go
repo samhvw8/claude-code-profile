@@ -240,7 +240,11 @@ func (m *Manager) LinkHubItem(profileName string, itemType config.HubItemType, i
 
 	// Create symlink
 	hubItemPath := m.paths.HubItemPath(itemType, itemName)
-	profileItemPath := filepath.Join(profile.Path, string(itemType), itemName)
+	linkName := itemName
+	if itemType == config.HubRules {
+		linkName = filepath.Base(itemName)
+	}
+	profileItemPath := filepath.Join(profile.Path, string(itemType), linkName)
 
 	// Check hub item exists
 	if _, err := os.Stat(hubItemPath); err != nil {
@@ -269,7 +273,11 @@ func (m *Manager) UnlinkHubItem(profileName string, itemType config.HubItemType,
 	}
 
 	// Remove symlink
-	profileItemPath := filepath.Join(profile.Path, string(itemType), itemName)
+	linkName := itemName
+	if itemType == config.HubRules {
+		linkName = filepath.Base(itemName)
+	}
+	profileItemPath := filepath.Join(profile.Path, string(itemType), linkName)
 	if err := os.Remove(profileItemPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
