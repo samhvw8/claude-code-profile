@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.32.4
-**Date:** 2026-04-24
+**Version:** 0.34.0
+**Date:** 2026-04-26
 **Status:** Draft
 
 ---
@@ -685,6 +685,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp project add [items...] [-i]` | Copy hub items into project's `.claude/` | `ccp project add skills/coding agents/reviewer` |
+| `ccp project install [source] [items...]` | Install from source directly into project | `ccp project install owner/repo skills/my-skill` |
 | `ccp project list` | List items in project's `.claude/` | `ccp project list` |
 | `ccp project remove [items...]` | Remove items from project's `.claude/` | `ccp project remove skills/coding` |
 

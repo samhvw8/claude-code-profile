@@ -97,13 +97,18 @@ Hooks are always overlaid from hub hooks, not stored in templates.
 Copy hub items into a project's `.claude/` directory for project-scoped Claude Code config. Items are copied (not symlinked) so the project is self-contained and git-committable.
 
 ```bash
-ccp project add skills/coding agents/reviewer   # Copy specific items
-ccp project add -i                                # Interactive picker
-ccp project list                                  # List project's .claude/ items
-ccp project remove skills/coding                  # Remove from project
+ccp project add skills/coding agents/reviewer   # Copy from hub
+ccp project add -i                               # Interactive picker
+ccp project install owner/repo skills/my-skill   # Install from source directly
+ccp project install owner/repo --all             # Install all from source
+ccp project install owner/repo -i                # Interactive source install
+ccp project list                                 # List project's .claude/ items
+ccp project remove skills/coding                 # Remove from project
 ```
 
 Detects project root via `.git/` directory (walk up from cwd). Override with `--dir`. Valid types: skills, agents, hooks, rules, commands.
+
+`project add` copies from the local hub. `project install` fetches from a source (GitHub/skills.sh) directly into the project — items are not tracked in the registry and overwrite existing items.
 
 > ccp is the authoring tool, `.claude/` is the distribution format. One person runs `ccp project add`, commits `.claude/`, and the team uses Claude Code without needing ccp.
 

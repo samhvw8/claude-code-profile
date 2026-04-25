@@ -193,6 +193,63 @@ func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem s
 	return
 }
 
+// InstallToDir copies items from a source to an arbitrary target directory.
+// Unlike Install, it does not track items in the registry and filters by allowed types.
+func (i *Installer) InstallToDir(sourceID string, items []string, targetDir string, allowedTypes map[string]bool) ([]string, error) {
+	_, err := i.registry.GetSource(sourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	sourceDir := i.paths.SourceDir(sourceID)
+	if _, err := os.Stat(sourceDir); err != nil {
+		return nil, &SourceError{Op: "install", Source: sourceID,
+			Err: fmt.Errorf("source not downloaded: %s", sourceDir)}
+	}
+
+	var installed []string
+
+	for _, item := range items {
+		srcPath, dstItem, err := i.resolveItemPaths(sourceDir, item)
+		if err != nil {
+			return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
+		}
+
+		if _, err := os.Stat(srcPath); err != nil {
+			return installed, &SourceError{Op: "install", Source: sourceID,
+				Err: fmt.Errorf("item not found: %s", item)}
+		}
+
+		parts := strings.SplitN(dstItem, "/", 2)
+		if len(parts) != 2 {
+			return installed, &SourceError{Op: "install", Source: sourceID,
+				Err: fmt.Errorf("invalid item format: %s", dstItem)}
+		}
+		itemType, itemName := parts[0], parts[1]
+
+		if allowedTypes != nil && !allowedTypes[itemType] {
+			return installed, &SourceError{Op: "install", Source: sourceID,
+				Err: fmt.Errorf("type not allowed for project install: %s", itemType)}
+		}
+
+		dstPath := filepath.Join(targetDir, itemType, itemName)
+
+		if _, err := os.Stat(dstPath); err == nil {
+			if err := os.RemoveAll(dstPath); err != nil {
+				return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
+			}
+		}
+
+		if err := CopyTree(srcPath, dstPath); err != nil {
+			return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
+		}
+
+		installed = append(installed, dstItem)
+	}
+
+	return installed, nil
+}
+
 // Uninstall removes items from hub
 func (i *Installer) Uninstall(items []string) error {
 	for _, item := range items {
