@@ -39,6 +39,12 @@ func (p *GitProvider) CanHandle(url string) bool {
 func (p *GitProvider) Fetch(ctx context.Context, url string, destPath string, opts FetchOptions) error {
 	url = normalizeGitURL(url)
 
+	if info, err := os.Stat(destPath); err == nil && info.IsDir() {
+		if err := os.RemoveAll(destPath); err != nil {
+			return &SourceError{Op: "git clone", Source: url, Err: fmt.Errorf("failed to clean stale directory: %w", err)}
+		}
+	}
+
 	args := []string{"clone", "--depth", "1"}
 	if opts.Ref != "" {
 		args = append(args, "--branch", opts.Ref)
