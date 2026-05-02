@@ -1,6 +1,6 @@
 ---
 name: ccp-dev
-description: "ccp (Claude Code Profile Manager) development. Go CLI with Cobra, go-toml/v2, Bubble Tea TUI. Architecture: cmd/ (thin Cobra layer), internal/ (config, hub, profile, source, symlink, migration, picker). Capabilities: adding commands, hub item management, source system, settings generation, profile CRUD, platform symlinks. Actions: build, test, add commands, extend hub, fix bugs in ccp. Keywords: ccp, Claude Code Profile, profile manager, hub, source, Cobra, Go CLI, symlink, settings template, manifest, picker, migration. Use when: developing ccp features, adding commands, modifying hub/source/profile logic, debugging ccp issues, understanding ccp architecture."
+description: "Develop, debug, and extend ccp — the Claude Code Profile Manager CLI. Use when: adding a new command, fixing a bug in profile/hub/source logic, extending the source system, modifying settings generation, working with symlinks or manifests, understanding how ccp works internally. Actions: build, fix, add, extend, refactor, debug ccp code. Keywords: ccp, profile manager, hub item, source install, Cobra command, settings template, manifest, picker, symlink, migration, go build, go test. Casual triggers: 'add a command to ccp', 'ccp is broken', 'how does ccp source work', 'new ccp feature', 'profile not switching', 'hub items not linking'."
 ---
 
 # ccp Development
