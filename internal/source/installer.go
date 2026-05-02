@@ -142,22 +142,8 @@ func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem s
 			return
 		}
 
-		// Try .claude/ folder (directory)
-		srcPath = filepath.Join(sourceDir, ".claude", itemType, itemName)
-		if _, statErr := os.Stat(srcPath); statErr == nil {
-			dstItem = item
-			return
-		}
-
-		// Try .claude/ folder as file
-		if filePath, ext := i.tryFileExtensions(filepath.Join(sourceDir, ".claude"), itemType, itemName); filePath != "" {
-			srcPath = filePath
-			dstItem = fmt.Sprintf("%s/%s%s", itemType, itemName, ext)
-			return
-		}
-
-		// Not found in either location
-		err = fmt.Errorf("item not found: %s (checked %s/ and .claude/%s/)", item, itemType, itemType)
+		// Not found
+		err = fmt.Errorf("item not found: %s (checked %s/)", item, itemType)
 		return
 	}
 
@@ -298,20 +284,13 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 		i.scanItemDir(typeDir, itemType, addItem)
 	}
 
-	// 2. Scan .claude/ folder (Claude Code standalone config)
-	claudeDir := filepath.Join(sourceDir, ".claude")
-	for _, itemType := range itemTypes {
-		typeDir := filepath.Join(claudeDir, itemType)
-		i.scanItemDir(typeDir, itemType, addItem)
-	}
-
-	// 3. Check for .claude-plugin/plugin.json and parse custom paths
+	// 2. Check for .claude-plugin/plugin.json and parse custom paths (plugin format)
 	pluginJSON := filepath.Join(sourceDir, ".claude-plugin", "plugin.json")
 	if data, err := os.ReadFile(pluginJSON); err == nil {
 		i.discoverFromPluginJSON(sourceDir, data, itemTypes, addItem)
 	}
 
-	// 4. Scan plugins/<plugin-name>/<type>/ structure (legacy/marketplace)
+	// 3. Scan plugins/<plugin-name>/<type>/ structure (legacy/marketplace)
 	pluginDirs := []string{"plugins", "external_plugins"}
 	for _, pluginDir := range pluginDirs {
 		pluginsPath := filepath.Join(sourceDir, pluginDir)
