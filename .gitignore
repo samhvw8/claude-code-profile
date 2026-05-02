@@ -1,6 +1,6 @@
 # Binary
-ccp
-ccp.exe
+/ccp
+/ccp.exe
 
 # Test binary
 *.test
