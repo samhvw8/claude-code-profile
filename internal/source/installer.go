@@ -36,6 +36,13 @@ type pluginJSON struct {
 	Hooks       any    `json:"hooks"`    // string or object
 }
 
+type marketplaceJSON struct {
+	Plugins []struct {
+		Name   string `json:"name"`
+		Source string `json:"source"`
+	} `json:"plugins"`
+}
+
 // Install copies items from a source to the hub
 func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
 	source, err := i.registry.GetSource(sourceID)
@@ -139,6 +146,13 @@ func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem s
 		if filePath, ext := i.tryFileExtensions(sourceDir, itemType, itemName); filePath != "" {
 			srcPath = filePath
 			dstItem = fmt.Sprintf("%s/%s%s", itemType, itemName, ext)
+			return
+		}
+
+		// Try marketplace plugin subdirs
+		if found := i.findInMarketplace(sourceDir, itemType, itemName); found != "" {
+			srcPath = found
+			dstItem = item
 			return
 		}
 
@@ -290,7 +304,13 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 		i.discoverFromPluginJSON(sourceDir, data, itemTypes, addItem)
 	}
 
-	// 3. Scan plugins/<plugin-name>/<type>/ structure (legacy/marketplace)
+	// 3. Check for .claude-plugin/marketplace.json and scan plugin subdirs
+	marketplaceFile := filepath.Join(sourceDir, ".claude-plugin", "marketplace.json")
+	if data, err := os.ReadFile(marketplaceFile); err == nil {
+		i.discoverFromMarketplace(sourceDir, data, itemTypes, addItem)
+	}
+
+	// 4. Scan plugins/<plugin-name>/<type>/ structure (legacy/marketplace)
 	pluginDirs := []string{"plugins", "external_plugins"}
 	for _, pluginDir := range pluginDirs {
 		pluginsPath := filepath.Join(sourceDir, pluginDir)
@@ -420,6 +440,59 @@ func (i *Installer) discoverFromPluginJSON(sourceDir string, data []byte, _ []st
 			}
 		}
 	}
+}
+
+// discoverFromMarketplace parses marketplace.json and scans each plugin subdir
+func (i *Installer) discoverFromMarketplace(sourceDir string, data []byte, itemTypes []string, addItem func(string)) {
+	var marketplace marketplaceJSON
+	if err := json.Unmarshal(data, &marketplace); err != nil {
+		return
+	}
+
+	for _, plugin := range marketplace.Plugins {
+		if plugin.Source == "" {
+			continue
+		}
+		pluginDir := filepath.Join(sourceDir, strings.TrimPrefix(plugin.Source, "./"))
+
+		// Scan standard item dirs within the plugin subdir
+		for _, itemType := range itemTypes {
+			typeDir := filepath.Join(pluginDir, itemType)
+			i.scanItemDir(typeDir, itemType, addItem)
+		}
+
+		// Also check for plugin.json within the plugin subdir
+		pJSON := filepath.Join(pluginDir, ".claude-plugin", "plugin.json")
+		if pData, err := os.ReadFile(pJSON); err == nil {
+			i.discoverFromPluginJSON(pluginDir, pData, itemTypes, addItem)
+		}
+	}
+}
+
+// findInMarketplace searches marketplace plugin subdirs for an item
+func (i *Installer) findInMarketplace(sourceDir, itemType, itemName string) string {
+	marketplaceFile := filepath.Join(sourceDir, ".claude-plugin", "marketplace.json")
+	data, err := os.ReadFile(marketplaceFile)
+	if err != nil {
+		return ""
+	}
+
+	var marketplace marketplaceJSON
+	if err := json.Unmarshal(data, &marketplace); err != nil {
+		return ""
+	}
+
+	for _, plugin := range marketplace.Plugins {
+		if plugin.Source == "" {
+			continue
+		}
+		pluginDir := filepath.Join(sourceDir, strings.TrimPrefix(plugin.Source, "./"))
+		candidate := filepath.Join(pluginDir, itemType, itemName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // CopyTree copies a file or directory tree from src to dst.

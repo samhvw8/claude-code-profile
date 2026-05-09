@@ -72,11 +72,13 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 		if addErr := addSourceForInstall(sourceID, paths, registry); addErr != nil {
 			return fmt.Errorf("failed to add source: %w", addErr)
 		}
-		// Re-fetch source after adding
-		src, err = registry.GetSource(sourceID)
+		// Re-fetch using the generated ID (URL gets normalized to owner/repo)
+		resolvedID := generateSourceID(sourceID, sourceID)
+		src, err = registry.GetSource(resolvedID)
 		if err != nil {
 			return fmt.Errorf("source not found after add: %s", sourceID)
 		}
+		sourceID = resolvedID
 	}
 
 	installer := source.NewInstaller(paths, registry)
