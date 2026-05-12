@@ -29,6 +29,7 @@ type TabbedModel struct {
 	quitting    bool
 	searchInput textinput.Model
 	searching   bool
+	filter      filterMode
 }
 
 // NewTabbed creates a new tabbed picker model
@@ -80,19 +81,24 @@ func (m TabbedModel) Init() tea.Cmd {
 	return nil
 }
 
-// getFilteredItems returns items matching the current search query
+// getFilteredItems returns items matching the current search query and filter mode
 func (m TabbedModel) getFilteredItems(tab *Tab) []Item {
-	if m.searchInput.Value() == "" {
-		return tab.Items
-	}
-
-	query := strings.ToLower(m.searchInput.Value())
 	var filtered []Item
 	for _, item := range tab.Items {
-		if strings.Contains(strings.ToLower(item.Label), query) ||
-			strings.Contains(strings.ToLower(item.ID), query) {
-			filtered = append(filtered, item)
+		if m.filter == filterChecked && !tab.selected[item.ID] {
+			continue
 		}
+		if m.filter == filterUnchecked && tab.selected[item.ID] {
+			continue
+		}
+		if m.searchInput.Value() != "" {
+			query := strings.ToLower(m.searchInput.Value())
+			if !strings.Contains(strings.ToLower(item.Label), query) &&
+				!strings.Contains(strings.ToLower(item.ID), query) {
+				continue
+			}
+		}
+		filtered = append(filtered, item)
 	}
 	return filtered
 }
@@ -233,6 +239,12 @@ func (m TabbedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tab.selected[item.ID] = !allSelected
 			}
 
+		case key.Matches(msg, tabbedKeys.Filter):
+			m.filter = (m.filter + 1) % 3
+			tab := &m.tabs[m.currentTab]
+			tab.cursor = 0
+			tab.offset = 0
+
 		case key.Matches(msg, tabbedKeys.Confirm):
 			m.done = true
 			return m, tea.Quit
@@ -282,6 +294,11 @@ func (m TabbedModel) View() string {
 		}
 	}
 	b.WriteString(strings.Join(tabNames, "  │  "))
+	if m.filter != filterAll {
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+		b.WriteString("  ")
+		b.WriteString(filterStyle.Render(fmt.Sprintf("[filter: %s]", m.filter)))
+	}
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", 60))
 	b.WriteString("\n")
@@ -349,7 +366,7 @@ func (m TabbedModel) View() string {
 	}
 
 	b.WriteString("\n")
-	helpText := "←/→: switch tab • ↑/↓: navigate • space: toggle • a: all/none • /: search • enter: confirm • q: quit"
+	helpText := "←/→: switch tab • ↑/↓: navigate • space: toggle • a: all/none • f: filter • /: search • enter: confirm • q: quit"
 	b.WriteString(lipgloss.NewStyle().Faint(true).Render(helpText))
 
 	return b.String()
@@ -363,6 +380,7 @@ type tabbedKeyMap struct {
 	Right   key.Binding
 	Toggle  key.Binding
 	All     key.Binding
+	Filter  key.Binding
 	Search  key.Binding
 	Confirm key.Binding
 	Quit    key.Binding
@@ -386,6 +404,9 @@ var tabbedKeys = tabbedKeyMap{
 	),
 	All: key.NewBinding(
 		key.WithKeys("a"),
+	),
+	Filter: key.NewBinding(
+		key.WithKeys("f"),
 	),
 	Search: key.NewBinding(
 		key.WithKeys("/"),

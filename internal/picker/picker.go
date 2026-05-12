@@ -10,6 +10,26 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// filterMode controls which items are visible by check state
+type filterMode int
+
+const (
+	filterAll filterMode = iota
+	filterChecked
+	filterUnchecked
+)
+
+func (f filterMode) String() string {
+	switch f {
+	case filterChecked:
+		return "checked"
+	case filterUnchecked:
+		return "unchecked"
+	default:
+		return "all"
+	}
+}
+
 // Item represents a selectable item
 type Item struct {
 	ID       string
@@ -28,6 +48,7 @@ type Model struct {
 	quitting    bool
 	searchInput textinput.Model
 	searching   bool
+	filter      filterMode
 }
 
 // New creates a new picker model
@@ -74,19 +95,24 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// getFilteredItems returns items matching the current search query
+// getFilteredItems returns items matching the current search query and filter mode
 func (m Model) getFilteredItems() []Item {
-	if m.searchInput.Value() == "" {
-		return m.items
-	}
-
-	query := strings.ToLower(m.searchInput.Value())
 	var filtered []Item
 	for _, item := range m.items {
-		if strings.Contains(strings.ToLower(item.Label), query) ||
-			strings.Contains(strings.ToLower(item.ID), query) {
-			filtered = append(filtered, item)
+		if m.filter == filterChecked && !m.selected[item.ID] {
+			continue
 		}
+		if m.filter == filterUnchecked && m.selected[item.ID] {
+			continue
+		}
+		if m.searchInput.Value() != "" {
+			query := strings.ToLower(m.searchInput.Value())
+			if !strings.Contains(strings.ToLower(item.Label), query) &&
+				!strings.Contains(strings.ToLower(item.ID), query) {
+				continue
+			}
+		}
+		filtered = append(filtered, item)
 	}
 	return filtered
 }
@@ -203,6 +229,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected[item.ID] = !allSelected
 			}
 
+		case key.Matches(msg, keys.Filter):
+			m.filter = (m.filter + 1) % 3
+			m.cursor = 0
+			m.offset = 0
+
 		case key.Matches(msg, keys.Confirm):
 			m.done = true
 			return m, tea.Quit
@@ -237,6 +268,11 @@ func (m Model) View() string {
 	b.WriteString(titleStyle.Render(m.title))
 	b.WriteString(" ")
 	b.WriteString(countStyle.Render(fmt.Sprintf("(%d/%d selected)", selectedCount, len(m.items))))
+	if m.filter != filterAll {
+		filterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+		b.WriteString(" ")
+		b.WriteString(filterStyle.Render(fmt.Sprintf("[filter: %s]", m.filter)))
+	}
 	b.WriteString("\n")
 
 	// Search bar
@@ -300,7 +336,7 @@ func (m Model) View() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • space: toggle • a: all/none • /: search • enter: confirm • q: quit"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • space: toggle • a: all/none • f: filter • /: search • enter: confirm • q: quit"))
 
 	return b.String()
 }
@@ -311,6 +347,7 @@ type keyMap struct {
 	Down    key.Binding
 	Toggle  key.Binding
 	All     key.Binding
+	Filter  key.Binding
 	Search  key.Binding
 	Confirm key.Binding
 	Quit    key.Binding
@@ -328,6 +365,9 @@ var keys = keyMap{
 	),
 	All: key.NewBinding(
 		key.WithKeys("a"),
+	),
+	Filter: key.NewBinding(
+		key.WithKeys("f"),
 	),
 	Search: key.NewBinding(
 		key.WithKeys("/"),
