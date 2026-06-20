@@ -396,6 +396,94 @@ func TestParseFrontmatterName(t *testing.T) {
 	}
 }
 
+func TestInstallPath_RootSkill(t *testing.T) {
+	ccpDir := t.TempDir()
+	hubDir := t.TempDir()
+	paths := &config.Paths{CcpDir: ccpDir, HubDir: hubDir}
+	registry := NewRegistry(ccpDir)
+
+	sourceID := "owner/frontend-audit-skill"
+	srcDir := paths.SourceDir(sourceID)
+	// Bare skill repo cloned: SKILL.md at the source root, plus siblings.
+	createTestFile(t, srcDir, "SKILL.md", "---\nname: frontend-audit\n---\n# x\n")
+	createTestFile(t, srcDir, "README.md", "# readme")
+	createTestFile(t, srcDir, "scripts/run.mjs", "// s")
+
+	if err := registry.AddSource(sourceID, Source{Provider: "git"}); err != nil {
+		t.Fatal(err)
+	}
+
+	installer := NewInstaller(paths, registry)
+	item, err := installer.InstallPath(sourceID, ".")
+	if err != nil {
+		t.Fatalf("InstallPath: %v", err)
+	}
+	if item != "skills/frontend-audit" {
+		t.Errorf("item = %q, want skills/frontend-audit", item)
+	}
+
+	// Everything at SKILL.md's level was copied.
+	for _, f := range []string{"SKILL.md", "README.md", "scripts/run.mjs"} {
+		if _, err := os.Stat(filepath.Join(hubDir, "skills", "frontend-audit", f)); err != nil {
+			t.Errorf("expected %s copied: %v", f, err)
+		}
+	}
+
+	// Registry tracks it as installed.
+	src, _ := registry.GetSource(sourceID)
+	if len(src.Installed) != 1 || src.Installed[0] != "skills/frontend-audit" {
+		t.Errorf("registry Installed = %v, want [skills/frontend-audit]", src.Installed)
+	}
+}
+
+func TestInstallPath_SubdirSkill(t *testing.T) {
+	ccpDir := t.TempDir()
+	hubDir := t.TempDir()
+	paths := &config.Paths{CcpDir: ccpDir, HubDir: hubDir}
+	registry := NewRegistry(ccpDir)
+
+	sourceID := "owner/monorepo"
+	srcDir := paths.SourceDir(sourceID)
+	// Skill lives in a subdirectory; name comes from frontmatter.
+	createTestFile(t, srcDir, "skills/debug/SKILL.md", "---\nname: debug\n---\n# d\n")
+	createTestFile(t, srcDir, "skills/debug/helper.py", "# h")
+
+	if err := registry.AddSource(sourceID, Source{Provider: "git"}); err != nil {
+		t.Fatal(err)
+	}
+
+	installer := NewInstaller(paths, registry)
+	item, err := installer.InstallPath(sourceID, "skills/debug")
+	if err != nil {
+		t.Fatalf("InstallPath: %v", err)
+	}
+	if item != "skills/debug" {
+		t.Errorf("item = %q, want skills/debug", item)
+	}
+	if _, err := os.Stat(filepath.Join(hubDir, "skills", "debug", "helper.py")); err != nil {
+		t.Errorf("expected helper.py copied: %v", err)
+	}
+}
+
+func TestInstallPath_NoSkillMd(t *testing.T) {
+	ccpDir := t.TempDir()
+	hubDir := t.TempDir()
+	paths := &config.Paths{CcpDir: ccpDir, HubDir: hubDir}
+	registry := NewRegistry(ccpDir)
+
+	sourceID := "owner/empty"
+	srcDir := paths.SourceDir(sourceID)
+	createTestFile(t, srcDir, "README.md", "# no skill here")
+	if err := registry.AddSource(sourceID, Source{Provider: "git"}); err != nil {
+		t.Fatal(err)
+	}
+
+	installer := NewInstaller(paths, registry)
+	if _, err := installer.InstallPath(sourceID, "."); err == nil {
+		t.Error("expected error when no SKILL.md is present, got nil")
+	}
+}
+
 func TestCopyDir_SkipsGit(t *testing.T) {
 	src := t.TempDir()
 	dst := filepath.Join(t.TempDir(), "out")

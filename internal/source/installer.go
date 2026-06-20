@@ -101,6 +101,43 @@ func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
 	return installed, nil
 }
 
+// InstallPath installs a single skill from an explicit directory within the
+// source — used when the user points install at a SKILL.md by URL. relDir is
+// relative to the source root ("" or "." means the repo root itself). The whole
+// directory at that level is copied; the skill name comes from its SKILL.md
+// frontmatter (falling back to the directory's base name).
+func (i *Installer) InstallPath(sourceID, relDir string) (string, error) {
+	sourceDir := i.paths.SourceDir(sourceID)
+	skillDir := sourceDir
+	if relDir != "" && relDir != "." {
+		skillDir = filepath.Join(sourceDir, filepath.FromSlash(relDir))
+	}
+
+	name := rootSkillName(skillDir)
+	if name == "" {
+		return "", &SourceError{Op: "install", Source: sourceID,
+			Err: fmt.Errorf("no SKILL.md found at %q", relDir)}
+	}
+
+	dstItem := "skills/" + name
+	dstPath := filepath.Join(i.paths.HubDir, "skills", name)
+	if _, err := os.Stat(dstPath); err == nil {
+		return "", &SourceError{Op: "install", Source: sourceID,
+			Err: fmt.Errorf("item already exists: %s", dstItem)}
+	}
+
+	if err := CopyTree(skillDir, dstPath); err != nil {
+		return "", &SourceError{Op: "install", Source: sourceID, Err: err}
+	}
+
+	if err := i.registry.AddInstalled(sourceID, dstItem); err != nil {
+		os.RemoveAll(dstPath)
+		return "", err
+	}
+
+	return dstItem, nil
+}
+
 // validExtensions are the file extensions to check when resolving flat file items
 var validExtensions = []string{".md", ".yaml", ".yml", ".json", ".toml"}
 

@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.38.0
-**Date:** 2026-05-12
+**Version:** 0.39.0
+**Date:** 2026-06-20
 **Status:** Draft
 
 ---
@@ -650,6 +650,15 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp env <profile>` | Configure project env for a profile | `ccp env dev --format=mise` |
 | `ccp config shell` | Output shell aliases for Claude integration | `ccp config shell >> ~/.zshrc` |
 
+### Codex Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp codex link <items...>` | Link hub skills to ~/.agents/skills/ for Codex | `ccp codex link skills/debugging` |
+| `ccp codex unlink <items...>` | Remove skill links from ~/.agents/skills/ | `ccp codex unlink skills/debugging` |
+| `ccp codex sync [profile]` | Sync all profile skills to Codex | `ccp codex sync dev` |
+| `ccp codex list` | List hub skills linked to Codex | `ccp codex list` |
+
 ### Profile Commands
 
 | Command | Description | Example |
@@ -872,6 +881,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.39.0 | 2026-06-20 | — | Added: install skills from repos whose `SKILL.md` is at the repository root (a "bare" skill repo, no `skills/<name>/` wrapper). `DiscoverItems` detects a root-level `SKILL.md` and installs the whole repo as `skills/<name>` (name from frontmatter `name:`, falling back to the source dir name); `CopyDir` skips `.git`. Also added install-by-URL: `ccp install https://github.com/owner/repo/blob/<ref>/SKILL.md` auto-adds the repo (honoring the URL's ref) and installs just that skill via `InstallPath`, copying everything at the `SKILL.md`'s level. `ParseGitWebURL` handles `/blob/`, `/tree/`, `raw.githubusercontent.com`, and GitLab `/-/blob/` URLs. |
 | 0.32.0 | 2026-04-15 | — | Enhanced: `hub remove` now offers copy-to-profile option when removing items used by profiles. Three-choice prompt (copy/delete/cancel) replaces binary "Remove anyway?" prompt. Added `--copy` flag for scripting. Copy operation replaces symlink with local files and updates profile manifest. |
 | 0.31.0 | 2026-04-03 | — | Added `--all` flag to `ccp profile fix` — fixes all profiles in one command, matching the `profile sync --all` pattern. Without `--force`, hub_missing items are skipped (no interactive prompt per profile). With `--force`, hub_missing items are auto-removed. Per-profile errors warn and continue. |
 | 0.30.0 | 2026-04-01 | — | Enhanced: `hub remove` and `hub show` now resolve single-file hub items (try exact path then common extensions .md/.yaml/.sh/.json). Added `-i` interactive mode to both commands (tabbed picker for remove, single-select for show). Both default to interactive when called without arguments. Fixed "item not found" error when removing/showing file-based hub items. |

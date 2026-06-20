@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -55,6 +56,18 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 	sourceID := args[0]
 	items := args[1:]
 
+	// A GitHub/GitLab blob|tree URL points at a specific skill inside a repo,
+	// e.g. https://github.com/owner/repo/blob/main/SKILL.md. Split it into the
+	// repo (to add as the source) and the in-repo path (the skill to install).
+	addIdentifier := sourceID
+	var urlRef, skillPath string
+	if repoURL, ref, sub := source.ParseGitWebURL(sourceID); sub != "" {
+		addIdentifier = repoURL
+		urlRef = ref
+		skillPath = sub
+		sourceID = generateSourceID(repoURL, repoURL)
+	}
+
 	paths, err := config.ResolvePaths()
 	if err != nil {
 		return err
@@ -68,20 +81,42 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 	src, err := registry.GetSource(sourceID)
 	if err != nil {
 		// Source not found - try to add it first
-		fmt.Printf("Source not found, adding: %s\n", sourceID)
-		if addErr := addSourceForInstall(sourceID, paths, registry); addErr != nil {
+		fmt.Printf("Source not found, adding: %s\n", addIdentifier)
+		if addErr := addSourceForInstall(addIdentifier, urlRef, paths, registry); addErr != nil {
 			return fmt.Errorf("failed to add source: %w", addErr)
 		}
 		// Re-fetch using the generated ID (URL gets normalized to owner/repo)
-		resolvedID := generateSourceID(sourceID, sourceID)
+		resolvedID := generateSourceID(addIdentifier, addIdentifier)
 		src, err = registry.GetSource(resolvedID)
 		if err != nil {
-			return fmt.Errorf("source not found after add: %s", sourceID)
+			return fmt.Errorf("source not found after add: %s", addIdentifier)
 		}
 		sourceID = resolvedID
 	}
 
 	installer := source.NewInstaller(paths, registry)
+
+	// URL pointed at a specific skill: install exactly that, copying everything
+	// at the SKILL.md's level (handles both root-level and skills/<name>/).
+	if skillPath != "" {
+		relDir := skillPath
+		if strings.EqualFold(path.Base(relDir), "SKILL.md") {
+			relDir = path.Dir(relDir)
+		}
+		item, instErr := installer.InstallPath(sourceID, relDir)
+		if instErr != nil {
+			return instErr
+		}
+		if err := registry.Save(); err != nil {
+			return err
+		}
+		fmt.Printf("Installed %s from %s\n", item, sourceID)
+		fmt.Println()
+		fmt.Println("Link to profile with:")
+		fmt.Printf("  ccp link <profile> %s\n", item)
+		return nil
+	}
+
 	available := installer.DiscoverItems(src.Path)
 
 	if sourceInstallAll {
@@ -155,8 +190,10 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// addSourceForInstall adds a source when it's not found during install
-func addSourceForInstall(identifier string, paths *config.Paths, registry *source.Registry) error {
+// addSourceForInstall adds a source when it's not found during install.
+// refOverride, when non-empty, forces the git ref (e.g. the branch parsed from
+// a blob URL); otherwise the ref comes from the registry lookup.
+func addSourceForInstall(identifier, refOverride string, paths *config.Paths, registry *source.Registry) error {
 	ctx := context.Background()
 
 	var details *source.PackageDetails
@@ -169,6 +206,7 @@ func addSourceForInstall(identifier string, paths *config.Paths, registry *sourc
 		if provider == nil {
 			return fmt.Errorf("cannot determine provider for: %s", url)
 		}
+		ref = refOverride
 	} else {
 		reg := source.DetectRegistry(identifier)
 		if reg == nil {
@@ -199,6 +237,9 @@ func addSourceForInstall(identifier string, paths *config.Paths, registry *sourc
 		url = details.DownloadURL
 		provider = source.GetProvider(details.ProviderType)
 		ref = details.Ref
+		if refOverride != "" {
+			ref = refOverride
+		}
 	}
 
 	sourceID := generateSourceID(identifier, url)

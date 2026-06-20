@@ -123,6 +123,7 @@ ccp install                             # Sync all from ccp.toml (for machine mi
 ccp install <owner/repo>                # Auto-add + interactive install (recommended)
 ccp install <owner/repo> skills/<name>  # Install specific skill directly
 ccp install <owner/repo> -a             # Auto-add + install all items
+ccp install <github-url>/blob/<ref>/SKILL.md  # Auto-add repo + install that one skill
 ccp source add <owner/repo>             # Add source only (falls back to GitHub if not on skills.sh)
 ccp source list                         # List installed sources
 ccp source update [name]                # Update sources
@@ -134,8 +135,9 @@ ccp source remove <name>                # Remove source
 1. `find` searches skills.sh by default, shows PACKAGE (owner/repo) and SKILL separately
 2. `install <owner/repo>` auto-adds source if not found, then shows interactive picker
 3. `install <owner/repo> skills/<name>` installs a specific skill directly without picker
-4. `install` (no args) syncs all sources from ccp.toml - clones missing sources and reinstalls items
-5. `source add` tries skills.sh first, falls back to GitHub with default branch
+4. `install <github-blob-url>` to a `SKILL.md` auto-adds the repo (at the URL's ref) and installs just that skill via `InstallPath` — `ParseGitWebURL` handles `/blob/`, `/tree/`, raw, and GitLab `/-/blob/` URLs
+5. `install` (no args) syncs all sources from ccp.toml - clones missing sources and reinstalls items
+6. `source add` tries skills.sh first, falls back to GitHub with default branch
 
 ## Hooks Format
 

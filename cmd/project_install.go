@@ -78,7 +78,7 @@ func runProjectInstall(cmd *cobra.Command, args []string) error {
 	src, err := registry.GetSource(sourceID)
 	if err != nil {
 		fmt.Printf("Source not found, adding: %s\n", sourceID)
-		if addErr := addSourceForInstall(sourceID, paths, registry); addErr != nil {
+		if addErr := addSourceForInstall(sourceID, "", paths, registry); addErr != nil {
 			return fmt.Errorf("failed to add source: %w", addErr)
 		}
 		resolvedID := generateSourceID(sourceID, sourceID)
