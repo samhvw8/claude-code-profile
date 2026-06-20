@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/samhoang/ccp/internal/config"
+	"gopkg.in/yaml.v3"
 )
 
 // Installer handles copying items from sources to hub
@@ -149,9 +150,32 @@ func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem s
 			return
 		}
 
-		// Try marketplace plugin subdirs
+		// Try Codex directories (.agents/, .codex/)
+		for _, codexDir := range codexDirs {
+			candidate := filepath.Join(sourceDir, codexDir, itemType, itemName)
+			if _, statErr := os.Stat(candidate); statErr == nil {
+				srcPath = candidate
+				dstItem = item
+				return
+			}
+			if filePath, ext := i.tryFileExtensions(filepath.Join(sourceDir, codexDir), itemType, itemName); filePath != "" {
+				srcPath = filePath
+				dstItem = fmt.Sprintf("%s/%s%s", itemType, itemName, ext)
+				return
+			}
+		}
+
+		// Try marketplace plugin subdirs (.claude-plugin/ and .codex-plugin/)
 		if found := i.findInMarketplace(sourceDir, itemType, itemName); found != "" {
 			srcPath = found
+			dstItem = item
+			return
+		}
+
+		// Bare skill repo: SKILL.md at the repository root. The whole repo is
+		// the skill, so the source path is the repo root itself.
+		if itemType == "skills" && rootSkillName(sourceDir) == itemName {
+			srcPath = sourceDir
 			dstItem = item
 			return
 		}
@@ -273,11 +297,17 @@ func (i *Installer) Uninstall(items []string) error {
 	return nil
 }
 
+// codexDirs are Codex-format directories to scan for items
+var codexDirs = []string{".agents", ".codex"}
+
 // DiscoverItems scans a source directory for installable items
 // Supports multiple structures:
 // 1. Root-level: skills/, agents/, commands/, hooks/
-// 2. Claude Code plugin: .claude-plugin/plugin.json with skills/, commands/, agents/
-// 3. .claude folder: .claude/skills/, .claude/commands/
+// 2. Claude Code plugin: .claude-plugin/plugin.json
+// 3. Codex format: .agents/skills/, .codex/skills/
+// 4. Codex plugin: .codex-plugin/plugin.json, .codex-plugin/marketplace.json
+// 5. Plugin subdirs: plugins/<name>/<type>/
+// 6. Bare skill repo: SKILL.md at the repository root (the whole repo IS one skill)
 func (i *Installer) DiscoverItems(sourceDir string) []string {
 	var items []string
 	seen := make(map[string]bool)
@@ -298,6 +328,12 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 		i.scanItemDir(typeDir, itemType, addItem)
 	}
 
+	// 1b. Bare skill repo: SKILL.md at the repository root (the whole repo IS
+	// one skill, with no skills/<name>/ wrapper). Name comes from frontmatter.
+	if name := rootSkillName(sourceDir); name != "" {
+		addItem("skills/" + name)
+	}
+
 	// 2. Check for .claude-plugin/plugin.json and parse custom paths (plugin format)
 	pluginJSON := filepath.Join(sourceDir, ".claude-plugin", "plugin.json")
 	if data, err := os.ReadFile(pluginJSON); err == nil {
@@ -310,7 +346,27 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 		i.discoverFromMarketplace(sourceDir, data, itemTypes, addItem)
 	}
 
-	// 4. Scan plugins/<plugin-name>/<type>/ structure (legacy/marketplace)
+	// 4. Scan Codex-format directories (.agents/, .codex/)
+	for _, codexDir := range codexDirs {
+		for _, itemType := range itemTypes {
+			typeDir := filepath.Join(sourceDir, codexDir, itemType)
+			i.scanItemDir(typeDir, itemType, addItem)
+		}
+	}
+
+	// 5. Check for .codex-plugin/plugin.json (Codex plugin format)
+	codexPluginJSON := filepath.Join(sourceDir, ".codex-plugin", "plugin.json")
+	if data, err := os.ReadFile(codexPluginJSON); err == nil {
+		i.discoverFromPluginJSON(sourceDir, data, itemTypes, addItem)
+	}
+
+	// 6. Check for .codex-plugin/marketplace.json
+	codexMarketplace := filepath.Join(sourceDir, ".codex-plugin", "marketplace.json")
+	if data, err := os.ReadFile(codexMarketplace); err == nil {
+		i.discoverFromMarketplace(sourceDir, data, itemTypes, addItem)
+	}
+
+	// 7. Scan plugins/<plugin-name>/<type>/ structure (legacy/marketplace)
 	pluginDirs := []string{"plugins", "external_plugins"}
 	for _, pluginDir := range pluginDirs {
 		pluginsPath := filepath.Join(sourceDir, pluginDir)
@@ -386,6 +442,44 @@ func isValidItemFile(name string) bool {
 	}
 
 	return validExts[ext]
+}
+
+// rootSkillName returns the skill name for a "bare" skill repo whose SKILL.md
+// lives at the repository root (the whole repo IS the skill, with no
+// skills/<name>/ wrapper). The name is taken from the frontmatter `name:`
+// field, falling back to the source directory's base name. Returns "" when
+// there is no root-level SKILL.md.
+func rootSkillName(sourceDir string) string {
+	data, err := os.ReadFile(filepath.Join(sourceDir, "SKILL.md"))
+	if err != nil {
+		return ""
+	}
+	if name := parseFrontmatterName(data); name != "" {
+		return name
+	}
+	return filepath.Base(sourceDir)
+}
+
+// parseFrontmatterName extracts the `name:` value from a Markdown file's YAML
+// frontmatter (the block delimited by leading and trailing `---` fences).
+// Returns "" when there is no frontmatter or no name field.
+func parseFrontmatterName(data []byte) string {
+	content := string(data)
+	if !strings.HasPrefix(content, "---") {
+		return ""
+	}
+	rest := content[len("---"):]
+	front, _, found := strings.Cut(rest, "\n---")
+	if !found {
+		return ""
+	}
+	var fm struct {
+		Name string `yaml:"name"`
+	}
+	if err := yaml.Unmarshal([]byte(front), &fm); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(fm.Name)
 }
 
 // discoverFromPluginJSON parses plugin.json for custom component paths
@@ -469,27 +563,34 @@ func (i *Installer) discoverFromMarketplace(sourceDir string, data []byte, itemT
 	}
 }
 
-// findInMarketplace searches marketplace plugin subdirs for an item
+// findInMarketplace searches marketplace plugin subdirs for an item.
+// Checks both .claude-plugin/ and .codex-plugin/ marketplace files.
 func (i *Installer) findInMarketplace(sourceDir, itemType, itemName string) string {
-	marketplaceFile := filepath.Join(sourceDir, ".claude-plugin", "marketplace.json")
-	data, err := os.ReadFile(marketplaceFile)
-	if err != nil {
-		return ""
+	marketplaceFiles := []string{
+		filepath.Join(sourceDir, ".claude-plugin", "marketplace.json"),
+		filepath.Join(sourceDir, ".codex-plugin", "marketplace.json"),
 	}
 
-	var marketplace marketplaceJSON
-	if err := json.Unmarshal(data, &marketplace); err != nil {
-		return ""
-	}
-
-	for _, plugin := range marketplace.Plugins {
-		if plugin.Source == "" {
+	for _, marketplaceFile := range marketplaceFiles {
+		data, err := os.ReadFile(marketplaceFile)
+		if err != nil {
 			continue
 		}
-		pluginDir := filepath.Join(sourceDir, strings.TrimPrefix(plugin.Source, "./"))
-		candidate := filepath.Join(pluginDir, itemType, itemName)
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+
+		var marketplace marketplaceJSON
+		if err := json.Unmarshal(data, &marketplace); err != nil {
+			continue
+		}
+
+		for _, plugin := range marketplace.Plugins {
+			if plugin.Source == "" {
+				continue
+			}
+			pluginDir := filepath.Join(sourceDir, strings.TrimPrefix(plugin.Source, "./"))
+			candidate := filepath.Join(pluginDir, itemType, itemName)
+			if _, err := os.Stat(candidate); err == nil {
+				return candidate
+			}
 		}
 	}
 	return ""
@@ -521,6 +622,12 @@ func CopyDir(src, dst string) error {
 	}
 
 	for _, entry := range entries {
+		// Never copy version-control metadata into a hub item (matters when
+		// the source is a whole repo, e.g. a bare root-level SKILL.md skill).
+		if entry.Name() == ".git" {
+			continue
+		}
+
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 

@@ -200,6 +200,41 @@ type HookCommand struct {
 
 Legacy `hook.yaml` format still supported for reading. `GetHookManifest()` tries `hooks.json` first, falls back to `hook.yaml`.
 
+## Codex Skill Portability
+
+Cross-tool compatibility with OpenAI Codex CLI. Skills use the same SKILL.md format — zero conversion needed.
+
+### Source Discovery
+
+`DiscoverItems()` scans Codex directory layouts alongside Claude Code layouts:
+
+| Path | Format | Priority |
+|------|--------|----------|
+| `skills/` | Root-level (shared) | First |
+| `.claude/skills/` | Claude Code plugin | Second |
+| `.agents/skills/` | Codex cross-tool standard | Third |
+| `.codex/skills/` | Codex project-level | Fourth |
+| `.codex-plugin/plugin.json` | Codex plugin manifest | Fifth |
+| `SKILL.md` at repo root | Bare skill repo (whole repo = one skill) | Last (fallback) |
+
+`resolveItemPaths()` falls back through these directories when resolving items.
+
+A **bare skill repo** has `SKILL.md` at the repository root with no `skills/<name>/` wrapper (e.g. `colbymchenry/frontend-audit-skill`). `DiscoverItems()` detects the root `SKILL.md`, derives the item name from its frontmatter `name:` field (falling back to the source dir name), and installs the whole repo as `skills/<name>`. `CopyDir()` skips `.git` so VCS metadata is never copied into the hub item.
+
+### Linking Hub Skills to Codex
+
+Codex CLI discovers user-level skills in `~/.agents/skills/`. ccp creates symlinks from hub to that directory:
+
+```bash
+ccp codex link skills/debugging       # Link one skill
+ccp codex sync                        # Sync all skills from active profile
+ccp codex sync dev                    # Sync from specific profile
+ccp codex list                        # Show linked skills
+ccp codex unlink skills/debugging     # Remove link
+```
+
+Only skills are linkable (same SKILL.md format). Codex uses different formats for agents (TOML), hooks, and rules (AGENTS.md).
+
 ## Configuration
 
 Global config at `~/.ccp/ccp.toml`:
@@ -214,6 +249,10 @@ per_page = 10
 [skillssh]
 base_url = "https://skills.sh"
 limit = 10
+
+[codex]
+generate_agents_md = false
+generate_config_toml = false
 
 # Installed sources (auto-managed by ccp source commands)
 # Paths are relative to ~/.ccp/ for portability
