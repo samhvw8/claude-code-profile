@@ -12,6 +12,10 @@ ccp (Claude Code Profile Manager) is a Go CLI tool for managing multiple Claude 
 | **Source** | External repository providing hub items (GitHub, skills.sh) |
 | **Activation** | How a profile becomes active (`ccp use -g` for global, env var for project) |
 
+### Bundles (composite hub item — not a 6th concept)
+
+A **bundle** is an atomic group of hub items (skill + agent + hook + …) installed, linked, and removed together. It is a *kind of hub item*, not a new top-level concept — the "5 only" budget holds. Members live inside `hub/bundles/<name>/` and are never exposed as standalone leaf items, which makes "can't install separately" **structural**, not guard-based. Deliberately excluded from `config.AllHubItemTypes()`.
+
 ## Architecture
 
 ```

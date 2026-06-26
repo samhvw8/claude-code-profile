@@ -37,6 +37,23 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 		processLegacyHook(hookManifest, profileHooksDir, hookName, hooks)
 	}
 
+	// Bundle hooks: bundle members are tracked only by bundle name (never in
+	// Hub.Hooks), so resolve each linked bundle and process its hook members.
+	// The members are symlinked into profile/hooks/<member>, so the same
+	// hooks.json path resolution applies.
+	for _, bundleName := range manifest.Hub.Bundles {
+		bundle, err := hub.LoadBundle(paths.BundlesDir(), bundleName)
+		if err != nil {
+			continue
+		}
+		for _, hookName := range bundle.Members.Hooks {
+			hookDir := filepath.Join(profileHooksDir, hookName)
+			if hooksJSON, err := hub.GetHooksJSON(hookDir); err == nil && hooksJSON != nil {
+				processHooksJSON(hooksJSON, hookDir, hooks)
+			}
+		}
+	}
+
 	return hooks, nil
 }
 

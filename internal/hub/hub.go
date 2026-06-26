@@ -14,6 +14,9 @@ import (
 type Hub struct {
 	Path  string
 	Items map[config.HubItemType][]Item
+	// Bundles holds composite items (atomic groups). Kept separate from Items
+	// because a bundle is not a leaf and must not be iterated as one.
+	Bundles []*Bundle
 }
 
 // Item represents a single hub item (skill, hook, rule, etc.)
@@ -51,6 +54,16 @@ func (h *Hub) GetItem(itemType config.HubItemType, name string) *Item {
 // HasItem checks if an item exists in the hub
 func (h *Hub) HasItem(itemType config.HubItemType, name string) bool {
 	return h.GetItem(itemType, name) != nil
+}
+
+// GetBundle returns a bundle by name, or nil if not present.
+func (h *Hub) GetBundle(name string) *Bundle {
+	for _, b := range h.Bundles {
+		if b.Name == name {
+			return b
+		}
+	}
+	return nil
 }
 
 // AllItems returns all items as a flat slice

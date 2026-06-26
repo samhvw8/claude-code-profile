@@ -27,9 +27,18 @@ const (
 	HubRules             HubItemType = "rules"
 	HubCommands          HubItemType = "commands"
 	HubSettingsTemplates HubItemType = "settings-templates"
+
+	// HubBundles is a composite item type: an atomic, non-separable group of
+	// other items (skills/agents/hooks/rules/commands) stored together under
+	// hub/bundles/<name>/. It is deliberately NOT part of AllHubItemTypes() —
+	// bundles are scanned and linked on their own path so the generic leaf-item
+	// loops (scanning, drift, settings) never mistake a composite for a leaf.
+	HubBundles HubItemType = "bundles"
 )
 
-// AllHubItemTypes returns all hub item types in order
+// AllHubItemTypes returns all leaf hub item types in order.
+// Note: HubBundles is intentionally excluded — it is a composite type handled
+// separately (see scanner.Scan and profile.LinkHubBundle).
 func AllHubItemTypes() []HubItemType {
 	return []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubSettingsTemplates}
 }
@@ -138,6 +147,16 @@ func (p *Paths) ProfileDir(name string) string {
 // HubItemDir returns the directory for a specific hub item type
 func (p *Paths) HubItemDir(itemType HubItemType) string {
 	return filepath.Join(p.HubDir, string(itemType))
+}
+
+// BundlesDir returns the directory holding all bundles
+func (p *Paths) BundlesDir() string {
+	return filepath.Join(p.HubDir, string(HubBundles))
+}
+
+// BundleDir returns the directory for a specific bundle
+func (p *Paths) BundleDir(name string) string {
+	return filepath.Join(p.HubDir, string(HubBundles), name)
 }
 
 // HubItemPath returns the full path to a specific hub item

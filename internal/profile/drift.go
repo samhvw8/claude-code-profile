@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/hub"
 	"github.com/samhoang/ccp/internal/symlink"
 )
 
@@ -92,6 +93,14 @@ func (d *Detector) Detect(profile *Profile) (*DriftReport, error) {
 		report.Issues = append(report.Issues, issues...)
 	}
 
+	// Bundles are composite: check their presence and that every member symlink
+	// they materialize is still in place.
+	bundleIssues, err := d.detectBundleDrift(profile)
+	if err != nil {
+		return nil, err
+	}
+	report.Issues = append(report.Issues, bundleIssues...)
+
 	return report, nil
 }
 
@@ -108,6 +117,13 @@ func (d *Detector) detectItemTypeDrift(profile *Profile, itemType config.HubItem
 		if itemType == config.HubRules {
 			linkName = filepath.Base(name)
 		}
+		manifestLinkNames[linkName] = true
+	}
+
+	// Member symlinks materialized by linked bundles live in this same leaf dir
+	// but are tracked only by bundle name. Treat them as known so they are not
+	// reported (and then destroyed by Fix) as "extra" items.
+	for linkName := range d.bundleMemberLinkNames(profile, itemType) {
 		manifestLinkNames[linkName] = true
 	}
 
@@ -200,6 +216,66 @@ func (d *Detector) detectItemTypeDrift(profile *Profile, itemType config.HubItem
 		}
 	}
 
+	return issues, nil
+}
+
+// bundleMemberLinkNames returns the set of profile link names contributed by
+// linked bundles for a given leaf item type, so bundle-materialized symlinks
+// are not mistaken for un-tracked "extra" items.
+func (d *Detector) bundleMemberLinkNames(profile *Profile, itemType config.HubItemType) map[string]bool {
+	names := make(map[string]bool)
+	for _, bundleName := range profile.Manifest.Hub.Bundles {
+		bundle, err := hub.LoadBundle(d.paths.BundlesDir(), bundleName)
+		if err != nil {
+			continue
+		}
+		for _, member := range bundle.Members.AllComponents() {
+			if member.Type != string(itemType) {
+				continue
+			}
+			linkName := member.Name
+			if itemType == config.HubRules {
+				linkName = filepath.Base(member.Name)
+			}
+			names[linkName] = true
+		}
+	}
+	return names
+}
+
+// detectBundleDrift checks each linked bundle: that it still exists in the hub
+// and that every member symlink it should have materialized is present.
+func (d *Detector) detectBundleDrift(profile *Profile) ([]DriftItem, error) {
+	var issues []DriftItem
+	for _, bundleName := range profile.Manifest.Hub.Bundles {
+		bundle, err := hub.LoadBundle(d.paths.BundlesDir(), bundleName)
+		if err != nil {
+			issues = append(issues, DriftItem{
+				Type:     DriftHubMissing,
+				ItemType: config.HubBundles,
+				ItemName: bundleName,
+			})
+			continue
+		}
+		for _, member := range bundle.Members.AllComponents() {
+			linkName := member.Name
+			if member.Type == string(config.HubRules) {
+				linkName = filepath.Base(member.Name)
+			}
+			dst := filepath.Join(profile.Path, member.Type, linkName)
+			info, err := d.symMgr.Info(dst)
+			if err != nil {
+				return nil, err
+			}
+			if !info.Exists || info.IsBroken {
+				issues = append(issues, DriftItem{
+					Type:     DriftMissing,
+					ItemType: config.HubBundles,
+					ItemName: bundleName + " (" + member.Type + "/" + member.Name + ")",
+				})
+			}
+		}
+	}
 	return issues, nil
 }
 

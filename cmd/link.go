@@ -97,6 +97,24 @@ func runLink(cmd *cobra.Command, args []string) error {
 	itemType := config.HubItemType(parts[0])
 	itemName := parts[1]
 
+	// Bundles link atomically (expand to per-member symlinks). Handle before the
+	// leaf-type validation below, since "bundles" is not a leaf type.
+	if itemType == config.HubBundles {
+		scanner := hub.NewScanner()
+		h, err := scanner.Scan(paths.HubDir)
+		if err != nil {
+			return fmt.Errorf("failed to scan hub: %w", err)
+		}
+		if h.GetBundle(itemName) == nil {
+			return fmt.Errorf("bundle not found: %s", itemName)
+		}
+		if err := mgr.LinkHubBundle(profileName, itemName); err != nil {
+			return fmt.Errorf("failed to link bundle: %w", err)
+		}
+		fmt.Printf("Linked bundle %s to profile %s\n", itemName, profileName)
+		return nil
+	}
+
 	// Validate item type
 	valid := false
 	for _, t := range config.AllHubItemTypes() {

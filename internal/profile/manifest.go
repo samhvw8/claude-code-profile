@@ -38,6 +38,10 @@ type HubLinks struct {
 	Hooks    []string `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
 	Rules    []string `toml:"rules,omitempty" yaml:"rules,omitempty"`
 	Commands []string `toml:"commands,omitempty" yaml:"commands,omitempty"`
+	// Bundles lists linked composite items by name only. Their members are
+	// materialized as per-member symlinks at link time and are deliberately not
+	// recorded here, so a bundle can only be linked/unlinked as a whole.
+	Bundles []string `toml:"bundles,omitempty" yaml:"bundles,omitempty"`
 }
 
 // NewManifest creates a new manifest with defaults
@@ -132,6 +136,8 @@ func (m *Manifest) GetHubItems(itemType config.HubItemType) []string {
 		return m.Hub.Rules
 	case config.HubCommands:
 		return m.Hub.Commands
+	case config.HubBundles:
+		return m.Hub.Bundles
 	default:
 		return nil
 	}
@@ -150,6 +156,8 @@ func (m *Manifest) SetHubItems(itemType config.HubItemType, items []string) {
 		m.Hub.Rules = items
 	case config.HubCommands:
 		m.Hub.Commands = items
+	case config.HubBundles:
+		m.Hub.Bundles = items
 	}
 }
 

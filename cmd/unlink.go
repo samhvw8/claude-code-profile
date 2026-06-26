@@ -42,6 +42,24 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 	itemType := config.HubItemType(parts[0])
 	itemName := parts[1]
 
+	// Bundles unlink atomically (remove all member symlinks). Handle before the
+	// leaf-type validation below, since "bundles" is not a leaf type.
+	if itemType == config.HubBundles {
+		paths, err := config.ResolvePaths()
+		if err != nil {
+			return err
+		}
+		if !paths.IsInitialized() {
+			return fmt.Errorf("ccp not initialized: run 'ccp init' first")
+		}
+		mgr := profile.NewManager(paths)
+		if err := mgr.UnlinkHubBundle(profileName, itemName); err != nil {
+			return fmt.Errorf("failed to unlink bundle: %w", err)
+		}
+		fmt.Printf("Unlinked bundle %s from profile %s\n", itemName, profileName)
+		return nil
+	}
+
 	// Validate item type
 	valid := false
 	for _, t := range config.AllHubItemTypes() {

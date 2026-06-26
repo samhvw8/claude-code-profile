@@ -35,6 +35,14 @@ func (s *Scanner) Scan(hubPath string) (*Hub, error) {
 		hub.Items[itemType] = items
 	}
 
+	// Bundles are composite items scanned on their own path (not via
+	// AllHubItemTypes) so the leaf loop above never treats one as a leaf.
+	bundles, err := ListBundles(filepath.Join(hubPath, string(config.HubBundles)))
+	if err != nil {
+		return nil, err
+	}
+	hub.Bundles = bundles
+
 	return hub, nil
 }
 
