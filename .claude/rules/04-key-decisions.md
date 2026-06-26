@@ -32,6 +32,17 @@ Decisions that future sessions must respect. Do not re-open these without user r
 **Why:** Binary "Remove anyway? [y/N]" was destructive — choosing "y" left profiles with broken symlinks. Users need a way to keep their profile working after hub cleanup.
 **Implication:** Copy replaces symlink with local files and removes item from profile's `[hub]` manifest. `--copy` flag for scripting. `--force` still skips everything.
 
+## Bundles — atomic composite hub items (2026-06-26)
+
+**Decision:** Added a `bundles` hub item type: an atomic group of skills/agents/hooks/rules/commands that links and removes as one unit.
+**Why:** Coupled setups (e.g. pbakaus/impeccable, where a hook command points *into* its skill dir) break when their parts are linked separately. `source install` flattens such packages into independently-linkable items with nothing keeping them together.
+**Key choices:**
+- Bundle = self-contained dir `hub/bundles/<name>/` (Option A). Non-separability is structural — there is no `hub/skills/<member>` to link alone.
+- NOT in `config.AllHubItemTypes()` — it is composite; leaf-loops (scan, drift, settings) must not treat it as a leaf. Scanned/linked on its own path.
+- Manifest stores only the bundle name (`[hub] bundles`); members materialize as per-member symlinks at link time, so a member cannot be unlinked individually.
+- Composer (`ccp bundle create`) **copies** selected hub items in (non-destructive); originals remain. `--move` and `source install --as-bundle` are deliberate follow-ups.
+**Implication:** A *kind of hub item*, not a 6th top-level concept — the 5-concept budget is intact. Reuses `hub.ComponentList` for members and `processHooksJSON` for the settings merge.
+
 ## Command Surface (2026-03-31)
 
 **Decision:** ~18 visible commands, power-user commands hidden.

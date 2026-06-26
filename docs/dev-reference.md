@@ -92,6 +92,24 @@ Storage: `~/.ccp/hub/settings-templates/<name>/settings.json`
 
 Hooks are always overlaid from hub hooks, not stored in templates.
 
+## Bundles
+
+An atomic, non-separable group of hub items (skills, agents, hooks, rules, commands). Members live *inside* the bundle directory, so they can only be linked or removed as a unit — never individually.
+
+```bash
+ccp bundle create <name>                      # Interactive multi-select composer
+ccp bundle create <name> --skill a --hook b   # Non-interactive (repeatable flags)
+ccp bundle list
+ccp bundle show <name>
+ccp bundle remove <name>
+
+# Link/unlink as a unit (expands to per-member symlinks)
+ccp link <profile> bundles/<name>
+ccp unlink <profile> bundles/<name>
+```
+
+Storage: `~/.ccp/hub/bundles/<name>/` holds `bundle.yaml` plus the members under `skills/`, `agents/`, `hooks/`, etc. The composer **copies** selected hub items in (originals untouched). The profile manifest records only the bundle name (`[hub] bundles = [...]`); linking materializes per-member symlinks into the profile's leaf dirs and merges any bundle hooks into the generated `settings.json`. Bundles are a *composite* type, intentionally excluded from `config.AllHubItemTypes()` so leaf-item loops (scan, drift, settings) never treat one as a leaf.
+
 ## Project Setup
 
 Copy hub items into a project's `.claude/` directory for project-scoped Claude Code config. Items are copied (not symlinked) so the project is self-contained and git-committable.
@@ -280,7 +298,8 @@ Generate default config: `ccp config init`
 │   ├── hooks/
 │   ├── rules/
 │   ├── commands/
-│   └── settings-templates/     # Complete settings.json templates
+│   ├── settings-templates/     # Complete settings.json templates
+│   └── bundles/                # Atomic groups: skill+agent+hook linked together
 ├── store/                      # Shared downloadable resources
 │   └── plugins/
 │       ├── marketplaces/       # Downloaded marketplace repos

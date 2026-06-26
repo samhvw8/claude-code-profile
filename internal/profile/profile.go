@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/hub"
 	"github.com/samhoang/ccp/internal/symlink"
 )
 
@@ -282,6 +283,75 @@ func (m *Manager) UnlinkHubItem(profileName string, itemType config.HubItemType,
 
 	// Update manifest
 	profile.Manifest.RemoveHubItem(itemType, itemName)
+	return profile.Manifest.Save(ManifestPath(profile.Path))
+}
+
+// LinkHubBundle links an entire bundle to a profile by materializing each of
+// its members as a per-member symlink into the profile's leaf directories.
+// Only the bundle name is recorded in the manifest, so a bundle is atomic:
+// its members cannot be linked or unlinked individually.
+func (m *Manager) LinkHubBundle(profileName, bundleName string) error {
+	profile, err := m.Get(profileName)
+	if err != nil {
+		return err
+	}
+	if profile == nil {
+		return os.ErrNotExist
+	}
+
+	bundleDir := m.paths.BundleDir(bundleName)
+	bundle, err := hub.LoadBundle(m.paths.BundlesDir(), bundleName)
+	if err != nil {
+		return err
+	}
+
+	for _, member := range bundle.Members.AllComponents() {
+		src := filepath.Join(bundleDir, member.Type, member.Name)
+		if _, err := os.Stat(src); err != nil {
+			return err
+		}
+		linkName := member.Name
+		if member.Type == string(config.HubRules) {
+			linkName = filepath.Base(member.Name)
+		}
+		dst := filepath.Join(profile.Path, member.Type, linkName)
+		if err := m.symMgr.Create(dst, src); err != nil {
+			return err
+		}
+	}
+
+	profile.Manifest.AddHubItem(config.HubBundles, bundleName)
+	return profile.Manifest.Save(ManifestPath(profile.Path))
+}
+
+// UnlinkHubBundle removes a linked bundle and all of its materialized member
+// symlinks from a profile. Members are resolved from the bundle manifest (the
+// source of truth); if the bundle no longer exists in the hub, only the
+// manifest entry is removed and any orphaned member symlinks are left for
+// drift detection to report.
+func (m *Manager) UnlinkHubBundle(profileName, bundleName string) error {
+	profile, err := m.Get(profileName)
+	if err != nil {
+		return err
+	}
+	if profile == nil {
+		return os.ErrNotExist
+	}
+
+	if bundle, err := hub.LoadBundle(m.paths.BundlesDir(), bundleName); err == nil {
+		for _, member := range bundle.Members.AllComponents() {
+			linkName := member.Name
+			if member.Type == string(config.HubRules) {
+				linkName = filepath.Base(member.Name)
+			}
+			dst := filepath.Join(profile.Path, member.Type, linkName)
+			if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
+	}
+
+	profile.Manifest.RemoveHubItem(config.HubBundles, bundleName)
 	return profile.Manifest.Save(ManifestPath(profile.Path))
 }
 

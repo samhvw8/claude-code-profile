@@ -1,7 +1,7 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.39.0
-**Date:** 2026-06-20
+**Version:** 0.40.0
+**Date:** 2026-06-26
 **Status:** Draft
 
 ---
@@ -33,7 +33,8 @@ A local CLI tool (`ccp`) that manages a central hub of reusable components and m
 │   ├── rules/
 │   ├── hooks/
 │   ├── commands/
-│   └── settings-templates/           # Complete settings.json templates
+│   ├── settings-templates/           # Complete settings.json templates
+│   └── bundles/                      # Atomic groups: skill+agent+hook linked together
 │
 ├── store/                            # Shared downloadable resources
 │   └── plugins/
