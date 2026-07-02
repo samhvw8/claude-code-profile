@@ -1,6 +1,6 @@
 ---
 name: ccp-dev
-description: "Develop, debug, and extend ccp — the Claude Code Profile Manager CLI. Use when: adding a new command, fixing a bug in profile/hub/source logic, extending the source system, modifying settings generation, working with symlinks or manifests, understanding how ccp works internally. Actions: build, fix, add, extend, refactor, debug ccp code. Keywords: ccp, profile manager, hub item, source install, Cobra command, settings template, manifest, picker, symlink, migration, go build, go test. Casual triggers: 'add a command to ccp', 'ccp is broken', 'how does ccp source work', 'new ccp feature', 'profile not switching', 'hub items not linking'."
+description: "Develop, debug, and extend ccp — the Claude Code Profile Manager CLI. Use when: adding a new command, fixing a bug in profile/hub/source logic, extending the source system, modifying settings generation, working with symlinks or manifests, understanding how ccp works internally. Actions: build, fix, add, extend, refactor, debug ccp code. Keywords: ccp, profile manager, hub item, source install, Cobra command, settings template, manifest, picker, fuzzy search, symlink, migration, go build, go test. Casual triggers: 'add a command to ccp', 'ccp is broken', 'how does ccp source work', 'new ccp feature', 'profile not switching', 'hub items not linking', 'picker not working'."
 ---
 
 # ccp Development
@@ -19,53 +19,51 @@ internal/
 ├── profile/            # Profile CRUD, manifest, settings generation, drift
 ├── symlink/            # Platform-specific symlink operations (unix/windows)
 ├── migration/          # Format migrations, rollback
-└── picker/             # Bubble Tea multi-select TUI
+└── picker/             # Bubble Tea TUI (fuzzy search, tab-to-toggle, fzf-style)
 ```
 
 ## Patterns
 
 ### Adding a Command
-**When you see:** Need for a new CLI command
-**This indicates:** Create file in cmd/, wire to parent
-**Therefore:**
 1. Create `cmd/<parent>_<child>.go` (or `cmd/<name>.go` for top-level)
 2. Define `var <name>Cmd = &cobra.Command{...}` with `RunE`
 3. Register in `init()` with `parentCmd.AddCommand()`
 4. Keep cmd layer thin — delegate to `internal/`
-**Watch out:** Check complexity budget (max 5 user-facing concepts). Prefer flags on existing commands over new commands.
 
-### Hub Item Types
-**When you see:** Code referencing item types
-**This indicates:** Fixed set: skills, agents, commands, rules, hooks, settings-templates
-**Therefore:** Use `config.HubItemType` constants. Hub scanner discovers these from `~/.ccp/hub/<type>/`
-**Watch out:** Don't add new item types without strong justification
+**Watch out:** Max 5 user-facing concepts. Prefer flags on existing commands over new commands.
+
+### Picker TUI (`internal/picker/`)
+
+| File | Model | Use |
+|------|-------|-----|
+| `picker.go` | `Model` | Multi-select with checkboxes |
+| `single.go` | `SingleModel` | Single-select (profile switch) |
+| `tabbed.go` | `TabbedModel` | Multi-tab multi-select (profile create/edit) |
+| `fuzzy.go` | — | fzf-style fuzzy scorer + `sortByFuzzyScore()` |
+
+**Key behavior (fzf-style):**
+- `/` enters search mode — type to fuzzy-filter, results sorted by match quality
+- In search mode: `↑`/`↓` navigate, `Tab` toggles, `Enter` confirms, `Esc` clears
+- In normal mode: `Tab`/`Space` toggle, `a` all/none, `f` filter checked/unchecked
+- Fuzzy scoring: consecutive char bonus, word boundary bonus, start-of-string bonus
+- `getFilteredItems()` applies filter mode first, then `sortByFuzzyScore()` if search active
 
 ### Source System
-**When you see:** Code for fetching/installing external items
-**This indicates:** Three-layer architecture: Registry → Provider → Installer
-**Therefore:**
+Three-layer: Registry → Provider → Installer
 - Registry: resolves package ID to URL (skills.sh, GitHub, manual)
 - Provider: fetches content (git clone, HTTP download)
 - Installer: discovers items in source dir, copies to hub
-**Watch out:** Installer supports multiple layouts: root-level `skills/`, `.claude/skills/`, `.claude-plugin/plugin.json`, and `plugins/<name>/skills/`
+- Layouts: root `skills/`, `.claude/skills/`, `.claude-plugin/plugin.json`, `plugins/<name>/skills/`
 
 ### Settings Generation
-**When you see:** Code generating settings.json
-**This indicates:** Single function, not a pipeline
-**Therefore:** `profile.GenerateSettings(manifest, hubDir)` — loads template, overlays hooks, returns map
-**Watch out:** No processor/builder interfaces. This was deliberately simplified in v0.28.
+Single function, not a pipeline:
+`profile.GenerateSettings(manifest, hubDir)` — loads template, overlays hooks, returns map.
+No processor/builder interfaces (deliberately simplified in v0.28).
 
-### Profile Manifest
-**When you see:** Code reading/writing profile.toml
-**This indicates:** Manifest v3 (TOML format)
-**Therefore:** `profile.Manifest` struct with Name, Description, SettingsTemplate, Hub links
-**Watch out:** Version field drives migration. All data dirs are always shared — no per-type config.
-
-### Platform Symlinks
-**When you see:** Symlink creation/resolution
-**This indicates:** Platform-specific code with build tags
-**Therefore:** Use `internal/symlink/` package. Relative symlinks for portability.
-**Watch out:** macOS resolves `/var` → `/private/var`. Use `filepath.EvalSymlinks()` in tests.
+### Symlinks
+Use `internal/symlink/` package. Relative symlinks for portability.
+**Watch out:** macOS `/var` → `/private/var`. Use `filepath.EvalSymlinks()` in tests.
+**Watch out:** `os.Readlink` returns raw target — resolve relative targets with `filepath.Join(filepath.Dir(link), target)` before `os.Stat`.
 
 ## Anti-Patterns (Do NOT Re-introduce)
 
@@ -77,6 +75,7 @@ internal/
 | Processor interface chains | Single function suffices |
 | Configurable data sharing | All data always shared |
 | Force-updating git tags | Prevents GitHub CI from re-running |
+| External fuzzy lib | Hand-rolled 70-line scorer suffices |
 
 ## Build & Test
 
@@ -90,20 +89,15 @@ go mod tidy              # Dependencies
 ## Key Types
 
 ```go
-// Paths — all directory resolution
 type Paths struct {
     CcpDir, ClaudeDir, GlobalClaudeDir string
     HubDir, ProfilesDir, SharedDir, StoreDir string
 }
-
-// Manifest — profile definition (profile.toml)
 type Manifest struct {
     Version int
     Name, Description, SettingsTemplate string
     Hub HubLinks
 }
-
-// Source — external package in registry
 type Source struct {
     Registry, Provider, URL, Path, Ref, Commit string
     Installed []string

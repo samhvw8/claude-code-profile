@@ -99,6 +99,10 @@ func runSourceUpdate(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	fmt.Printf("\nUpdated %d/%d sources\n", updated, len(toUpdate))
+	if updated > 0 {
+		fmt.Printf("\n%d of %d sources had updates\n", updated, len(toUpdate))
+	} else {
+		fmt.Printf("\nAll %d sources up to date\n", len(toUpdate))
+	}
 	return nil
 }
