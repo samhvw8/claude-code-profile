@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/hub"
@@ -98,6 +99,85 @@ func loadFragment(profileDir string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to parse settings fragment: %w", err)
 	}
 	return fragment, nil
+}
+
+// DiffSettings returns keys in current that differ from base.
+// Objects are compared recursively; arrays and scalars use reflect.DeepEqual.
+func DiffSettings(base, current map[string]interface{}) map[string]interface{} {
+	diff := make(map[string]interface{})
+	for k, cv := range current {
+		bv, exists := base[k]
+		if !exists {
+			diff[k] = cv
+			continue
+		}
+		cm, cok := cv.(map[string]interface{})
+		bm, bok := bv.(map[string]interface{})
+		if cok && bok {
+			sub := DiffSettings(bm, cm)
+			if len(sub) > 0 {
+				diff[k] = sub
+			}
+			continue
+		}
+		if !reflect.DeepEqual(bv, cv) {
+			diff[k] = cv
+		}
+	}
+	return diff
+}
+
+// PreviewFragment computes the diff without writing to disk.
+func PreviewFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]interface{}, error) {
+	return computeFragment(paths, profileDir, manifest)
+}
+
+// UpdateFragment computes the diff between current settings.json and the base
+// template, strips hooks, and saves the result as settings-fragment.json.
+func UpdateFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]interface{}, error) {
+	fragment, err := computeFragment(paths, profileDir, manifest)
+	if err != nil {
+		return nil, err
+	}
+
+	fragmentPath := filepath.Join(profileDir, SettingsFragmentFile)
+	if len(fragment) == 0 {
+		os.Remove(fragmentPath)
+		return fragment, nil
+	}
+
+	if err := writeJSONFile(fragmentPath, fragment); err != nil {
+		return nil, fmt.Errorf("failed to write fragment: %w", err)
+	}
+
+	return fragment, nil
+}
+
+func computeFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]interface{}, error) {
+	settingsPath := filepath.Join(profileDir, "settings.json")
+	currentData, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read settings.json: %w", err)
+	}
+
+	var current map[string]interface{}
+	if err := json.Unmarshal(currentData, &current); err != nil {
+		return nil, fmt.Errorf("failed to parse settings.json: %w", err)
+	}
+
+	delete(current, "hooks")
+
+	base := make(map[string]interface{})
+	if manifest.SettingsTemplate != "" {
+		tmplMgr := hub.NewTemplateManager(paths.HubDir)
+		tmpl, err := tmplMgr.Load(manifest.SettingsTemplate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load template %s: %w", manifest.SettingsTemplate, err)
+		}
+		base = tmpl.Settings
+	}
+
+	return DiffSettings(base, current), nil
 }
 
 // deepMerge merges src into dst recursively.

@@ -617,3 +617,222 @@ func TestGenerateSettings_TemplateWithHooksKey_OverriddenByGeneratedHooks(t *tes
 		t.Error("expected SessionStart preserved from template")
 	}
 }
+
+func TestDiffSettings(t *testing.T) {
+	tests := []struct {
+		name          string
+		base, current map[string]interface{}
+		check         func(t *testing.T, diff map[string]interface{})
+	}{
+		{
+			name:    "identical maps produce empty diff",
+			base:    map[string]interface{}{"a": "1", "b": "2"},
+			current: map[string]interface{}{"a": "1", "b": "2"},
+			check: func(t *testing.T, diff map[string]interface{}) {
+				if len(diff) != 0 {
+					t.Errorf("expected empty diff, got %v", diff)
+				}
+			},
+		},
+		{
+			name:    "new key in current",
+			base:    map[string]interface{}{"a": "1"},
+			current: map[string]interface{}{"a": "1", "b": "2"},
+			check: func(t *testing.T, diff map[string]interface{}) {
+				if diff["b"] != "2" {
+					t.Errorf("expected b=2, got %v", diff["b"])
+				}
+				if _, has := diff["a"]; has {
+					t.Error("unchanged key 'a' should not appear in diff")
+				}
+			},
+		},
+		{
+			name:    "changed scalar",
+			base:    map[string]interface{}{"model": "sonnet"},
+			current: map[string]interface{}{"model": "opus"},
+			check: func(t *testing.T, diff map[string]interface{}) {
+				if diff["model"] != "opus" {
+					t.Errorf("expected model=opus, got %v", diff["model"])
+				}
+			},
+		},
+		{
+			name: "nested object partial change",
+			base: map[string]interface{}{
+				"env": map[string]interface{}{"A": "1", "B": "2"},
+			},
+			current: map[string]interface{}{
+				"env": map[string]interface{}{"A": "1", "B": "changed"},
+			},
+			check: func(t *testing.T, diff map[string]interface{}) {
+				env := diff["env"].(map[string]interface{})
+				if env["B"] != "changed" {
+					t.Errorf("expected env.B=changed, got %v", env["B"])
+				}
+				if _, has := env["A"]; has {
+					t.Error("unchanged nested key 'A' should not appear")
+				}
+			},
+		},
+		{
+			name:    "array replaced wholesale",
+			base:    map[string]interface{}{"arr": []interface{}{1, 2}},
+			current: map[string]interface{}{"arr": []interface{}{1, 2, 3}},
+			check: func(t *testing.T, diff map[string]interface{}) {
+				arr := diff["arr"].([]interface{})
+				if len(arr) != 3 {
+					t.Errorf("expected full array in diff, got len %d", len(arr))
+				}
+			},
+		},
+		{
+			name:    "deleted key in current not in diff",
+			base:    map[string]interface{}{"a": "1", "b": "2"},
+			current: map[string]interface{}{"a": "1"},
+			check: func(t *testing.T, diff map[string]interface{}) {
+				if len(diff) != 0 {
+					t.Errorf("deletions should not appear in diff, got %v", diff)
+				}
+			},
+		},
+		{
+			name:    "empty base means everything is diff",
+			base:    map[string]interface{}{},
+			current: map[string]interface{}{"a": "1", "b": "2"},
+			check: func(t *testing.T, diff map[string]interface{}) {
+				if len(diff) != 2 {
+					t.Errorf("expected 2 keys, got %d", len(diff))
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diff := DiffSettings(tt.base, tt.current)
+			tt.check(t, diff)
+		})
+	}
+}
+
+func TestUpdateFragment(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	// Create template with base settings
+	tmplDir := filepath.Join(hubDir, "settings-templates", "base")
+	os.MkdirAll(tmplDir, 0755)
+	baseTmpl := map[string]interface{}{
+		"model":       "sonnet",
+		"permissions": map[string]interface{}{"allow": []interface{}{"read"}},
+	}
+	data, _ := json.Marshal(baseTmpl)
+	os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644)
+
+	// Create profile with modified settings.json (user added a key + changed model)
+	os.MkdirAll(profileDir, 0755)
+	currentSettings := map[string]interface{}{
+		"model":       "opus",
+		"permissions": map[string]interface{}{"allow": []interface{}{"read"}},
+		"env":         map[string]interface{}{"DEBUG": "true"},
+		"hooks":       map[string]interface{}{"Stop": []interface{}{}},
+	}
+	data, _ = json.Marshal(currentSettings)
+	os.WriteFile(filepath.Join(profileDir, "settings.json"), data, 0644)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{SettingsTemplate: "base"}
+
+	fragment, err := UpdateFragment(paths, profileDir, manifest)
+	if err != nil {
+		t.Fatalf("UpdateFragment() error = %v", err)
+	}
+
+	if fragment["model"] != "opus" {
+		t.Errorf("expected model=opus in fragment, got %v", fragment["model"])
+	}
+	if fragment["env"] == nil {
+		t.Error("expected env in fragment")
+	}
+	if _, has := fragment["hooks"]; has {
+		t.Error("hooks should be stripped from fragment")
+	}
+	if _, has := fragment["permissions"]; has {
+		t.Error("unchanged permissions should not appear in fragment")
+	}
+
+	// Verify file was written
+	fragData, err := os.ReadFile(filepath.Join(profileDir, SettingsFragmentFile))
+	if err != nil {
+		t.Fatalf("fragment file not written: %v", err)
+	}
+	var saved map[string]interface{}
+	json.Unmarshal(fragData, &saved)
+	if saved["model"] != "opus" {
+		t.Errorf("saved fragment model = %v, want opus", saved["model"])
+	}
+}
+
+func TestUpdateFragment_NoTemplate(t *testing.T) {
+	tmpDir := t.TempDir()
+	profileDir := filepath.Join(tmpDir, "profile")
+	os.MkdirAll(profileDir, 0755)
+
+	// Settings with no base template — everything becomes the fragment
+	settings := map[string]interface{}{
+		"model": "opus",
+		"env":   map[string]interface{}{"X": "1"},
+	}
+	data, _ := json.Marshal(settings)
+	os.WriteFile(filepath.Join(profileDir, "settings.json"), data, 0644)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: filepath.Join(tmpDir, "hub")}
+	manifest := &Manifest{}
+
+	fragment, err := UpdateFragment(paths, profileDir, manifest)
+	if err != nil {
+		t.Fatalf("UpdateFragment() error = %v", err)
+	}
+
+	if len(fragment) != 2 {
+		t.Errorf("expected 2 keys (all settings as fragment), got %d", len(fragment))
+	}
+}
+
+func TestUpdateFragment_NoDiff_RemovesFragment(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profile")
+
+	// Template and settings are identical
+	tmplDir := filepath.Join(hubDir, "settings-templates", "same")
+	os.MkdirAll(tmplDir, 0755)
+	settings := map[string]interface{}{"model": "sonnet"}
+	data, _ := json.Marshal(settings)
+	os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644)
+
+	os.MkdirAll(profileDir, 0755)
+	os.WriteFile(filepath.Join(profileDir, "settings.json"), data, 0644)
+
+	// Pre-create a stale fragment
+	os.WriteFile(filepath.Join(profileDir, SettingsFragmentFile), []byte(`{"old":"stale"}`), 0644)
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{SettingsTemplate: "same"}
+
+	fragment, err := UpdateFragment(paths, profileDir, manifest)
+	if err != nil {
+		t.Fatalf("UpdateFragment() error = %v", err)
+	}
+
+	if len(fragment) != 0 {
+		t.Errorf("expected empty fragment, got %v", fragment)
+	}
+
+	// Stale fragment file should be removed
+	if _, err := os.Stat(filepath.Join(profileDir, SettingsFragmentFile)); err == nil {
+		t.Error("stale fragment file should have been removed")
+	}
+}

@@ -69,6 +69,10 @@ type Template struct {
 // internal/profile/generator.go
 // Single function replaces previous processor interfaces:
 func GenerateSettings(manifest *Manifest, hubDir string) (map[string]interface{}, error)
+// Diff/fragment functions:
+func DiffSettings(base, current map[string]interface{}) map[string]interface{}
+func UpdateFragment(paths *Paths, profileDir string, manifest *Manifest) (map[string]interface{}, error)
+func PreviewFragment(paths *Paths, profileDir string, manifest *Manifest) (map[string]interface{}, error)
 ```
 
 ## Settings Templates
@@ -91,6 +95,18 @@ ccp profile edit <name> --template minimal
 Storage: `~/.ccp/hub/settings-templates/<name>/settings.json`
 
 Hooks are always overlaid from hub hooks, not stored in templates.
+
+### Fragment Capture
+
+Capture manual edits to `settings.json` as a per-profile fragment so they survive regeneration:
+
+```bash
+ccp profile capture              # Capture from active profile
+ccp profile capture dev          # Capture from named profile
+ccp profile capture --dry-run    # Show diff without saving
+```
+
+Computes `DiffSettings(base_template, current_settings)` — strips hooks, saves only keys that differ from the base template as `settings-fragment.json`. If no template is set, all non-hook keys become the fragment. If no diff exists, removes any stale fragment file.
 
 ## Bundles
 
