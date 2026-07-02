@@ -147,18 +147,44 @@ func (m TabbedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searching = false
 				m.searchInput.SetValue("")
 				m.searchInput.Blur()
-				// Reset cursor and offset when exiting search
 				tab := &m.tabs[m.currentTab]
 				tab.cursor = 0
 				tab.offset = 0
 				return m, nil
-			case "tab", "enter":
-				m.searching = false
-				m.searchInput.Blur()
+			case "enter":
+				m.done = true
+				return m, tea.Quit
+			case "up":
+				tab := &m.tabs[m.currentTab]
+				filteredItems := m.getFilteredItems(tab)
+				if tab.cursor > 0 {
+					tab.cursor--
+				} else if len(filteredItems) > 0 {
+					tab.cursor = len(filteredItems) - 1
+				}
+				m.adjustScroll()
+				return m, nil
+			case "down":
+				tab := &m.tabs[m.currentTab]
+				filteredItems := m.getFilteredItems(tab)
+				if tab.cursor < len(filteredItems)-1 {
+					tab.cursor++
+				} else if len(filteredItems) > 0 {
+					tab.cursor = 0
+					tab.offset = 0
+				}
+				m.adjustScroll()
+				return m, nil
+			case "tab":
+				tab := &m.tabs[m.currentTab]
+				filteredItems := m.getFilteredItems(tab)
+				if len(filteredItems) > 0 && tab.cursor < len(filteredItems) {
+					id := filteredItems[tab.cursor].ID
+					tab.selected[id] = !tab.selected[id]
+				}
 				return m, nil
 			default:
 				m.searchInput, cmd = m.searchInput.Update(msg)
-				// Reset cursor when search changes
 				tab := &m.tabs[m.currentTab]
 				tab.cursor = 0
 				tab.offset = 0
@@ -361,8 +387,11 @@ func (m TabbedModel) View() string {
 	}
 
 	b.WriteString("\n")
-	helpText := "←/→: switch tab • ↑/↓: navigate • space: toggle • a: all/none • f: filter • /: search • enter: confirm • q: quit"
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render(helpText))
+	if m.searching {
+		b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • tab: toggle • enter: confirm • esc: clear"))
+	} else {
+		b.WriteString(lipgloss.NewStyle().Faint(true).Render("←/→: switch tab • ↑/↓: navigate • space: toggle • a: all/none • f: filter • /: search • enter: confirm • q: quit"))
+	}
 
 	return b.String()
 }
@@ -395,7 +424,7 @@ var tabbedKeys = tabbedKeyMap{
 		key.WithKeys("right", "l"),
 	),
 	Toggle: key.NewBinding(
-		key.WithKeys(" "),
+		key.WithKeys(" ", "tab"),
 	),
 	All: key.NewBinding(
 		key.WithKeys("a"),

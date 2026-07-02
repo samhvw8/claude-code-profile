@@ -163,9 +163,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.offset = 0
 				return m, nil
-			case "tab", "enter":
-				m.searching = false
-				m.searchInput.Blur()
+			case "enter":
+				m.done = true
+				return m, tea.Quit
+			case "up":
+				filteredItems := m.getFilteredItems()
+				if m.cursor > 0 {
+					m.cursor--
+				} else if len(filteredItems) > 0 {
+					m.cursor = len(filteredItems) - 1
+				}
+				m.adjustScroll()
+				return m, nil
+			case "down":
+				filteredItems := m.getFilteredItems()
+				if m.cursor < len(filteredItems)-1 {
+					m.cursor++
+				} else if len(filteredItems) > 0 {
+					m.cursor = 0
+					m.offset = 0
+				}
+				m.adjustScroll()
+				return m, nil
+			case "tab":
+				filteredItems := m.getFilteredItems()
+				if len(filteredItems) > 0 && m.cursor < len(filteredItems) {
+					id := filteredItems[m.cursor].ID
+					m.selected[id] = !m.selected[id]
+				}
 				return m, nil
 			default:
 				m.searchInput, cmd = m.searchInput.Update(msg)
@@ -332,7 +357,11 @@ func (m Model) View() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • space: toggle • a: all/none • f: filter • /: search • enter: confirm • q: quit"))
+	if m.searching {
+		b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • tab: toggle • enter: confirm • esc: clear"))
+	} else {
+		b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • space: toggle • a: all/none • f: filter • /: search • enter: confirm • q: quit"))
+	}
 
 	return b.String()
 }
@@ -357,7 +386,7 @@ var keys = keyMap{
 		key.WithKeys("down", "j"),
 	),
 	Toggle: key.NewBinding(
-		key.WithKeys(" "),
+		key.WithKeys(" ", "tab"),
 	),
 	All: key.NewBinding(
 		key.WithKeys("a"),

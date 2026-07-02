@@ -67,12 +67,19 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 			fmt.Println("FAIL")
 			fmt.Printf("  → Cannot read symlink: %v\n", err)
 			issues++
-		} else if _, err := os.Stat(target); os.IsNotExist(err) {
-			fmt.Println("FAIL")
-			fmt.Printf("  → Symlink target does not exist: %s\n", target)
-			issues++
 		} else {
-			fmt.Printf("OK → %s\n", filepath.Base(target))
+			// Resolve relative symlink targets against the symlink's parent dir
+			resolvedTarget := target
+			if !filepath.IsAbs(resolvedTarget) {
+				resolvedTarget = filepath.Join(filepath.Dir(paths.ClaudeDir), resolvedTarget)
+			}
+			if _, err := os.Stat(resolvedTarget); os.IsNotExist(err) {
+				fmt.Println("FAIL")
+				fmt.Printf("  → Symlink target does not exist: %s\n", target)
+				issues++
+			} else {
+				fmt.Printf("OK → %s\n", filepath.Base(target))
+			}
 		}
 	}
 

@@ -124,9 +124,27 @@ func (m SingleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.offset = 0
 				return m, nil
-			case "tab", "enter":
-				m.searching = false
-				m.searchInput.Blur()
+			case "enter":
+				m.done = true
+				return m, tea.Quit
+			case "up":
+				filteredItems := m.getFilteredItems()
+				if m.cursor > 0 {
+					m.cursor--
+				} else if len(filteredItems) > 0 {
+					m.cursor = len(filteredItems) - 1
+				}
+				m.adjustScroll()
+				return m, nil
+			case "down":
+				filteredItems := m.getFilteredItems()
+				if m.cursor < len(filteredItems)-1 {
+					m.cursor++
+				} else if len(filteredItems) > 0 {
+					m.cursor = 0
+					m.offset = 0
+				}
+				m.adjustScroll()
 				return m, nil
 			default:
 				m.searchInput, cmd = m.searchInput.Update(msg)
@@ -250,7 +268,11 @@ func (m SingleModel) View() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • /: search • enter: select • q: quit"))
+	if m.searching {
+		b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • enter: select • esc: clear"))
+	} else {
+		b.WriteString(lipgloss.NewStyle().Faint(true).Render("↑/↓: navigate • /: search • enter: select • q: quit"))
+	}
 
 	return b.String()
 }
