@@ -105,14 +105,10 @@ func (m Model) getFilteredItems() []Item {
 		if m.filter == filterUnchecked && m.selected[item.ID] {
 			continue
 		}
-		if m.searchInput.Value() != "" {
-			query := strings.ToLower(m.searchInput.Value())
-			if !strings.Contains(strings.ToLower(item.Label), query) &&
-				!strings.Contains(strings.ToLower(item.ID), query) {
-				continue
-			}
-		}
 		filtered = append(filtered, item)
+	}
+	if m.searchInput.Value() != "" {
+		filtered = sortByFuzzyScore(filtered, m.searchInput.Value())
 	}
 	return filtered
 }
@@ -167,7 +163,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.offset = 0
 				return m, nil
-			case "enter":
+			case "tab", "enter":
 				m.searching = false
 				m.searchInput.Blur()
 				return m, nil

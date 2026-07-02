@@ -91,14 +91,10 @@ func (m TabbedModel) getFilteredItems(tab *Tab) []Item {
 		if m.filter == filterUnchecked && tab.selected[item.ID] {
 			continue
 		}
-		if m.searchInput.Value() != "" {
-			query := strings.ToLower(m.searchInput.Value())
-			if !strings.Contains(strings.ToLower(item.Label), query) &&
-				!strings.Contains(strings.ToLower(item.ID), query) {
-				continue
-			}
-		}
 		filtered = append(filtered, item)
+	}
+	if m.searchInput.Value() != "" {
+		filtered = sortByFuzzyScore(filtered, m.searchInput.Value())
 	}
 	return filtered
 }
@@ -156,8 +152,7 @@ func (m TabbedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tab.cursor = 0
 				tab.offset = 0
 				return m, nil
-			case "enter":
-				// Exit search mode but keep filter
+			case "tab", "enter":
 				m.searching = false
 				m.searchInput.Blur()
 				return m, nil

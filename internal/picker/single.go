@@ -71,16 +71,7 @@ func (m SingleModel) getFilteredItems() []Item {
 	if m.searchInput.Value() == "" {
 		return m.items
 	}
-
-	query := strings.ToLower(m.searchInput.Value())
-	var filtered []Item
-	for _, item := range m.items {
-		if strings.Contains(strings.ToLower(item.Label), query) ||
-			strings.Contains(strings.ToLower(item.ID), query) {
-			filtered = append(filtered, item)
-		}
-	}
-	return filtered
+	return sortByFuzzyScore(m.items, m.searchInput.Value())
 }
 
 // adjustScroll ensures cursor is visible within the viewport
@@ -133,7 +124,7 @@ func (m SingleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 				m.offset = 0
 				return m, nil
-			case "enter":
+			case "tab", "enter":
 				m.searching = false
 				m.searchInput.Blur()
 				return m, nil
