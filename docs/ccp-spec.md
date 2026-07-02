@@ -1,6 +1,6 @@
 # ccp (Claude Code Profile) — Product Specification
 
-**Version:** 0.42.0
+**Version:** 0.43.0
 **Date:** 2026-07-02
 **Status:** Draft
 
@@ -882,6 +882,7 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 0.43.0 | 2026-07-02 | — | Fixed: source installer now discovers items from `.claude/` layout (canonical Claude Code directory), checked before `.agents/`/`.codex/` harness dirs. Previously only searched root, `.agents/`, `.codex/`, and marketplace layouts — missing `.claude/skills/` entirely. Added `.claude-plugin/plugin.json` marketplace manifest. Updated skills with installation instructions and picker docs. Fixed `source update` output message clarity. |
 | 0.42.0 | 2026-07-02 | — | Enhanced: TUI picker now uses fzf-style fuzzy search (scored by consecutive chars, word boundaries, start-of-string) with results sorted best-match-first. Tab toggles items in both normal and search modes. Arrow keys navigate while searching — no need to exit search first. Help text is context-aware (shows search-mode keys when searching). Fixed: `ccp doctor` symlink check now resolves relative symlink targets against the symlink's parent dir instead of CWD. |
 | 0.39.0 | 2026-06-20 | — | Added: install skills from repos whose `SKILL.md` is at the repository root (a "bare" skill repo, no `skills/<name>/` wrapper). `DiscoverItems` detects a root-level `SKILL.md` and installs the whole repo as `skills/<name>` (name from frontmatter `name:`, falling back to the source dir name); `CopyDir` skips `.git`. Also added install-by-URL: `ccp install https://github.com/owner/repo/blob/<ref>/SKILL.md` auto-adds the repo (honoring the URL's ref) and installs just that skill via `InstallPath`, copying everything at the `SKILL.md`'s level. `ParseGitWebURL` handles `/blob/`, `/tree/`, `raw.githubusercontent.com`, and GitLab `/-/blob/` URLs. |
 | 0.32.0 | 2026-04-15 | — | Enhanced: `hub remove` now offers copy-to-profile option when removing items used by profiles. Three-choice prompt (copy/delete/cancel) replaces binary "Remove anyway?" prompt. Added `--copy` flag for scripting. Copy operation replaces symlink with local files and updates profile manifest. |

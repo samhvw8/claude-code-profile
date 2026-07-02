@@ -187,8 +187,8 @@ func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem s
 			return
 		}
 
-		// Try Codex directories (.agents/, .codex/)
-		for _, codexDir := range codexDirs {
+		// Try harness directories (.claude/) then Codex directories (.agents/, .codex/)
+		for _, codexDir := range append(claudeDirs, harnessDirs...) {
 			candidate := filepath.Join(sourceDir, codexDir, itemType, itemName)
 			if _, statErr := os.Stat(candidate); statErr == nil {
 				srcPath = candidate
@@ -334,8 +334,11 @@ func (i *Installer) Uninstall(items []string) error {
 	return nil
 }
 
-// codexDirs are Codex-format directories to scan for items
-var codexDirs = []string{".agents", ".codex"}
+// claudeDirs is the canonical Claude Code layout directory
+var claudeDirs = []string{".claude"}
+
+// harnessDirs are other agent harness directories that mirror the root item layout
+var harnessDirs = []string{".agents", ".codex"}
 
 // DiscoverItems scans a source directory for installable items
 // Supports multiple structures:
@@ -371,7 +374,15 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 		addItem("skills/" + name)
 	}
 
-	// 2. Check for .claude-plugin/plugin.json and parse custom paths (plugin format)
+	// 2. Scan .claude/ — canonical Claude Code layout
+	for _, claudeDir := range claudeDirs {
+		for _, itemType := range itemTypes {
+			typeDir := filepath.Join(sourceDir, claudeDir, itemType)
+			i.scanItemDir(typeDir, itemType, addItem)
+		}
+	}
+
+	// 3. Check for .claude-plugin/plugin.json and parse custom paths (plugin format)
 	pluginJSON := filepath.Join(sourceDir, ".claude-plugin", "plugin.json")
 	if data, err := os.ReadFile(pluginJSON); err == nil {
 		i.discoverFromPluginJSON(sourceDir, data, itemTypes, addItem)
@@ -383,10 +394,10 @@ func (i *Installer) DiscoverItems(sourceDir string) []string {
 		i.discoverFromMarketplace(sourceDir, data, itemTypes, addItem)
 	}
 
-	// 4. Scan Codex-format directories (.agents/, .codex/)
-	for _, codexDir := range codexDirs {
+	// 4. Scan other harness directories (.agents/, .codex/)
+	for _, harnessDir := range harnessDirs {
 		for _, itemType := range itemTypes {
-			typeDir := filepath.Join(sourceDir, codexDir, itemType)
+			typeDir := filepath.Join(sourceDir, harnessDir, itemType)
 			i.scanItemDir(typeDir, itemType, addItem)
 		}
 	}
