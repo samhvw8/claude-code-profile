@@ -173,6 +173,18 @@ ccp source remove <name>                # Remove source
 5. `install` (no args) syncs all sources from ccp.toml - clones missing sources and reinstalls items
 6. `source add` tries skills.sh first, falls back to GitHub with default branch
 
+### Bootstrap (chezmoi sync)
+
+```bash
+ccp bootstrap          # Pull: sync sources + fix all profiles (run after chezmoi apply)
+ccp bootstrap --push   # Push: add local-only hub items to chezmoi (skip source-installed)
+```
+
+Designed for multi-machine sync via chezmoi. Source-installed items (tracked in `ccp.toml`) are re-downloaded, not synced — only local-only hub items, profiles, and `ccp.toml` go through chezmoi.
+
+**New machine:** `chezmoi apply && ccp bootstrap`
+**After changes:** `ccp bootstrap --push`
+
 ## Hooks Format
 
 Hooks use the official Claude Code `hooks.json` format for plugin compatibility:
