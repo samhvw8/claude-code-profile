@@ -27,6 +27,9 @@ type DriftItem struct {
 	ItemName   string
 	Expected   string // Expected target (for mismatched)
 	Actual     string // Actual target (for mismatched)
+	BundleName string // Parent bundle name (for bundle member drift)
+	MemberType string // Member type within bundle (e.g. "skills")
+	MemberName string // Member name within bundle
 }
 
 // DriftReport contains all drift issues for a profile
@@ -269,9 +272,12 @@ func (d *Detector) detectBundleDrift(profile *Profile) ([]DriftItem, error) {
 			}
 			if !info.Exists || info.IsBroken {
 				issues = append(issues, DriftItem{
-					Type:     DriftMissing,
-					ItemType: config.HubBundles,
-					ItemName: bundleName + " (" + member.Type + "/" + member.Name + ")",
+					Type:       DriftMissing,
+					ItemType:   config.HubBundles,
+					ItemName:   bundleName,
+					BundleName: bundleName,
+					MemberType: member.Type,
+					MemberName: member.Name,
 				})
 			}
 		}
@@ -347,6 +353,11 @@ func (d *Detector) Fix(profile *Profile, report *DriftReport, opts FixOptions) (
 
 // fixIssue fixes a single drift issue
 func (d *Detector) fixIssue(profile *Profile, issue DriftItem, dryRun bool) (string, error) {
+	// Bundle member drift: symlink points into the bundle dir, not hub/<type>
+	if issue.ItemType == config.HubBundles && issue.BundleName != "" {
+		return d.fixBundleMemberIssue(profile, issue, dryRun)
+	}
+
 	linkName := issue.ItemName
 	if issue.ItemType == config.HubRules {
 		linkName = filepath.Base(issue.ItemName)
@@ -397,4 +408,25 @@ func (d *Detector) fixIssue(profile *Profile, issue DriftItem, dryRun bool) (str
 	}
 
 	return "", nil
+}
+
+// fixBundleMemberIssue fixes a missing symlink for a bundle member.
+func (d *Detector) fixBundleMemberIssue(profile *Profile, issue DriftItem, dryRun bool) (string, error) {
+	linkName := issue.MemberName
+	if issue.MemberType == string(config.HubRules) {
+		linkName = filepath.Base(issue.MemberName)
+	}
+	itemPath := filepath.Join(profile.Path, issue.MemberType, linkName)
+	srcPath := filepath.Join(d.paths.BundleDir(issue.BundleName), issue.MemberType, issue.MemberName)
+
+	action := "create symlink: " + itemPath + " -> " + srcPath + " (bundle: " + issue.BundleName + ")"
+	if !dryRun {
+		if _, err := os.Stat(srcPath); err != nil {
+			return "", err
+		}
+		if err := d.symMgr.Create(itemPath, srcPath); err != nil {
+			return "", err
+		}
+	}
+	return action, nil
 }
