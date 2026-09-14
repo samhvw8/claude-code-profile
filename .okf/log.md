@@ -1,0 +1,7 @@
+# Update Log
+
+## 2026-09-14
+* **Initialization**: Created the bundle by migrating `docs/ccp-spec.md`, `docs/dev-reference.md`, `.claude/rules/01`–`05` and the knowledge sections of `CLAUDE.md`; the two docs and rules 04–05 were removed, rules 01–03 and `CLAUDE.md` now point here.
+* **Creation**: [Product](/product/), [architecture](/architecture/), [reference](/reference/), [features](/features/) including [omp](/features/omp/), [CLI](/cli/), [engineering](/engineering/), [decisions](/decisions/) and [anti-patterns](/anti-patterns/).
+* **Update**: Corrected stale facts while migrating — `GenerateSettings` signature checked against the code ([key types](/architecture/key-types.md)); omp follow described as retiring the outgoing profile's items, not "additive" ([profile switching](/features/omp/profile-switching.md)); `profile.yaml` → `profile.toml` and `~/.claude/hub` → `~/.ccp/hub` in the [acceptance criteria](/product/acceptance-criteria.md) and [journeys](/product/user-journeys.md); data-sharing wording dropped from AC-17/18 (removed in v0.28); US-4/7/8/9/10 marked implemented ([user stories](/product/user-stories.md)); removed `ccp skills update` flags dropped ([command flags](/cli/command-flags.md)); hub hooks shown as `hooks.json` directories rather than loose `.sh` files ([directory layout](/architecture/directory-layout.md)).
+* **Creation**: Added v0.44.0 and v0.45.0 to the [release history](/product/release-history.md) from the commit log.
