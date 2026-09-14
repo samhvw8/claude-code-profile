@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/hub"
 )
 
 // ManifestVersion is the current manifest format version
@@ -69,6 +71,9 @@ func LoadManifest(path string) (*Manifest, error) {
 
 	// Try TOML first (v2+ format)
 	if err := toml.Unmarshal(data, &m); err == nil && m.Version >= ManifestVersionV2 {
+		if err := m.validateItemNames(); err != nil {
+			return nil, err
+		}
 		return &m, nil
 	}
 
@@ -82,7 +87,24 @@ func LoadManifest(path string) (*Manifest, error) {
 		m.Version = 1
 	}
 
+	if err := m.validateItemNames(); err != nil {
+		return nil, err
+	}
 	return &m, nil
+}
+
+// validateItemNames rejects a hub item name that is not a single path element:
+// the name becomes a link name inside the profile and inside each harness, so
+// ".." would send that write outside the directory ccp owns.
+func (m *Manifest) validateItemNames() error {
+	for _, itemType := range config.AllHubItemTypes() {
+		for _, name := range m.GetHubItems(itemType) {
+			if err := hub.ValidateItemName(name); err != nil {
+				return fmt.Errorf("%s: %w", itemType, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Save writes the manifest to file (always TOML)

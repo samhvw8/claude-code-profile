@@ -72,6 +72,14 @@ func runProfileCheck(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Profile '%s' has configuration drift:\n\n", profileName)
 
+	if items, ok := byType[profile.DriftHubMissing]; ok {
+		fmt.Println("Hub missing (in manifest but not usable in the hub):")
+		for _, item := range items {
+			fmt.Printf("  - %s/%s\n", item.ItemType, item.ItemName)
+		}
+		fmt.Println()
+	}
+
 	if items, ok := byType[profile.DriftMissing]; ok {
 		fmt.Println("Missing (in manifest but not in directory):")
 		for _, item := range items {

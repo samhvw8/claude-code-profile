@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -62,6 +63,42 @@ func TestLoadBundleNameFallback(t *testing.T) {
 	}
 	if b.Name != "named-by-dir" {
 		t.Errorf("expected name to fall back to dir name, got %q", b.Name)
+	}
+}
+
+func TestLoadBundleRejectsEscapingMemberName(t *testing.T) {
+	bundlesDir := t.TempDir()
+	dir := filepath.Join(bundlesDir, "evil")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// A member name becomes a path inside the bundle, a profile and every linked
+	// harness, so ".." would resolve — and write — outside each of them.
+	manifest := "name: evil\nmembers:\n  skills:\n    - ../../../../ESCAPED\n"
+	if err := os.WriteFile(filepath.Join(dir, BundleManifestFile), []byte(manifest), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadBundle(bundlesDir, "evil")
+	if err == nil {
+		t.Fatal("LoadBundle() error = nil, want a rejection for a member name that escapes the bundle")
+	}
+	if !errors.Is(err, ErrInvalidItemName) {
+		t.Errorf("LoadBundle() error = %v, want ErrInvalidItemName", err)
+	}
+}
+
+func TestValidateItemName(t *testing.T) {
+	// Nested names are legitimate: rules are flattened into `group/tone.md`.
+	for _, name := range []string{"skill", "skill.md", "group-name_1", "a.b.c", "group/tone.md"} {
+		if err := ValidateItemName(name); err != nil {
+			t.Errorf("ValidateItemName(%q) = %v, want nil", name, err)
+		}
+	}
+	for _, name := range []string{"", ".", "..", "/abs/path", "../../x", "a/../../x", "a/.."} {
+		if err := ValidateItemName(name); !errors.Is(err, ErrInvalidItemName) {
+			t.Errorf("ValidateItemName(%q) = %v, want ErrInvalidItemName", name, err)
+		}
 	}
 }
 

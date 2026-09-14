@@ -35,7 +35,12 @@ func runBundleShow(cmd *cobra.Command, args []string) error {
 
 	bundle, err := hub.LoadBundle(paths.BundlesDir(), name)
 	if err != nil {
-		return fmt.Errorf("bundle not found: %s", name)
+		// Distinguish "not there" from "there but unusable": the second is
+		// usually a bad member name, and hiding it makes the bundle look absent.
+		if os.IsNotExist(err) {
+			return fmt.Errorf("bundle not found: %s", name)
+		}
+		return fmt.Errorf("cannot load bundle %s: %w", name, err)
 	}
 
 	fmt.Printf("Bundle: %s\n", bundle.Name)

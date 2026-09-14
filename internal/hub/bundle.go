@@ -1,8 +1,12 @@
 package hub
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -23,6 +27,32 @@ type Bundle struct {
 	Members     ComponentList `yaml:"members"`
 }
 
+// ErrInvalidItemName reports a hub item name that does not stay inside its item
+// directory.
+var ErrInvalidItemName = errors.New("invalid hub item name")
+
+// ValidateItemName rejects a hub item name that resolves outside its item
+// directory.
+//
+// A name is a path under a type directory — the hub's, a profile's, or a
+// harness's — and it becomes the *link* name in the last two, so a name that
+// climbs with ".." resolves to a path outside the tree ccp owns and sends the
+// write there. Names arrive from files ccp does not author alone (a bundle
+// manifest can be pulled from a source registry, a profile manifest is
+// hand-edited), which is why every one is checked before it is used. Nested
+// names are legitimate: the hub scanner flattens rule directories into
+// `group/tone.md`.
+func ValidateItemName(name string) error {
+	if name == "" || filepath.IsAbs(name) {
+		return fmt.Errorf("%w: %q must be a relative path", ErrInvalidItemName, name)
+	}
+	cleaned := path.Clean(filepath.ToSlash(name))
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("%w: %q must stay inside its item directory", ErrInvalidItemName, name)
+	}
+	return nil
+}
+
 // LoadBundle reads bundle.yaml from hub/bundles/<name>/.
 func LoadBundle(bundlesDir, name string) (*Bundle, error) {
 	path := filepath.Join(bundlesDir, name, BundleManifestFile)
@@ -36,6 +66,11 @@ func LoadBundle(bundlesDir, name string) (*Bundle, error) {
 	}
 	if b.Name == "" {
 		b.Name = name
+	}
+	for _, member := range b.Members.AllComponents() {
+		if err := ValidateItemName(member.Name); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
 	}
 	return &b, nil
 }

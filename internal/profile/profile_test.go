@@ -2,6 +2,7 @@ package profile
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhoang/ccp/internal/hub"
 )
 
 func TestNewManifest(t *testing.T) {
@@ -869,6 +871,40 @@ func TestLoadManifest_TOMLRoundTrip(t *testing.T) {
 	}
 	if len(loaded.Hub.Commands) != 3 {
 		t.Errorf("len(Commands) = %d, want 3", len(loaded.Hub.Commands))
+	}
+}
+
+func TestLoadManifestRejectsEscapingItemName(t *testing.T) {
+	dir := t.TempDir()
+
+	// An item name becomes a link name inside the profile and inside each linked
+	// harness, so ".." would send that write outside the directory ccp owns.
+	tomlPath := filepath.Join(dir, "profile.toml")
+	tomlBody := "version = 3\nname = 'evil'\n\n[hub]\nskills = ['../../../../ESCAPED']\n"
+	if err := os.WriteFile(tomlPath, []byte(tomlBody), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(tomlPath); !errors.Is(err, hub.ErrInvalidItemName) {
+		t.Errorf("LoadManifest(TOML) error = %v, want ErrInvalidItemName", err)
+	}
+
+	yamlPath := filepath.Join(dir, "profile.yaml")
+	yamlBody := "version: 1\nname: evil\nhub:\n  skills:\n    - ../../../../ESCAPED\n"
+	if err := os.WriteFile(yamlPath, []byte(yamlBody), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(yamlPath); !errors.Is(err, hub.ErrInvalidItemName) {
+		t.Errorf("LoadManifest(YAML) error = %v, want ErrInvalidItemName", err)
+	}
+
+	// An ordinary manifest still loads.
+	okPath := filepath.Join(dir, "ok.toml")
+	okBody := "version = 3\nname = 'ok'\n\n[hub]\nskills = ['keep']\nrules = ['group/tone.md']\n"
+	if err := os.WriteFile(okPath, []byte(okBody), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadManifest(okPath); err != nil {
+		t.Errorf("LoadManifest(ordinary manifest) error = %v, want nil", err)
 	}
 }
 
