@@ -26,6 +26,11 @@ func (r *Resetter) Execute() error {
 	if err != nil {
 		return fmt.Errorf("failed to read symlink %s: %w (is ccp initialized?)", r.paths.ClaudeDir, err)
 	}
+	// ccp writes relative symlink targets for portability, so resolve them
+	// against the symlink's own directory rather than the working directory.
+	if !filepath.IsAbs(activeProfile) {
+		activeProfile = filepath.Join(filepath.Dir(r.paths.ClaudeDir), activeProfile)
+	}
 
 	// Get the profile directory permissions to restore later
 	profileInfo, err := os.Stat(activeProfile)

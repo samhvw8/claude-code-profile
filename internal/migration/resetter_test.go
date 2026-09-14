@@ -8,6 +8,48 @@ import (
 	"github.com/samhoang/ccp/internal/config"
 )
 
+// ccp writes relative ~/.claude symlinks for portability; reset must resolve
+// them against the home directory, not the working directory.
+func TestResetter_Execute_RelativeSymlinkFromOtherCwd(t *testing.T) {
+	paths, _ := setupTestPaths(t)
+
+	defaultProfile := filepath.Join(paths.ProfilesDir, "default")
+	if err := os.MkdirAll(defaultProfile, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(defaultProfile, "CLAUDE.md"), []byte("# Test"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(".ccp", "profiles", "default"), paths.ClaudeDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run from somewhere else entirely, as a user would.
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origDir)
+	if err := os.Chdir(t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := NewResetter(paths).Execute(); err != nil {
+		t.Fatalf("Execute() from another directory failed: %v", err)
+	}
+
+	info, err := os.Lstat(paths.ClaudeDir)
+	if err != nil {
+		t.Fatalf("ClaudeDir should exist: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Error("~/.claude should be a regular directory after reset")
+	}
+	if _, err := os.Stat(filepath.Join(paths.ClaudeDir, "CLAUDE.md")); err != nil {
+		t.Errorf("profile content not restored: %v", err)
+	}
+}
+
 func TestNewResetter(t *testing.T) {
 	paths, _ := setupTestPaths(t)
 	r := NewResetter(paths)
