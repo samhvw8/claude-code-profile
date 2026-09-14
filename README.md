@@ -138,6 +138,22 @@ ccp project add skills/coding agents/reviewer
 | `ccp project list` | List items in project's `.claude/` |
 | `ccp project remove [items...]` | Remove items from project's `.claude/` |
 
+### Other Agents (omp)
+
+omp (oh-my-pi) reads its own config from `~/.omp/agent/` and only loads `~/.claude` when its `enabledProviders` setting opts in, so ccp mirrors a profile into omp's agent directory. Only items omp actually loads are linked (skills with descriptions, agents with a description and a resolvable model, commands); rules and Claude hooks are reported as inert instead, because omp surfaces a rule only with `description`/`alwaysApply` frontmatter and imports hooks as modules. `ccp omp` is hidden — run `ccp omp --help` for it.
+
+| Command | Description |
+|---------|-------------|
+| `ccp omp link skills/debugging commands/ship.md` | Link hub items into `~/.omp/agent/` |
+| `ccp omp link` | Interactive selection of items not linked yet |
+| `ccp omp sync [profile]` | Mirror a profile's skills and commands to omp |
+| `ccp omp list [profile] [--json]` | List links and show what a sync would change |
+| `ccp omp unlink skills/debugging` | Remove ccp links from omp |
+| `ccp omp unlink` / `--all` | Interactive selection, or remove everything ccp set up |
+| `ccp omp --profile work sync` | Target an omp named profile |
+
+Once anything is linked, `ccp use <profile> -g` syncs omp against the profile you switched to, including its global context: `~/.omp/agent/AGENTS.md` → the profile's `CLAUDE.md`, and `RULES.md` generated from the profile's rules. `ccp doctor` reports omp links too: broken ones (the hub item is gone) and drift against the active profile.
+
 ### Package Management
 
 | Command | Description |

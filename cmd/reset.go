@@ -10,6 +10,7 @@ import (
 
 	"github.com/samhoang/ccp/internal/config"
 	"github.com/samhoang/ccp/internal/migration"
+	"github.com/samhoang/ccp/internal/profile"
 )
 
 var (
@@ -62,6 +63,14 @@ func runReset(cmd *cobra.Command, args []string) error {
 	fmt.Printf("  Active profile: %s\n", target)
 	fmt.Printf("  Will restore to: %s\n", paths.ClaudeDir)
 	fmt.Printf("  Will remove: %s\n", paths.CcpDir)
+	// omp links point into ~/.ccp, so leaving them behind would leave dangling
+	// symlinks and a stale RULES.md in every omp session.
+	ompManaged, ompErr := profile.OmpManaged(paths)
+	if ompErr != nil {
+		fmt.Printf("  Warning: cannot inspect omp links: %v\n", ompErr)
+	} else if len(ompManaged) > 0 {
+		fmt.Printf("  Will remove: %d ccp link(s) in %s\n", len(ompManaged), profile.OmpAgentDir())
+	}
 	fmt.Println()
 
 	if !resetForce {
@@ -83,6 +92,18 @@ func runReset(cmd *cobra.Command, args []string) error {
 	resetter := migration.NewResetter(paths)
 	if err := resetter.Execute(); err != nil {
 		return fmt.Errorf("reset failed: %w", err)
+	}
+
+	// Only once the reset has actually happened: tearing down first would
+	// destroy the omp integration even when the reset aborts. Broken links still
+	// resolve by target path, so this works after ~/.ccp is gone.
+	if len(ompManaged) > 0 {
+		removed, err := profile.OmpTeardown(paths)
+		if err != nil {
+			fmt.Printf("Warning: could not remove omp links: %v\n", err)
+		} else {
+			fmt.Printf("Removed %d ccp link(s) from %s\n", len(removed), profile.OmpAgentDir())
+		}
 	}
 
 	fmt.Println()

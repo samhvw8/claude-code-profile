@@ -71,6 +71,25 @@ ccp source update                         # Update all sources
 ccp source add owner/repo                 # Add a source
 ```
 
+### Link Items to Other Agents
+
+omp (oh-my-pi) does not read `~/.claude` unless opted in, so ccp mirrors a profile into its own config directory — but only what omp actually loads. Rules and Claude hooks are reported as inert instead of being symlinked into directories omp ignores (`RULES.md` carries the rules).
+
+```bash
+ccp omp link skills/debugging commands/ship.md  # Link hub items to omp
+ccp omp link                                    # Interactive picker (no args)
+ccp omp sync                                    # Reconcile omp with active profile
+ccp omp list                                    # Links + missing/stale/inert vs profile
+ccp omp unlink skills/debugging                 # Remove ccp links
+ccp omp --profile work sync                     # Target an omp named profile
+```
+
+After the first link, `ccp use <profile> -g` mirrors the new profile additively
+(hand-made links survive and are reported, not pruned) and refreshes omp's global
+context (`AGENTS.md` → the profile's `CLAUDE.md`, `RULES.md` from its rules).
+`ccp doctor` reports broken omp links when the hub item behind them is gone.
+`ccp omp` is a hidden command.
+
 ## Picker Controls (fzf-style)
 
 | Key | Normal Mode | Search Mode (after /) |

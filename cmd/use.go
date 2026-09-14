@@ -172,6 +172,9 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 		}
 
 		globalMgr := profile.NewManager(&globalPaths)
+		// Read the outgoing profile before the symlink moves: its manifest is
+		// what lets the omp follow-up retire exactly its items.
+		previous, _ := globalMgr.GetActive()
 		if err := globalMgr.SetActive(profileName); err != nil {
 			return fmt.Errorf("failed to set active profile: %w", err)
 		}
@@ -181,6 +184,21 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 		}
 
 		fmt.Printf("Switched global profile to: %s\n", profileName)
+
+		// Once the user has opted in to omp links, a global switch mirrors the new
+		// profile and retires the previous profile's items. Failures are warnings:
+		// the switch itself already happened.
+		result, err := profile.OmpFollowProfile(paths, previous, p)
+		switch {
+		case err != nil:
+			fmt.Fprintf(os.Stderr, "Warning: could not sync omp links: %v\n", err)
+		case len(result.Linked) > 0 || len(result.Removed) > 0 || len(result.Context) > 0:
+			reportOmpResult(result)
+		}
+		if len(result.LeftBehind) > 0 {
+			fmt.Printf("Note: %d omp link(s) are not in profile '%s' — 'ccp omp sync' would prune them\n",
+				len(result.LeftBehind), p.Name)
+		}
 		return nil
 	}
 

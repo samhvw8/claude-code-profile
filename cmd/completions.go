@@ -140,3 +140,30 @@ func completeProjectRemoveArgs(cmd *cobra.Command, args []string, toComplete str
 
 	return items, cobra.ShellCompDirectiveNoFileComp
 }
+
+// completeOmpArgs returns completion for omp link/unlink (hub items omp can read)
+func completeOmpArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	paths, err := config.ResolvePaths()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	if !paths.IsInitialized() {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	scanner := hub.NewScanner()
+	h, err := scanner.Scan(paths.HubDir)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var items []string
+	for _, itemType := range profile.OmpLinkTypes {
+		for _, item := range h.GetItems(itemType) {
+			items = append(items, string(itemType)+"/"+item.Name)
+		}
+	}
+
+	return items, cobra.ShellCompDirectiveNoFileComp
+}

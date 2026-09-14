@@ -651,14 +651,20 @@ export CLAUDE_CONFIG_DIR=$(ccp auto --path 2>/dev/null || echo ~/.claude)
 | `ccp env <profile>` | Configure project env for a profile | `ccp env dev --format=mise` |
 | `ccp config shell` | Output shell aliases for Claude integration | `ccp config shell >> ~/.zshrc` |
 
-### Codex Commands
+### omp Commands
+
+omp (oh-my-pi) reads ~/.omp/agent/ and only loads ~/.claude when its `enabledProviders` setting opts in, so ccp mirrors a profile into omp's own agent directory. Skills, agents and commands are linked; rules are not, because omp surfaces a rule only when its frontmatter routes it somewhere and a rule that fails to route is dropped without a word — every profile rule travels in `RULES.md` instead, which ccp generates and omp injects into every session (always on, as in Claude Code). An item omp ignores is still linked and reported with its reason: a wrong guess about another program's loader must never take configuration away. Claude `hooks.json` files are skipped because omp imports hook modules from `hooks/pre` and `hooks/post`, and `ccp omp sync` also mirrors the profile's `CLAUDE.md` as `AGENTS.md`. Everything reported is checked live with `ccp doctor --verify-omp`, which asks a running omp what its system prompt actually carries (see docs/dev-reference.md). `ccp omp` is a hidden power-user command. Codex support is not implemented; there is no `ccp codex` command.
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `ccp codex link <items...>` | Link hub skills to ~/.agents/skills/ for Codex | `ccp codex link skills/debugging` |
-| `ccp codex unlink <items...>` | Remove skill links from ~/.agents/skills/ | `ccp codex unlink skills/debugging` |
-| `ccp codex sync [profile]` | Sync all profile skills to Codex | `ccp codex sync dev` |
-| `ccp codex list` | List hub skills linked to Codex | `ccp codex list` |
+| `ccp omp link <items...>` | Link hub skills, agents and commands into ~/.omp/agent/ (no args = interactive picker) | `ccp omp link skills/debugging` |
+| `ccp omp unlink <items...>` | Remove ccp links from ~/.omp/agent/ (no args = interactive picker, `--all` = everything ccp set up) | `ccp omp unlink skills/debugging` |
+| `ccp omp sync [profile]` | Sync a profile's hub items to omp, and regenerate RULES.md from its rules | `ccp omp sync dev` |
+| `ccp omp list [profile] [--json]` | List links and diff them against a profile (missing/stale/ignored) | `ccp omp list` |
+| `ccp omp --profile <name> <cmd>` | Target an omp named profile (as if OMP_PROFILE were exported; an invalid name is an error) | `ccp omp --profile work sync` |
+| `ccp doctor --verify-omp` | Ask a live omp what its system prompt carries, and compare it with the active profile | `ccp doctor --verify-omp` |
+
+Once ccp owns anything in omp's current tree, `ccp use <profile> -g` mirrors the newly active profile additively (it links what the profile wants and never prunes, so hand-made links survive a switch and are reported instead); `ccp omp sync` is the reconciling command. A project-scoped `ccp use` (no `-g`) leaves omp alone, since omp's project roots cover that case, and `ccp bootstrap` mirrors the active profile only when ccp already owns something in the tree it would write into. `sync` also sets up the profile's global context: `~/.omp/agent/AGENTS.md` → the profile's `CLAUDE.md`, and `~/.omp/agent/RULES.md` carrying every rule of the profile. `ccp doctor` reports omp links: broken ones (hub item deleted) are fixable with `--fix`, and drift against the active profile points at `ccp omp sync`; `ccp doctor --verify-omp` additionally asks a live omp what its prompt carries.
 
 ### Profile Commands
 

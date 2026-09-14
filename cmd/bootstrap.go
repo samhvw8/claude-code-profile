@@ -72,6 +72,34 @@ func runBootstrapPull() error {
 		}
 	}
 
+	// Step 3: omp, only when the user has actually opted in on this machine.
+	// Opt-in is "ccp owns something in omp": writing AGENTS.md into a harness the
+	// user never linked would silently push the profile into every omp session.
+	if agentDir := profile.OmpAgentDir(); agentDir != "" {
+		if _, err := os.Stat(agentDir); err == nil {
+			optedIn, err := profile.OmpOptedIn(paths)
+			switch {
+			case err != nil:
+				fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
+			case !optedIn:
+				fmt.Println("=== omp ===")
+				fmt.Println("  omp is installed but ccp has not linked anything here; run 'ccp omp sync' to mirror a profile")
+			default:
+				active, err := mgr.GetActive()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
+				} else if active == nil {
+					fmt.Println("  No active profile; nothing to mirror")
+				} else if result, err := profile.OmpSync(paths, active); err != nil {
+					fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
+				} else {
+					fmt.Printf("=== Syncing omp ===\n  Mirrored profile '%s': %d linked, %d removed, %d notes\n",
+						active.Name, len(result.Linked), len(result.Removed), len(result.Notes))
+				}
+			}
+		}
+	}
+
 	fmt.Println("\nBootstrap complete.")
 	return nil
 }
