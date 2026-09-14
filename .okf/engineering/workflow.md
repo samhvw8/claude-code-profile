@@ -3,7 +3,7 @@ type: Playbook
 title: Development and release workflow
 description: How to change ccp safely — build and test loop, common tasks, release and tagging, git rules, version tracking.
 tags: [engineering, workflow, release, git]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: claude-code/claude-opus-5, at: 2026-09-14T03:04:41Z }
 sources:
   - id: workflow-rule
     resource: ".claude/rules/03-workflow.md (pre-migration version, 2026-09-14)"
@@ -47,7 +47,7 @@ Conventions: [code standards](/engineering/code-standards.md).
 
 When asked to "update docs and commit" or similar:
 
-1. Update the affected [`.okf/`](/engineering/knowledge-maintenance.md) concepts, their `index.md`, and `log.md` — plus `CLAUDE.md`'s version line — in one pass.
+1. Update the affected [`.okf/`](/engineering/knowledge-maintenance.md) concepts, their `index.md`, and `log.md` — plus the version in `CLAUDE.md` and `.claude-plugin/plugin.json` — in one pass.
 2. Add the release to [release history](/product/release-history.md).
 3. Stage and commit with a descriptive message.
 4. Create a version tag if the version was bumped.
@@ -67,4 +67,5 @@ When asked to "update docs and commit" or similar:
 |-------|-----|
 | Git tag | Source of truth |
 | `CLAUDE.md` line 3 | `**Current version: vX.Y.Z**` — update on release |
+| `.claude-plugin/plugin.json` | `"version": "X.Y.Z"` — update on release (it lagged at 0.42.0 until v0.46.0) |
 | `cmd/root.go` | Set at build time via ldflags; no manual change |

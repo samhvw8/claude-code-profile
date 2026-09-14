@@ -3,23 +3,24 @@ type: Changelog
 title: Release history
 description: What changed in each ccp release that the spec recorded, newest first.
 tags: [product, releases, history]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: claude-code/claude-opus-5, at: 2026-09-14T03:04:41Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md revision history (removed 2026-09-14 by the OKF migration)"
     title: ccp product specification
   - id: git-log
     resource: "git log of this repository"
-    title: Commit messages for v0.44.0 and v0.45.0
+    title: Commit messages for v0.44.0 and later
 ---
 
 # Releases
 
-The spec's history stopped at 0.43.0; the two rows above it come from the commit log.[^git-log]
+The spec's history stopped at 0.43.0; rows from 0.44.0 on come from the commit log.[^git-log]
 The authoritative version is the latest git tag (also stated in `CLAUDE.md`).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.46.0 | 2026-09-14 | Added: hidden `ccp omp` group mirroring a profile into omp's agent directory — skills, agents and commands linked, every rule carried in a generated `RULES.md`, `CLAUDE.md` linked as `AGENTS.md`; `ccp use -g` follows once opted in; `reset`/`unlink --all` tear down every omp agent directory; `ccp doctor --verify-omp` asks a live omp what its prompt carries ([omp](/features/omp/overview.md)). Fixed: hub item names are validated in bundles and manifests so `..` cannot escape the tree; `ccp reset` resolves a relative `~/.claude` symlink from any directory; `ccp doctor` counts broken symlinks as issues; `profile check` lists hub_missing drift; `bundle show` names why a bundle cannot load. Docs: project knowledge moved into the `.okf/` bundle. Known issue: `model: inherit` agents are linked but fail to spawn in omp. |
 | 0.45.0 | 2026-07-11 | Fixed: drift detection resolves bundle member symlinks during `profile fix`. |
 | 0.44.0 | 2026-07-03 | Added: `ccp bootstrap` for multi-machine chezmoi sync ([bootstrap](/features/bootstrap.md)). |
 | 0.43.0 | 2026-07-02 | Fixed: source installer discovers items from the `.claude/` layout, checked before `.agents/`/`.codex/`. Added `.claude-plugin/plugin.json` marketplace manifest. Updated skills with installation and picker docs. Clearer `source update` output. |
@@ -54,4 +55,4 @@ The authoritative version is the latest git tag (also stated in `CLAUDE.md`).
 | 0.4.0 | 2026-01-29 | reset, status, doctor, which, auto, session, run, usage; hub CRUD; profile clone/diff/sync; `.ccp.yaml`. |
 | 0.1.0 | 2025-01-28 | Initial specification. |
 
-[^git-log]: Commit messages for v0.44.0 and v0.45.0
+[^git-log]: Commit messages for v0.44.0 and later
