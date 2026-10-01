@@ -1,7 +1,7 @@
 ---
 type: Requirements
 title: User stories
-description: The ten user stories ccp was specified against, with their implementation status as of v0.47.
+description: The ten user stories ccp was specified against, with their implementation status as of v0.48.
 tags: [product, requirements]
 generated: { by: claude-code/claude-opus-5, at: 2026-09-14T03:04:41Z }
 sources:
