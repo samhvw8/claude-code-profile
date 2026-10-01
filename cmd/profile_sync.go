@@ -74,6 +74,7 @@ func runProfileSync(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 			} else {
 				fmt.Println("  Done")
+				followOpencode(paths, p.Name)
 			}
 		}
 		return nil
@@ -108,6 +109,7 @@ func runProfileSync(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Println("Done")
+	followOpencode(paths, p.Name)
 
 	return nil
 }

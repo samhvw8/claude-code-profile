@@ -57,6 +57,7 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to unlink bundle: %w", err)
 		}
 		fmt.Printf("Unlinked bundle %s from profile %s\n", itemName, profileName)
+		followOpencode(paths, profileName)
 		return nil
 	}
 
@@ -89,5 +90,6 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Unlinked %s/%s from profile %s\n", itemType, itemName, profileName)
+	followOpencode(paths, profileName)
 	return nil
 }

@@ -109,6 +109,7 @@ func runLink(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to link bundle: %w", err)
 		}
 		fmt.Printf("Linked bundle %s to profile %s\n", itemName, profileName)
+		followOpencode(paths, profileName)
 		return nil
 	}
 
@@ -141,6 +142,7 @@ func runLink(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Linked %s/%s to profile %s\n", itemType, itemName, profileName)
+	followOpencode(paths, profileName)
 	return nil
 }
 
@@ -218,6 +220,7 @@ func runInteractiveLink(paths *config.Paths, p *profile.Profile) error {
 	}
 
 	fmt.Printf("Profile '%s' updated successfully\n", p.Name)
+	followOpencode(paths, p.Name)
 	return nil
 }
 

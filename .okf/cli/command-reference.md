@@ -21,7 +21,7 @@ sources:
 
 Power-user commands are hidden from `--help` but still work ([decision](/decisions/command-surface.md)).
 Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune`, `hub protect`,
-`hub unprotect`, `hub rename`, `omp`, `profile check`, `profile clone`, `profile diff`, `run`,
+`hub unprotect`, `hub rename`, `omp`, `opencode`, `profile check`, `profile clone`, `profile diff`, `run`,
 `session`, `usage`. Flags: [command flags](/cli/command-flags.md).
 
 # Core
@@ -123,5 +123,13 @@ Workflow and discovery layouts: [source system](/features/source-system.md).
 | `ccp doctor --verify-omp` | Ask a live omp what its prompt carries | `ccp doctor --verify-omp` |
 
 Behavior: [omp integration](/features/omp/overview.md).
+
+# opencode (hidden)
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp opencode sync [profile]` | Write converted copies of a profile's agents and commands into `~/.config/opencode` (default: active profile); opts in to following | `ccp opencode sync` |
+
+Behavior: [opencode integration](/features/opencode.md).
 
 [^hidden-cmds]: Hidden command declarations

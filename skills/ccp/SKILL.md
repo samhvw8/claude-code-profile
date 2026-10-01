@@ -118,6 +118,18 @@ context (`AGENTS.md` → the profile's `CLAUDE.md`, `RULES.md` from its rules).
 `ccp doctor` reports broken omp links when the hub item behind them is gone.
 `ccp omp` is a hidden command.
 
+opencode reads `~/.claude/CLAUDE.md` and `~/.claude/skills/` itself; point its
+`instructions` at `"{env:HOME}/.claude/rules/*.md"` for rules. Agents and
+commands need converting, which ccp does:
+
+```bash
+ccp opencode sync            # Write the active profile's agents/commands into ~/.config/opencode
+```
+
+After the first sync, `ccp use -g`, link/unlink and `ccp bootstrap` keep it
+current. ccp only replaces files it wrote; hooks are not mirrored (opencode
+uses plugins). `ccp opencode` is a hidden command.
+
 ## Picker Controls (fzf-style)
 
 | Key | Normal Mode | Search Mode (after /) |

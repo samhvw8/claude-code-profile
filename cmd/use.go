@@ -186,6 +186,7 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 		}
 
 		fmt.Printf("Switched global profile to: %s\n", profileName)
+		followOpencode(paths, profileName)
 
 		// Once the user has opted in to omp links, a global switch mirrors the new
 		// profile and retires the previous profile's items. Failures are warnings:

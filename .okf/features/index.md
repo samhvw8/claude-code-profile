@@ -8,3 +8,4 @@
 # Integrations
 
 * [omp (oh-my-pi)](omp/) - Mirroring a profile into omp's own agent directory: what is linked, global context, switching, health, teardown.
+* [opencode](opencode.md) - Mirroring a profile into opencode: what opencode already reads, what ccp converts and writes, ownership, and when it follows automatically.

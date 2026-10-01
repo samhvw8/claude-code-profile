@@ -132,6 +132,7 @@ func runProfileEdit(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Profile '%s' updated successfully\n", profileName)
+	followOpencode(paths, profileName)
 	return nil
 }
 
