@@ -46,6 +46,10 @@ func (p *GitProvider) Fetch(ctx context.Context, url string, destPath string, op
 	}
 
 	args := []string{"clone", "--depth", "1"}
+	if opts.Progress && !stdoutIsTerminal() {
+		// Progress meters are for people; piped output (scripts, agents) gets none
+		args = append(args, "--quiet")
+	}
 	if opts.Ref != "" {
 		args = append(args, "--branch", opts.Ref)
 	}
@@ -169,4 +173,10 @@ func normalizeGitURL(url string) string {
 	}
 
 	return url
+}
+
+// stdoutIsTerminal reports whether ccp's stdout is an interactive terminal.
+func stdoutIsTerminal() bool {
+	info, err := os.Stdout.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
