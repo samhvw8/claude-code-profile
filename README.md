@@ -24,6 +24,12 @@ Claude Code's 20 skill limit forces manual reconfiguration for different work mo
 go install github.com/samhvw8/claude-code-profile/cmd/ccp@latest
 ```
 
+Or install a prebuilt release binary with [mise](https://mise.jdx.dev):
+
+```bash
+mise use -g github:samhvw8/claude-code-profile
+```
+
 Or build from source:
 
 ```bash

@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-10-01
+* **Update**: Released v0.47.0 — added the release to [release history](/product/release-history.md) and moved the status line in [user stories](/product/user-stories.md) to v0.47.
 * **Update**: Module renamed to `github.com/samhvw8/claude-code-profile` and the entry point moved from `main.go` to `cmd/ccp/` — recorded in the [package layout](/architecture/package-layout.md); build commands in the [workflow](/engineering/workflow.md) now use `./cmd/ccp`.
 
 ## 2026-09-14

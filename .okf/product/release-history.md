@@ -3,7 +3,7 @@ type: Changelog
 title: Release history
 description: What changed in each ccp release that the spec recorded, newest first.
 tags: [product, releases, history]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T03:04:41Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T00:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md revision history (removed 2026-09-14 by the OKF migration)"
@@ -20,6 +20,7 @@ The authoritative version is the latest git tag (also stated in `CLAUDE.md`).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.47.0 | 2026-10-01 | Changed: the Go module is now `github.com/samhvw8/claude-code-profile` and the entry point moved to `cmd/ccp`, so `go install` takes `github.com/samhvw8/claude-code-profile/cmd/ccp@latest` ([package layout](/architecture/package-layout.md)). Also the first published build of the 0.46.0 changes, whose tag never produced a GitHub release. |
 | 0.46.0 | 2026-09-14 | Added: hidden `ccp omp` group mirroring a profile into omp's agent directory — skills, agents and commands linked, every rule carried in a generated `RULES.md`, `CLAUDE.md` linked as `AGENTS.md`; `ccp use -g` follows once opted in; `reset`/`unlink --all` tear down every omp agent directory; `ccp doctor --verify-omp` asks a live omp what its prompt carries ([omp](/features/omp/overview.md)). Fixed: hub item names are validated in bundles and manifests so `..` cannot escape the tree; `ccp reset` resolves a relative `~/.claude` symlink from any directory; `ccp doctor` counts broken symlinks as issues; `profile check` lists hub_missing drift; `bundle show` names why a bundle cannot load. Docs: project knowledge moved into the `.okf/` bundle. Known issue: `model: inherit` agents are linked but fail to spawn in omp. |
 | 0.45.0 | 2026-07-11 | Fixed: drift detection resolves bundle member symlinks during `profile fix`. |
 | 0.44.0 | 2026-07-03 | Added: `ccp bootstrap` for multi-machine chezmoi sync ([bootstrap](/features/bootstrap.md)). |
