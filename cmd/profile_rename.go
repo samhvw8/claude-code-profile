@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -84,7 +83,6 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 
 	if manifest != nil {
 		manifest.Name = newName
-		manifest.Updated = time.Now()
 		if err := manifest.Save(manifestPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not save updated manifest: %v\n", err)
 		}

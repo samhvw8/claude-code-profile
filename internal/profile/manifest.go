@@ -28,7 +28,6 @@ type Manifest struct {
 	Context          string              `toml:"context,omitempty" yaml:"context,omitempty"`   // Deprecated: flattened by migration
 	SettingsTemplate string              `toml:"settings-template,omitempty" yaml:"settings-template,omitempty"`
 	Created          time.Time           `toml:"created" yaml:"created"`
-	Updated          time.Time           `toml:"updated" yaml:"updated"`
 	Hub   HubLinks            `toml:"hub" yaml:"hub"`
 	Hooks []config.HookConfig `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
 }
@@ -55,7 +54,6 @@ func NewManifest(name, description string) *Manifest {
 		Name:        name,
 		Description: description,
 		Created:     now,
-		Updated:     now,
 		Hub:         HubLinks{},
 	}
 }
@@ -109,7 +107,6 @@ func (m *Manifest) validateItemNames() error {
 
 // Save writes the manifest to file (always TOML)
 func (m *Manifest) Save(path string) error {
-	m.Updated = time.Now()
 	m.Version = ManifestVersion
 
 	data, err := toml.Marshal(m)
