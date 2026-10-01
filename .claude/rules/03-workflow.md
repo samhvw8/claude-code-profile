@@ -7,6 +7,7 @@
   dated `.okf/log.md` entry. Load the `okf` skill first; run the `validate` skill with `--strict` before
   calling doc work done.
 - Release: update `.okf/`, the version in `CLAUDE.md` and `.claude-plugin/plugin.json`, add the release to
-  `.okf/product/release-history.md`, commit, tag — do not push.
+  `.okf/product/release-history.md`, commit, tag — do not push. The user pushes with `--follow-tags`;
+  a tag left behind means no release.
 
 Detail: `.okf/engineering/workflow.md`, `.okf/engineering/code-standards.md`.

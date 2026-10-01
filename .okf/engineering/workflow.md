@@ -3,7 +3,7 @@ type: Playbook
 title: Development and release workflow
 description: How to change ccp safely — build and test loop, common tasks, release and tagging, git rules, version tracking.
 tags: [engineering, workflow, release, git]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T03:04:41Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T03:00:00Z }
 sources:
   - id: workflow-rule
     resource: ".claude/rules/03-workflow.md (pre-migration version, 2026-09-14)"
@@ -51,7 +51,10 @@ When asked to "update docs and commit" or similar:
 2. Add the release to [release history](/product/release-history.md).
 3. Stage and commit with a descriptive message.
 4. Create a version tag if the version was bumped.
-5. **Do not push** — the user pushes after reviewing.
+5. **Do not push** — the user pushes after reviewing, with `git push --follow-tags` (or
+   `git config push.followTags true` once). The Release workflow runs only when the tag reaches
+   GitHub: v0.46.0 was tagged but its tag never left the machine, so no release was built and mise
+   users stayed on v0.45.0 until v0.47.0.
 
 # Git rules
 
