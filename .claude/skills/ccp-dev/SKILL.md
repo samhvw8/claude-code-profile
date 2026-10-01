@@ -80,10 +80,10 @@ Use `internal/symlink/` package. Relative symlinks for portability.
 ## Build & Test
 
 ```bash
-go build -o ccp .       # Build
-go test ./...            # All tests
-go test ./... -v         # Verbose
-go mod tidy              # Dependencies
+go build -o ccp ./cmd/ccp  # Build
+go test ./...              # All tests
+go test ./... -v           # Verbose
+go mod tidy                # Dependencies
 ```
 
 ## Key Types

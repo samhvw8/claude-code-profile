@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 // ccp writes relative ~/.claude symlinks for portability; reset must resolve

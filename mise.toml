@@ -10,7 +10,7 @@ alias = "b"
 description = "Build ccp binary"
 sources = ["**/*.go", "go.mod", "go.sum"]
 outputs = ["ccp"]
-run = "go build -o ccp ."
+run = "go build -o ccp ./cmd/ccp"
 
 [tasks.test]
 alias = "t"
@@ -46,7 +46,7 @@ run = "rm -f ccp coverage.out coverage.html"
 [tasks.install]
 description = "Install ccp locally"
 depends = ["build"]
-run = "go install ."
+run = "go install ./cmd/ccp"
 
 [tasks.check]
 description = "Run all checks (fmt, test, build)"

@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 // Hub represents the central hub of reusable components

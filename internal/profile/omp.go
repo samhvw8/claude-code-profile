@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/samhoang/ccp/internal/config"
-	"github.com/samhoang/ccp/internal/hub"
-	"github.com/samhoang/ccp/internal/symlink"
+	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/hub"
+	"github.com/samhvw8/claude-code-profile/internal/symlink"
 	"gopkg.in/yaml.v3"
 )
 

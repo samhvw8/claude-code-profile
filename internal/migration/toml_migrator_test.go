@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 func TestTOMLMigrator_MigrateProfiles(t *testing.T) {

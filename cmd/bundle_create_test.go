@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/samhoang/ccp/internal/config"
-	"github.com/samhoang/ccp/internal/hub"
+	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/hub"
 )
 
 // newBundleTestHub creates a hub on disk with one skill, one agent and one hook,

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 // RegistryVersion is the current registry format version

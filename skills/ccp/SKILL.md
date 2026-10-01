@@ -25,7 +25,7 @@ fi
 
 # Step 2: Install ccp via mise
 mise use -g go@latest
-go install github.com/samhoang/ccp@latest
+go install github.com/samhvw8/claude-code-profile/cmd/ccp@latest
 ```
 
 After install, initialize: `ccp init`

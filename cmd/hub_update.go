@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/samhoang/ccp/internal/config"
-	"github.com/samhoang/ccp/internal/hub"
+	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/hub"
 )
 
 var (

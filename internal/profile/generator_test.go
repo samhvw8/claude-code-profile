@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 func TestGenerateSettings_WithTemplate(t *testing.T) {

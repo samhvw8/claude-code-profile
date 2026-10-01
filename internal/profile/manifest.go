@@ -9,8 +9,8 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 
-	"github.com/samhoang/ccp/internal/config"
-	"github.com/samhoang/ccp/internal/hub"
+	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/hub"
 )
 
 // ManifestVersion is the current manifest format version

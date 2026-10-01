@@ -16,15 +16,15 @@ sources:
 # Before and after every change
 
 1. Read existing code and match the patterns in similar files.
-2. `go build -o ccp .` compiles cleanly.
+2. `go build -o ccp ./cmd/ccp` compiles cleanly.
 3. `go test ./...` passes, before and after.
 4. Keep platform variants in mind: symlink code has unix and windows versions.
 
 ```bash
-go build -o ccp .   # build
-go test ./...       # all tests (-v for verbose)
-go mod tidy         # dependencies
-./ccp --help        # smoke test
+go build -o ccp ./cmd/ccp  # build
+go test ./...              # all tests (-v for verbose)
+go mod tidy                # dependencies
+./ccp --help               # smoke test
 ```
 
 # Common tasks

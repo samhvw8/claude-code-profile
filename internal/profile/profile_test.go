@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/samhoang/ccp/internal/config"
-	"github.com/samhoang/ccp/internal/hub"
+	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/hub"
 )
 
 func TestNewManifest(t *testing.T) {

@@ -3,7 +3,7 @@ type: Architecture
 title: Package layout
 description: How ccp's Go code is split between a thin Cobra command layer and domain packages under internal/.
 tags: [architecture, go, packages]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T00:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md (removed 2026-09-14 by the OKF migration)"
@@ -14,6 +14,10 @@ sources:
 ---
 
 # Layout
+
+Module path: `github.com/samhvw8/claude-code-profile`. The binary's `main` package lives in
+`cmd/ccp/`, so it builds with `go build -o ccp ./cmd/ccp` and installs with
+`go install github.com/samhvw8/claude-code-profile/cmd/ccp@latest`.
 
 ```
 internal/
@@ -27,6 +31,7 @@ internal/
 └── picker/     # Bubble Tea multi-select TUI with fuzzy search
 
 cmd/            # Cobra commands, one file per command or subcommand
+└── ccp/        # main package — the binary entry point
 ```
 
 # Rules of the layout

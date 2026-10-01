@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/samhoang/ccp/internal/source"
+	"github.com/samhvw8/claude-code-profile/internal/source"
 )
 
 var (

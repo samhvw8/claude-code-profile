@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 // SettingsHookEntry represents a single hook command in settings.json

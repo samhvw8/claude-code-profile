@@ -3,7 +3,7 @@ package migration
 import (
 	"path/filepath"
 
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 // HookLocation represents where a hook file is located

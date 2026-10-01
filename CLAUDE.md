@@ -23,7 +23,7 @@ follow links only into what the task needs. Load the `okf` skill before editing 
 ## Development Commands
 
 ```bash
-go build -o ccp .         # Build binary
+go build -o ccp ./cmd/ccp # Build binary
 go test ./...             # Run all tests
 go test ./... -v          # Verbose test output
 go mod tidy               # Update dependencies

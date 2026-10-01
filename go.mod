@@ -1,4 +1,4 @@
-module github.com/samhoang/ccp
+module github.com/samhvw8/claude-code-profile
 
 go 1.25.1
 

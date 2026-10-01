@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 // SkillsShRegistry searches skills.sh for packages

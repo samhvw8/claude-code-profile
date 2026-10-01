@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/samhoang/ccp/internal/config"
-	"github.com/samhoang/ccp/internal/hub"
+	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/hub"
 )
 
 // setupBundleTest builds a hub containing one bundle ("impeccable") with a

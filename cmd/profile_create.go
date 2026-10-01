@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/samhoang/ccp/internal/config"
-	"github.com/samhoang/ccp/internal/hub"
-	"github.com/samhoang/ccp/internal/picker"
-	"github.com/samhoang/ccp/internal/profile"
+	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/hub"
+	"github.com/samhvw8/claude-code-profile/internal/picker"
+	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
 
 var (

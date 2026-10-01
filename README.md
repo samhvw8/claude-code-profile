@@ -21,15 +21,15 @@ Claude Code's 20 skill limit forces manual reconfiguration for different work mo
 ## Installation
 
 ```bash
-go install github.com/samhvw8/ccp@latest
+go install github.com/samhvw8/claude-code-profile/cmd/ccp@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/samhvw8/ccp
-cd ccp
-go build -o ccp .
+git clone https://github.com/samhvw8/claude-code-profile
+cd claude-code-profile
+go build -o ccp ./cmd/ccp
 ```
 
 ## Quick Start
@@ -244,9 +244,9 @@ ccp install  # Syncs all sources from ccp.toml
 ## Development
 
 ```bash
-go test ./...      # Run tests
-go build -o ccp .  # Build
-go install .       # Install locally
+go test ./...              # Run tests
+go build -o ccp ./cmd/ccp  # Build
+go install ./cmd/ccp       # Install locally
 ```
 
 ## License

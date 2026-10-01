@@ -1,6 +1,6 @@
 # Workflow Rules
 
-- After every change: `go build -o ccp .` and `go test ./...`.
+- After every change: `go build -o ccp ./cmd/ccp` and `go test ./...`.
 - Never force-update tags (`git tag -f`, `git push --tags -f`); always increment the version and create a new tag.
 - Never push without an explicit request — the user pushes after reviewing.
 - Update `.okf/` in the same change as the code it describes: touched concepts, their `index.md`, and a

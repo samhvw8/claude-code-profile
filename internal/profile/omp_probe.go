@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/samhoang/ccp/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
 // ompProbeTimeout bounds the live probe: omp starts, builds its prompt and
