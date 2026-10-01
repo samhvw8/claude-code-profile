@@ -110,61 +110,25 @@ func runHubAddFromProfile(paths *config.Paths, itemType config.HubItemType, item
 		return fmt.Errorf("profile not found: %s", hubAddFromProfile)
 	}
 
-	// Find the item in the profile
 	profileItemPath := filepath.Join(p.Path, string(itemType), itemName)
-
-	// Check if it's a symlink (already linked from hub)
-	symMgr := symlink.New()
-	isLink, _ := symMgr.IsSymlink(profileItemPath)
-	if isLink {
-		target, err := symMgr.ReadLink(profileItemPath)
-		if err != nil {
-			return fmt.Errorf("failed to read symlink: %w", err)
-		}
-		// Check if it points to hub
-		if strings.HasPrefix(target, paths.HubDir) {
-			return fmt.Errorf("item '%s' is already linked from hub (target: %s)", itemName, target)
-		}
-		// Resolve to actual content
-		profileItemPath = target
-	}
-
-	// Check source exists
-	srcInfo, err := os.Stat(profileItemPath)
-	if err != nil {
+	if _, err := os.Stat(profileItemPath); err != nil {
 		return fmt.Errorf("item not found in profile: %s/%s", itemType, itemName)
 	}
 
-	// Check if already exists in hub
-	dstPath := paths.HubItemPath(itemType, itemName)
-	if _, err := os.Stat(dstPath); err == nil {
-		if !hubAddReplace {
-			return fmt.Errorf("item already exists in hub: %s/%s (use --replace to overwrite)", itemType, itemName)
-		}
-		// Remove existing
-		if err := os.RemoveAll(dstPath); err != nil {
-			return fmt.Errorf("failed to remove existing hub item: %w", err)
-		}
-		fmt.Printf("Replacing existing hub item: %s/%s\n", itemType, itemName)
+	// Copy to hub, replace the profile copy with a link, record it in the manifest
+	if err := promoteToHub(paths, p, itemType, itemName); err != nil {
+		return err
 	}
-
-	// Copy to hub
-	if srcInfo.IsDir() {
-		if err := copyDirRecursive(profileItemPath, dstPath); err != nil {
-			return fmt.Errorf("failed to copy directory: %w", err)
-		}
-	} else {
-		if err := copyFileSimple(profileItemPath, dstPath); err != nil {
-			return fmt.Errorf("failed to copy file: %w", err)
+	if err := p.Manifest.Save(profile.ManifestPath(p.Path)); err != nil {
+		return fmt.Errorf("failed to save manifest: %w", err)
+	}
+	if itemType == config.HubHooks {
+		if err := profile.SyncHooks(paths, p.Path, p.Manifest); err != nil {
+			return fmt.Errorf("failed to update settings.json hooks: %w", err)
 		}
 	}
 
-	fmt.Printf("Added %s/%s to hub from profile '%s'\n", itemType, itemName, hubAddFromProfile)
-
-	// Offer to replace profile item with symlink
-	fmt.Printf("\nTo link this item back to the profile, run:\n")
-	fmt.Printf("  ccp link %s %s --profile=%s\n", itemType, itemName, hubAddFromProfile)
-
+	fmt.Printf("Added %s/%s to hub from profile '%s' and linked it back\n", itemType, itemName, hubAddFromProfile)
 	return nil
 }
 
@@ -450,8 +414,8 @@ func runInteractiveHubAdd(paths *config.Paths, profileName string) error {
 
 	// Regenerate settings.json if hooks were promoted
 	if needsSettingsRegen {
-		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
-			fmt.Printf("Warning: failed to regenerate settings.json: %v\n", err)
+		if err := profile.SyncHooks(paths, p.Path, p.Manifest); err != nil {
+			fmt.Printf("Warning: failed to update settings.json hooks: %v\n", err)
 		}
 	}
 
@@ -539,18 +503,15 @@ func promoteToHub(paths *config.Paths, p *profile.Profile, itemType config.HubIt
 	profileItemPath := filepath.Join(p.Path, string(itemType), itemName)
 	hubItemPath := paths.HubItemPath(itemType, itemName)
 
-	// Check if already exists in hub
-	if _, err := os.Stat(hubItemPath); err == nil {
-		if !hubAddReplace {
-			return fmt.Errorf("item already exists in hub: %s/%s (use --replace to overwrite)", itemType, itemName)
-		}
-		// Remove existing hub item
-		if err := os.RemoveAll(hubItemPath); err != nil {
-			return fmt.Errorf("failed to remove existing hub item: %w", err)
-		}
+	// The profile item may already be the hub item, reached through another path
+	// (e.g. a link into a dotfiles repo that ~/.ccp/hub is linked from). Replacing
+	// the hub item would then delete the only copy.
+	if sameItem(profileItemPath, hubItemPath) {
+		return fmt.Errorf("%s/%s in the profile is already the hub item", itemType, itemName)
 	}
 
-	// Handle symlinks pointing to external locations
+	// Resolve and check the source before touching the hub: with --replace the
+	// hub item is deleted next, and a dangling source would leave nothing.
 	isLink, _ := symMgr.IsSymlink(profileItemPath)
 	var srcPath string
 	if isLink {
@@ -565,11 +526,20 @@ func promoteToHub(paths *config.Paths, p *profile.Profile, itemType config.HubIt
 	} else {
 		srcPath = profileItemPath
 	}
-
-	// Get source info
 	srcInfo, err := os.Stat(srcPath)
 	if err != nil {
 		return fmt.Errorf("source not found: %w", err)
+	}
+
+	// Check if already exists in hub
+	if _, err := os.Stat(hubItemPath); err == nil {
+		if !hubAddReplace {
+			return fmt.Errorf("item already exists in hub: %s/%s (use --replace to overwrite)", itemType, itemName)
+		}
+		// Remove existing hub item
+		if err := os.RemoveAll(hubItemPath); err != nil {
+			return fmt.Errorf("failed to remove existing hub item: %w", err)
+		}
 	}
 
 	// Copy to hub
@@ -597,4 +567,17 @@ func promoteToHub(paths *config.Paths, p *profile.Profile, itemType config.HubIt
 	p.Manifest.AddHubItem(itemType, itemName)
 
 	return nil
+}
+
+// sameItem reports whether two paths resolve to the same file or directory.
+func sameItem(a, b string) bool {
+	ai, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	bi, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ai, bi)
 }
