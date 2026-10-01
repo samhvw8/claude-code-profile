@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -118,6 +119,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Printf("WARN (%d missing directories)\n", len(missingHubDirs))
 			fmt.Println("  → Run 'ccp doctor --fix' or 'ccp init --force' to fix")
+			issues += len(missingHubDirs)
 		}
 	} else {
 		fmt.Println("OK")
@@ -147,54 +149,36 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Check 5: Broken symlinks and profile drift
 	fmt.Print("Checking for broken symlinks... ")
-	brokenLinks := findBrokenSymlinks(paths.ProfilesDir)
-	if len(brokenLinks) > 0 {
-		if doctorFix {
-			// Fix: run drift detection and fix for all profiles
-			fixedProfiles := 0
-			mgr := profile.NewManager(paths)
-			detector := profile.NewDetector(paths)
-
-			for _, entry := range entries {
-				if !entry.IsDir() || entry.Name() == "shared" {
-					continue
-				}
-				p, err := mgr.Get(entry.Name())
-				if err != nil || p == nil {
-					continue
-				}
-
-				report, err := detector.Detect(p)
-				if err != nil {
-					continue
-				}
-
-				if report.HasDrift() {
-					opts := profile.FixOptions{
-						DryRun: false,
-						Force:  true, // Auto-fix without prompts in doctor --fix
-					}
-					result, err := detector.Fix(p, report, opts)
-					if err == nil && len(result.Actions) > 0 {
-						fixedProfiles++
-						fixed += len(result.Actions)
-					}
-				}
-			}
-			fmt.Printf("FIXED (%d profiles repaired)\n", fixedProfiles)
-		} else {
-			fmt.Printf("WARN (%d broken)\n", len(brokenLinks))
-			for _, link := range brokenLinks[:min(5, len(brokenLinks))] {
-				fmt.Printf("  → %s\n", link)
-			}
-			if len(brokenLinks) > 5 {
-				fmt.Printf("  → ... and %d more\n", len(brokenLinks)-5)
-			}
-			fmt.Println("  → Run 'ccp doctor --fix' to repair")
-			issues += len(brokenLinks)
+	brokenLinks := findBrokenSymlinks(paths)
+	if len(brokenLinks) > 0 && doctorFix {
+		fixed += fixProfileDrift(paths, entries)
+		removed, err := pruneBrokenLinks(paths, brokenLinks)
+		fixed += removed
+		if err != nil {
+			fmt.Printf("\n  → %v\n", err)
 		}
-	} else {
+		// Report what is actually left, not what the fix attempted
+		if remaining := findBrokenSymlinks(paths); len(remaining) > 0 {
+			brokenLinks = remaining
+		} else {
+			fmt.Printf("FIXED (%d broken link(s) removed)\n", len(brokenLinks))
+			brokenLinks = nil
+		}
+	} else if len(brokenLinks) == 0 {
 		fmt.Println("OK")
+	}
+	if len(brokenLinks) > 0 {
+		fmt.Printf("WARN (%d broken)\n", len(brokenLinks))
+		for _, link := range brokenLinks[:min(5, len(brokenLinks))] {
+			fmt.Printf("  → %s\n", link)
+		}
+		if len(brokenLinks) > 5 {
+			fmt.Printf("  → ... and %d more\n", len(brokenLinks)-5)
+		}
+		if !doctorFix {
+			fmt.Println("  → Run 'ccp doctor --fix' to repair")
+		}
+		issues += len(brokenLinks)
 	}
 
 	// Check 6: omp links. Informational — only inspected once ccp has linked
@@ -326,24 +310,113 @@ func reportOmpDrift(paths *config.Paths, linked int) {
 	}
 }
 
-func findBrokenSymlinks(dir string) []string {
+// findBrokenSymlinks returns dangling hub item symlinks across all profiles.
+func findBrokenSymlinks(paths *config.Paths) []string {
 	var broken []string
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
+	entries, _ := os.ReadDir(paths.ProfilesDir)
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "shared" {
+			continue
 		}
-		// Check if it's a symlink by using Lstat
-		linfo, err := os.Lstat(path)
-		if err != nil {
-			return nil
-		}
-		if linfo.Mode()&os.ModeSymlink != 0 {
-			// It's a symlink, check if target exists
+		broken = append(broken, brokenHubLinks(filepath.Join(paths.ProfilesDir, entry.Name()))...)
+	}
+	return broken
+}
+
+// brokenHubLinks returns dangling symlinks directly inside a profile's hub item
+// directories. Only those are ccp's: everything else — inside a profile-local
+// item, or in debug/, projects/, plugins/ — belongs to the user or Claude Code.
+func brokenHubLinks(profileDir string) []string {
+	var broken []string
+	for _, itemType := range config.AllHubItemTypes() {
+		dir := filepath.Join(profileDir, string(itemType))
+		entries, _ := os.ReadDir(dir)
+		for _, entry := range entries {
+			if entry.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			path := filepath.Join(dir, entry.Name())
 			if _, err := os.Stat(path); os.IsNotExist(err) {
 				broken = append(broken, path)
 			}
 		}
-		return nil
-	})
+	}
 	return broken
+}
+
+// fixProfileDrift reconciles every profile with its manifest and returns the
+// number of actions taken.
+func fixProfileDrift(paths *config.Paths, entries []os.DirEntry) int {
+	fixed := 0
+	mgr := profile.NewManager(paths)
+	detector := profile.NewDetector(paths)
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == "shared" {
+			continue
+		}
+		p, err := mgr.Get(entry.Name())
+		if err != nil || p == nil {
+			continue
+		}
+		report, err := detector.Detect(p)
+		if err != nil || !report.HasDrift() {
+			continue
+		}
+		result, err := detector.Fix(p, report, profile.FixOptions{Force: true})
+		if err == nil {
+			fixed += len(result.Actions)
+		}
+	}
+	return fixed
+}
+
+// pruneBrokenLinks removes dangling hub item symlinks that drift repair left
+// behind, and drops their entries from the profile manifest: the hub item they
+// pointed at is gone, so there is nothing to relink.
+func pruneBrokenLinks(paths *config.Paths, links []string) (int, error) {
+	// Every link dangles when the hub itself is unreachable (an unmounted or
+	// missing dotfiles checkout): pruning then would empty the manifests.
+	if _, err := os.Stat(paths.HubDir); err != nil {
+		return 0, fmt.Errorf("hub not reachable (%v); not removing links", err)
+	}
+	mgr := profile.NewManager(paths)
+	removed := 0
+	for _, link := range links {
+		if _, err := os.Lstat(link); os.IsNotExist(err) {
+			continue // drift repair already removed it
+		}
+		rel, err := filepath.Rel(paths.ProfilesDir, link)
+		if err != nil {
+			continue
+		}
+		parts := strings.SplitN(filepath.ToSlash(rel), "/", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		if err := os.Remove(link); err != nil {
+			return removed, fmt.Errorf("could not remove %s: %w", link, err)
+		}
+		removed++
+
+		p, err := mgr.Get(parts[0])
+		if err != nil || p == nil {
+			continue
+		}
+		itemType := config.HubItemType(parts[1])
+		for _, name := range p.Manifest.GetHubItems(itemType) {
+			if name == parts[2] || filepath.Base(name) == parts[2] {
+				p.Manifest.RemoveHubItem(itemType, name)
+			}
+		}
+		if err := p.Manifest.Save(profile.ManifestPath(p.Path)); err != nil {
+			return removed, fmt.Errorf("could not update %s manifest: %w", p.Name, err)
+		}
+		if itemType == config.HubHooks || itemType == config.HubBundles {
+			// Drop the pruned hook's entry from settings.json too
+			if err := profile.SyncHooks(paths, p.Path, p.Manifest); err != nil {
+				fmt.Fprintf(os.Stderr, "\n  → %s: settings.json hooks not updated: %v", p.Name, err)
+			}
+		}
+	}
+	return removed, nil
 }

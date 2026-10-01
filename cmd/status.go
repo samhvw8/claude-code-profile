@@ -218,7 +218,7 @@ func listAllProfiles(paths *config.Paths) ([]profileInfo, error) {
 
 		// Check for drift/broken links
 		profileDir := filepath.Join(paths.ProfilesDir, entry.Name())
-		p.brokenLinks = countBrokenLinks(profileDir)
+		p.brokenLinks = len(brokenHubLinks(profileDir))
 
 		// Check manifest drift
 		manifestPath := profile.ManifestPath(profileDir)
@@ -230,22 +230,6 @@ func listAllProfiles(paths *config.Paths) ([]profileInfo, error) {
 	}
 
 	return profiles, nil
-}
-
-func countBrokenLinks(dir string) int {
-	count := 0
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				count++
-			}
-		}
-		return nil
-	})
-	return count
 }
 
 func checkHealth(paths *config.Paths) []string {
@@ -272,7 +256,12 @@ func checkHealth(paths *config.Paths) []string {
 	if paths.ClaudeDirIsSymlink() {
 		target, err := os.Readlink(paths.ClaudeDir)
 		if err == nil {
-			if _, err := os.Stat(target); os.IsNotExist(err) {
+			// A relative target is relative to the link's directory, not the cwd
+			resolved := target
+			if !filepath.IsAbs(resolved) {
+				resolved = filepath.Join(filepath.Dir(paths.ClaudeDir), resolved)
+			}
+			if _, err := os.Stat(resolved); os.IsNotExist(err) {
 				issues = append(issues, fmt.Sprintf("Active profile target missing: %s", target))
 			}
 		}
