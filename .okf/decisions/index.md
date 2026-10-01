@@ -7,6 +7,7 @@ Settled choices with their rationale. Do not re-open one without a user request;
 * [v0.28 simplification: flat profiles](v0-28-simplification.md) - Profiles are flat — no engine/context composition layers; the hub is the sharing mechanism.
 * [API keys are per-profile](api-keys-per-profile.md) - API keys live in each profile; there is no shared account or credentials layer.
 * [Complete settings templates, not fragments](complete-settings-templates.md) - A settings template is a whole settings.json; hooks are overlaid from hub hooks.
+* [A machine-local snapshot tells settings edits from input changes](settings-snapshot.md) - ccp records what it last wrote to settings.json under ~/.ccp/state, so regeneration keeps edits but applies template and fragment changes.
 * [All data directories are always shared](data-sharing-always-shared.md) - Runtime data directories are always symlinked to profiles/shared, with no per-type configuration.
 * [Hub remove offers copy-to-profile](hub-remove-copy-to-profile.md) - Removing a hub item used by profiles offers copy / delete / cancel instead of a destructive yes/no.
 * [Bundles are atomic composite hub items](bundles-atomic-composite.md) - A bundles hub item type groups coupled items that link and remove as one unit, without becoming a sixth concept.

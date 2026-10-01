@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command flags
 description: Flags for ccp commands that take more than a positional argument.
 tags: [cli, reference, flags]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T03:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, Command Flags (removed 2026-09-14 by the OKF migration)"
@@ -23,7 +23,7 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 | `init` | `--dry-run` | Show the migration plan only |
 | `init` | `--force` | Overwrite an existing hub structure |
 | `migrate` | `--dry-run` | Show what would migrate |
-| `doctor` | `--fix` | Fix what can be fixed (missing hub dirs, broken symlinks) |
+| `doctor` | `--fix` | Fix what can be fixed: create missing hub dirs, reconcile drift, remove links (and manifest entries) whose hub item is gone. Only links directly inside the hub item dirs are checked — links inside a profile-local item, and `debug/`, `projects/` etc., are not ccp's |
 | `doctor` | `--verify-omp` | Ask a live omp what its prompt carries |
 | `reset` | `--force` | Skip confirmation |
 | `use` | `-g, --global` | Update the global `~/.claude` symlink (default: project env) |
@@ -44,7 +44,8 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 | `profile fix` | `--dry-run` | Preview |
 | `profile fix` | `-f, --force` | Drop non-existent hub items from the manifest without asking |
 | `profile fix` | `--all` | All profiles; skips hub_missing prompts (add `--force` to auto-remove) |
-| `profile sync` | `--all` | All profiles |
+| `profile sync` | `--all` | All profiles (does not imply `--force`) |
+| `profile sync` | `-f, --force` | Regenerate settings.json even if it drops uncaptured edits; hooks ccp did not create are kept ([settings](/reference/settings-templates.md)) |
 | `profile edit` | `--add-<type>=a,b` / `--remove-<type>=a` | Add/remove skills, hooks, rules, commands |
 | `profile edit` | `--template=<name>` | Set the settings template |
 | `profile edit` | `-i, --interactive` | Picker (default with no flags) |
@@ -54,8 +55,9 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 
 | Command | Flag | Effect |
 |---------|------|--------|
-| `hub add` | `--from-profile=<name>` | Promote an item from a profile |
+| `hub add` | `--from-profile=<name>` | Promote an item from a profile: copy to the hub, replace the profile copy with a link, record it in the manifest |
 | `hub add` | `--replace` | Replace an existing item |
+| `install`, `source install` | `-l, --link <profile>` | Also link the installed items to that profile; `.` is the active profile. Checked before anything is installed |
 | `hub remove` | `-i` | Picker |
 | `hub remove` | `--force` | Skip confirmation and usage check |
 | `hub remove` | `--copy` | Copy into affected profiles first, no prompt |

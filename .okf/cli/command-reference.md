@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command reference
 description: Every ccp command group with a one-line description and an example; hidden commands are marked.
 tags: [cli, reference, commands]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T03:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, CLI Command Reference (removed 2026-09-14 by the OKF migration)"
@@ -41,7 +41,7 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp env <profile>` | Configure a project env for a profile (hidden) | `ccp env dev --format=mise` |
 | `ccp config init` | Write a default `ccp.toml` | `ccp config init` |
 | `ccp config shell` | Print shell aliases for Claude integration | `ccp config shell >> ~/.zshrc` |
-| `ccp bootstrap [--push]` | chezmoi multi-machine sync ([details](/features/bootstrap.md)) | `ccp bootstrap` |
+| `ccp bootstrap [--push]` | New-machine setup: sync sources, fix profiles; `--push` adds to chezmoi ([details](/features/bootstrap.md)) | `ccp bootstrap` |
 
 # Profiles
 
@@ -89,7 +89,7 @@ Link a bundle with `ccp link <profile> bundles/<name>` ([bundles](/features/bund
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp find <query>` | Search skills.sh (`-r github` for GitHub) | `ccp find testing` |
-| `ccp install [source] [items]` | Install from a source, or replay `ccp.toml` | `ccp install owner/repo` |
+| `ccp install [source] [items]` | Install from a source, or replay `ccp.toml`; `--link <profile>` also links it (`.` = active) | `ccp install owner/repo skills/x --link .` |
 | `ccp source add/list/update/remove` | Manage sources | `ccp source update` |
 
 Workflow and discovery layouts: [source system](/features/source-system.md).

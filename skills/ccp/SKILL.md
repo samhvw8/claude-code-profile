@@ -23,9 +23,9 @@ if ! command -v mise >/dev/null 2>&1; then
   eval "$(~/.local/bin/mise activate)"
 fi
 
-# Step 2: Install ccp via mise
-mise use -g go@latest
-go install github.com/samhvw8/claude-code-profile/cmd/ccp@latest
+# Step 2: Install ccp via mise (prebuilt release binary)
+mise use -g github:samhvw8/claude-code-profile
+# or build from source: go install github.com/samhvw8/claude-code-profile/cmd/ccp@latest
 ```
 
 After install, initialize: `ccp init`
@@ -55,14 +55,42 @@ ccp find <query>                          # Search skills.sh
 ccp find -r github <query>               # Search GitHub
 ccp install owner/repo                    # Add source + interactive install
 ccp install owner/repo -a                 # Install all items
+ccp install owner/repo skills/x --link .    # Install and link to the active profile
+ccp install owner/repo skills/x --link dev  # Install and link to 'dev'
 ```
 
 ### Link Items to Profiles
+
+The profile name comes first, then one `type/name` path. Agents and rules keep
+their `.md` extension (`agents/reviewer.md`).
+
 ```bash
-ccp link skills/coding agents/reviewer    # Link to active profile
-ccp link -i                               # Interactive picker (/ to fuzzy search, tab to toggle)
-ccp unlink skills/coding                  # Remove from profile
+ccp link default skills/coding            # Link one item to profile 'default'
+ccp link default agents/reviewer.md
+ccp unlink default skills/coding          # Remove one item
+ccp link                                  # Interactive picker for the active profile
+ccp link dev                              # Interactive picker for 'dev'
+ccp hub add skills browser-skill --from-profile=default  # Move a profile-local item into the hub, linked back
 ```
+
+Linking or unlinking a hook updates `settings.json`'s `hooks` right away; no
+`ccp profile sync` needed.
+
+### Settings
+
+`settings.json` is generated from the settings template, the profile's
+`settings-fragment.json` and its linked hooks. Edits made directly to
+`settings.json` (by hand or by Claude Code) survive only once captured:
+
+```bash
+ccp profile capture default               # Save non-hook edits into the fragment
+ccp profile sync default                  # Relink items; regenerate settings.json
+ccp profile sync default --force          # Regenerate even if it drops uncaptured edits
+```
+
+Without `--force`, sync never drops uncaptured edits: it updates hooks only and
+names the keys; `ccp profile capture` followed by sync then applies everything. Template switches and fragment edits apply normally,
+and hooks you added yourself (by hand or via `/hooks`) are always kept.
 
 ### Sources
 ```bash
@@ -113,4 +141,5 @@ context (`AGENTS.md` → the profile's `CLAUDE.md`, `RULES.md` from its rules).
 
 - `ccp install` (no args) syncs all sources — useful for new machines
 - `ccp project add` copies (not symlinks) so projects are git-committable
-- `ccp doctor` diagnoses broken symlinks, manifests, and hub structure
+- `ccp doctor` diagnoses broken hub links, manifests, and hub structure; `--fix` removes links whose hub item is gone
+- `ccp status` shows the active profile, hub counts and per-profile health

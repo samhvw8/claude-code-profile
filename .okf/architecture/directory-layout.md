@@ -3,7 +3,7 @@ type: Filesystem Layout
 title: The ~/.ccp directory layout
 description: What lives under ~/.ccp — hub, store, sources, profiles, shared data — and how each class of data is shared.
 tags: [architecture, filesystem, hub, profiles]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T08:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md (removed 2026-09-14 by the OKF migration)"
@@ -38,12 +38,14 @@ sources:
 │       ├── profile.toml        # Manifest
 │       ├── CLAUDE.md
 │       ├── settings.json       # Generated
+│       ├── settings-fragment.json   # Captured edits (ccp profile capture)
 │       ├── skills/ agents/ hooks/ rules/ commands/  # Relative symlinks → hub
 │       ├── plugins/
 │       │   ├── marketplaces → store/plugins/marketplaces
 │       │   ├── cache → store/plugins/cache
 │       │   └── installed_plugins.json   # Per profile
 │       └── tasks/ todos/ … → shared/
+├── state/settings/<profile>.json  # What ccp last wrote to each settings.json; machine-local
 └── ccp.toml                    # Config + installed sources
 
 ~/.claude → .ccp/profiles/<active>   # Global activation symlink (relative)
