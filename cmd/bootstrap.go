@@ -19,18 +19,22 @@ var bootstrapPush bool
 
 var bootstrapCmd = &cobra.Command{
 	Use:   "bootstrap",
-	Short: "Set up ccp on a new machine, or push local items to chezmoi",
-	Long: `Without flags: pulls — sync sources + fix all profiles.
-With --push: adds local-only hub items + ccp.toml + profiles to chezmoi.
+	Short: "Set up ccp on a new machine: sync sources and fix profiles",
+	Long: `Without flags: sync sources from ccp.toml, then fix all profiles. Run it after
+your dotfiles land on a new machine (chezmoi apply, mise dotfiles, stow, ...).
 
-New machine:  chezmoi apply && ccp bootstrap
-After changes: ccp bootstrap --push`,
+With --push (chezmoi only): add local-only hub items, ccp.toml and profiles to
+chezmoi. Not needed when ~/.ccp is already linked from a dotfiles repo — commit
+there instead.
+
+New machine:   <restore dotfiles> && ccp bootstrap
+After changes: ccp bootstrap --push   # chezmoi users`,
 	RunE: runBootstrap,
 }
 
 func init() {
 	rootCmd.AddCommand(bootstrapCmd)
-	bootstrapCmd.Flags().BoolVar(&bootstrapPush, "push", false, "add local-only hub items to chezmoi (skip source-installed)")
+	bootstrapCmd.Flags().BoolVar(&bootstrapPush, "push", false, "chezmoi only: add local-only hub items to chezmoi (skip source-installed)")
 }
 
 func runBootstrap(cmd *cobra.Command, args []string) error {
@@ -106,7 +110,7 @@ func runBootstrapPull() error {
 
 func runBootstrapPush() error {
 	if _, err := exec.LookPath("chezmoi"); err != nil {
-		return fmt.Errorf("chezmoi not found in PATH")
+		return fmt.Errorf("--push adds files to chezmoi, which is not in PATH; if ~/.ccp is linked from another dotfiles repo, commit the changes there instead")
 	}
 
 	paths, err := config.ResolvePaths()

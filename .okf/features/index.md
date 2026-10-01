@@ -3,7 +3,7 @@
 * [Bundles](bundles.md) - Atomic, non-separable groups of hub items that are linked and removed as one unit.
 * [Project setup](project-setup.md) - Copying hub items into a project's .claude/ directory so a team uses them without ccp.
 * [Source system](source-system.md) - Finding and installing hub items from skills.sh and GitHub, including the repository layouts ccp discovers.
-* [Bootstrap (chezmoi sync)](bootstrap.md) - Syncing ccp across machines with chezmoi — pull sources and fix profiles, or push local-only hub items.
+* [Bootstrap (multi-machine sync)](bootstrap.md) - Setting ccp up on another machine — pull sources and fix profiles after dotfiles land; chezmoi users can also push local-only hub items.
 
 # Integrations
 
