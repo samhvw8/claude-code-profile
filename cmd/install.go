@@ -21,7 +21,9 @@ Examples:
   ccp install                           # Sync all from ccp.toml
   ccp install remorses/playwriter       # Auto-add, interactive selection
   ccp install owner/repo skills/my-skill
-  ccp install owner/repo --all`,
+  ccp install owner/repo --all
+  ccp install owner/repo skills/my-skill --link .        # ...and link to the active profile
+  ccp install owner/repo skills/my-skill --link work     # ...and link to 'work'`,
 	Args: cobra.MinimumNArgs(0),
 	RunE: runSourceInstall,
 }
@@ -29,5 +31,6 @@ Examples:
 func init() {
 	installCmd.Flags().BoolVarP(&sourceInstallAll, "all", "a", false, "Install all available items")
 	installCmd.Flags().BoolVarP(&sourceInstallInteractive, "interactive", "i", false, "Interactive item selection")
+	addInstallLinkFlag(installCmd)
 	rootCmd.AddCommand(installCmd)
 }

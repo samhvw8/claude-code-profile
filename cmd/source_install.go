@@ -11,13 +11,25 @@ import (
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
 	"github.com/samhvw8/claude-code-profile/internal/picker"
+	"github.com/samhvw8/claude-code-profile/internal/profile"
 	"github.com/samhvw8/claude-code-profile/internal/source"
 )
 
 var (
 	sourceInstallAll         bool
 	sourceInstallInteractive bool
+	sourceInstallLink        string
 )
+
+// activeProfileMarker is the --link value that means the active profile.
+// --link always takes a value: an optional one would read "--link work" as a
+// bare --link followed by an item named "work".
+const activeProfileMarker = "."
+
+// addInstallLinkFlag registers --link on an install command.
+func addInstallLinkFlag(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&sourceInstallLink, "link", "l", "", "Also link installed items to this profile ('.' for the active profile)")
+}
 
 var sourceInstallCmd = &cobra.Command{
 	Use:     "install [source] [items...]",
@@ -36,7 +48,9 @@ Examples:
   ccp source install                                  # Sync all from ccp.toml
   ccp source install remorses/playwriter              # Auto-add, interactive selection
   ccp source install owner/repo skills/my-skill
-  ccp source install owner/repo --all`,
+  ccp source install owner/repo --all
+  ccp source install owner/repo skills/my-skill --link .        # ...and link to the active profile
+  ccp source install owner/repo skills/my-skill --link work     # ...and link to 'work'`,
 	Args: cobra.MinimumNArgs(0),
 	RunE: runSourceInstall,
 }
@@ -44,12 +58,16 @@ Examples:
 func init() {
 	sourceInstallCmd.Flags().BoolVarP(&sourceInstallAll, "all", "a", false, "Install all available items")
 	sourceInstallCmd.Flags().BoolVarP(&sourceInstallInteractive, "interactive", "i", false, "Interactive item selection")
+	addInstallLinkFlag(sourceInstallCmd)
 	sourceCmd.AddCommand(sourceInstallCmd)
 }
 
 func runSourceInstall(cmd *cobra.Command, args []string) error {
 	// No args = sync all from registry
 	if len(args) == 0 {
+		if sourceInstallLink != "" {
+			return fmt.Errorf("--link needs a package to install; it does not apply to syncing ccp.toml")
+		}
 		return runSourceSync()
 	}
 
@@ -69,6 +87,12 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	paths, err := config.ResolvePaths()
+	if err != nil {
+		return err
+	}
+
+	// Resolve --link up front so a bad profile name fails before anything is installed
+	linkProfile, err := resolveLinkProfile(paths)
 	if err != nil {
 		return err
 	}
@@ -111,10 +135,7 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		fmt.Printf("Installed %s from %s\n", item, sourceID)
-		fmt.Println()
-		fmt.Println("Link to profile with:")
-		fmt.Printf("  ccp link <profile> %s\n", item)
-		return nil
+		return linkInstalled(paths, linkProfile, []string{item})
 	}
 
 	available := installer.DiscoverItems(src.Path)
@@ -181,12 +202,56 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  - %s\n", item)
 	}
 
-	fmt.Println()
-	fmt.Println("Link to profile with:")
-	for _, item := range installed {
-		fmt.Printf("  ccp link <profile> %s\n", item)
+	return linkInstalled(paths, linkProfile, installed)
+}
+
+// resolveLinkProfile returns the profile named by --link ("" when not given),
+// resolving "." to the active profile and checking that it exists.
+func resolveLinkProfile(paths *config.Paths) (string, error) {
+	if sourceInstallLink == "" {
+		return "", nil
+	}
+	mgr := profile.NewManager(paths)
+	if sourceInstallLink == activeProfileMarker {
+		active, err := mgr.GetActive()
+		if err != nil {
+			return "", fmt.Errorf("failed to get active profile: %w", err)
+		}
+		if active == nil {
+			return "", fmt.Errorf("no active profile: use --link <profile>")
+		}
+		return active.Name, nil
+	}
+	if !mgr.Exists(sourceInstallLink) {
+		return "", fmt.Errorf("--link: profile not found: %s", sourceInstallLink)
+	}
+	return sourceInstallLink, nil
+}
+
+// linkInstalled links freshly installed items to profileName, or prints how to
+// do it when --link was not given.
+func linkInstalled(paths *config.Paths, profileName string, items []string) error {
+	if profileName == "" {
+		fmt.Println()
+		fmt.Println("Link to profile with:")
+		for _, item := range items {
+			fmt.Printf("  ccp link <profile> %s\n", item)
+		}
+		fmt.Println("(or pass --link <profile> to install and link in one step; '.' is the active profile)")
+		return nil
 	}
 
+	mgr := profile.NewManager(paths)
+	for _, item := range items {
+		itemType, itemName, ok := strings.Cut(item, "/")
+		if !ok {
+			return fmt.Errorf("cannot link %s: expected type/name", item)
+		}
+		if err := mgr.LinkHubItem(profileName, config.HubItemType(itemType), itemName); err != nil {
+			return fmt.Errorf("failed to link %s to profile %s: %w", item, profileName, err)
+		}
+		fmt.Printf("Linked %s to profile %s\n", item, profileName)
+	}
 	return nil
 }
 
