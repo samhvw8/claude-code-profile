@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-10-01
+* **Update**: The [workflow](/engineering/workflow.md) now requires annotated release tags — v0.46.0's was lightweight, which `--follow-tags` does not push.
 * **Update**: Released v0.48.0 — added the release to [release history](/product/release-history.md) and moved the status line in [user stories](/product/user-stories.md) to v0.48.
 * **Creation**: [opencode integration](/features/opencode.md) — hidden `ccp opencode sync` writes converted copies of the active profile's agents and commands into opencode and follows profile changes once used; listed in the [command reference](/cli/command-reference.md).
 * **Update**: Fixes from reviewing how agents used ccp in Claude sessions, revised over three code reviews. Settings ([settings templates](/reference/settings-templates.md), [snapshot decision](/decisions/settings-snapshot.md)): hook link/unlink updates `settings.json` hooks immediately; regeneration keeps uncaptured edits unless `--force`, judged against a snapshot of what ccp last wrote in `~/.ccp/state/settings/`; hooks ccp did not create are kept; `profile capture` records removed template keys as `null`; nulls are never written; `--force` repairs an unparseable file, keeping `settings.json.bak`.
