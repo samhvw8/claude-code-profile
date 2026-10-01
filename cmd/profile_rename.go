@@ -72,6 +72,9 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 	if err := os.Rename(oldPath, newPath); err != nil {
 		return fmt.Errorf("failed to rename profile directory: %w", err)
 	}
+	if err := profile.MoveSettingsSnapshot(paths, oldPath, newPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not move the settings snapshot: %v\n", err)
+	}
 
 	// Update manifest with new name
 	manifestPath := profile.ManifestPath(newPath)

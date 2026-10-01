@@ -1,17 +1,14 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
 	"github.com/samhvw8/claude-code-profile/internal/profile"
-	"github.com/samhvw8/claude-code-profile/internal/symlink"
 )
 
 var profileSyncCmd = &cobra.Command{
@@ -29,7 +26,13 @@ If no profile name is given, syncs the active profile.
 Examples:
   ccp profile sync           # Sync active profile
   ccp profile sync default   # Sync the 'default' profile
-  ccp profile sync --all     # Sync all profiles`,
+  ccp profile sync --all     # Sync all profiles
+
+settings.json is regenerated from the settings template, settings-fragment.json
+and linked hub hooks. If it holds edits that regeneration would drop (made by
+hand or by Claude Code since the last 'ccp profile capture'), only its hooks are
+updated and the affected keys are listed. Capture them to keep them, or pass
+--force to discard them.`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: completeProfileNames,
 	RunE:              runProfileSync,
@@ -42,7 +45,7 @@ var (
 
 func init() {
 	profileSyncCmd.Flags().BoolVar(&syncAll, "all", false, "Sync all profiles")
-	profileSyncCmd.Flags().BoolVarP(&syncForce, "force", "f", false, "Apply settings changes without confirmation")
+	profileSyncCmd.Flags().BoolVarP(&syncForce, "force", "f", false, "Regenerate settings.json even if it discards edits not captured in settings-fragment.json")
 	profileCmd.AddCommand(profileSyncCmd)
 }
 
@@ -67,7 +70,7 @@ func runProfileSync(cmd *cobra.Command, args []string) error {
 
 		for _, p := range profiles {
 			fmt.Printf("Syncing profile: %s\n", p.Name)
-			if err := syncProfile(paths, p, syncForce || syncAll); err != nil {
+			if err := syncProfile(paths, p, syncForce); err != nil {
 				fmt.Fprintf(os.Stderr, "  Warning: %v\n", err)
 			} else {
 				fmt.Println("  Done")
@@ -110,80 +113,14 @@ func runProfileSync(cmd *cobra.Command, args []string) error {
 }
 
 func syncProfile(paths *config.Paths, p *profile.Profile, force bool) error {
-	symMgr := symlink.New()
-
-	// Sync hub item symlinks
-	for _, itemType := range config.AllHubItemTypes() {
-		itemDir := filepath.Join(p.Path, string(itemType))
-
-		// Ensure directory exists
-		if err := os.MkdirAll(itemDir, 0755); err != nil {
-			return fmt.Errorf("failed to create %s directory: %w", itemType, err)
-		}
-
-		// Get items from manifest — for rules, use basename as the link name
-		manifestLinks := make(map[string]bool)
-		for _, name := range p.Manifest.GetHubItems(itemType) {
-			linkName := name
-			if itemType == config.HubRules {
-				linkName = filepath.Base(name)
-			}
-			manifestLinks[linkName] = true
-		}
-
-		// Remove symlinks not in manifest
-		entries, err := os.ReadDir(itemDir)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read %s directory: %w", itemType, err)
-		}
-
-		for _, entry := range entries {
-			if !manifestLinks[entry.Name()] {
-				linkPath := filepath.Join(itemDir, entry.Name())
-				isLink, _ := symMgr.IsSymlink(linkPath)
-				if isLink {
-					fmt.Printf("  Removing unlinked %s: %s\n", itemType, entry.Name())
-					os.Remove(linkPath)
-				}
-			}
-		}
-
-		// Create missing symlinks
-		for _, itemName := range p.Manifest.GetHubItems(itemType) {
-			hubItemPath := paths.HubItemPath(itemType, itemName)
-			linkName := itemName
-			if itemType == config.HubRules {
-				linkName = filepath.Base(itemName)
-			}
-			profileItemPath := filepath.Join(itemDir, linkName)
-
-			// Check if hub item exists
-			if _, err := os.Stat(hubItemPath); err != nil {
-				fmt.Printf("  Warning: hub item not found: %s/%s\n", itemType, itemName)
-				continue
-			}
-
-			// Check if symlink already exists and is correct
-			isLink, _ := symMgr.IsSymlink(profileItemPath)
-			if isLink {
-				target, err := symMgr.ReadLink(profileItemPath)
-				if err == nil && target == hubItemPath {
-					continue // Already correct
-				}
-				// Wrong target, remove and recreate
-				os.Remove(profileItemPath)
-			}
-
-			fmt.Printf("  Linking %s: %s\n", itemType, itemName)
-			if err := symMgr.Create(profileItemPath, hubItemPath); err != nil {
-				fmt.Printf("  Warning: failed to create symlink for %s/%s: %v\n", itemType, itemName, err)
-			}
-		}
+	if err := profile.SyncLinks(paths, p, func(format string, args ...any) { fmt.Printf(format, args...) }); err != nil {
+		return err
 	}
 
 	// Regenerate settings.json
 	hasFragment := profile.FragmentExists(p.Path)
-	hasSources := len(p.Manifest.Hub.Hooks) > 0 || p.Manifest.SettingsTemplate != "" || hasFragment
+	hasSources := len(p.Manifest.Hub.Hooks) > 0 || len(p.Manifest.Hub.Bundles) > 0 || len(p.Manifest.Hooks) > 0 ||
+		p.Manifest.SettingsTemplate != "" || hasFragment || profile.SettingsHaveHooks(p.Path)
 
 	if hasSources {
 		changed, err := profile.SettingsChanged(paths, p.Path, p.Manifest)
@@ -191,46 +128,44 @@ func syncProfile(paths *config.Paths, p *profile.Profile, force bool) error {
 			return fmt.Errorf("failed to check settings: %w", err)
 		}
 
-		if changed && !force {
-			fmt.Println("  Settings changes detected.")
-			fmt.Print("  Apply changes to settings.json? [y/N]: ")
-			reader := bufio.NewReader(os.Stdin)
-			input, err := reader.ReadString('\n')
+		if changed {
+			uncaptured, err := profile.ApplySettings(paths, p.Path, p.Manifest, force)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to update settings.json: %w", err)
 			}
-			if answer := strings.TrimSpace(strings.ToLower(input)); answer != "y" && answer != "yes" {
-				fmt.Println("  Skipped settings update")
+			if len(uncaptured) > 0 {
+				fmt.Println("  Synced settings.json hooks; kept the other keys")
+				reportUncaptured(p.Name, uncaptured)
 				return nil
 			}
-		}
-
-		if changed {
-			fmt.Println("  Regenerating settings.json...")
-			if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
-				return fmt.Errorf("failed to regenerate settings.json: %w", err)
-			}
+			fmt.Println("  Regenerated settings.json")
 			if p.Manifest.SettingsTemplate != "" {
 				fmt.Printf("  Applied settings template: %s\n", p.Manifest.SettingsTemplate)
 			}
 			if hasFragment {
 				fmt.Println("  Applied settings fragment")
 			}
-			if len(p.Manifest.Hub.Hooks) > 0 {
-				fmt.Printf("  Configured %d hub hooks\n", len(p.Manifest.Hub.Hooks))
+			if n := profile.CountHookEntries(paths, p.Path, p.Manifest); n > 0 {
+				fmt.Printf("  Configured %d hook entries from hub hooks and bundles\n", n)
 			}
 		} else {
 			fmt.Println("  Settings up to date")
 		}
-	} else if len(p.Manifest.Hooks) > 0 {
-		// Legacy: Sync hooks from old-style manifest.Hooks
-		fmt.Println("  Syncing legacy hooks...")
-		settingsMgr := profile.NewSettingsManager(paths)
-		if err := settingsMgr.SyncHooksFromManifest(p.Path, p.Manifest); err != nil {
-			return fmt.Errorf("failed to sync settings: %w", err)
-		}
-		fmt.Printf("  Configured %d hooks\n", len(p.Manifest.Hooks))
 	}
-
 	return nil
+}
+
+// reportUncaptured explains why settings.json was not fully regenerated.
+func reportUncaptured(profileName string, keys []string) {
+	fmt.Printf("  settings.json has edits not captured in settings-fragment.json: %s\n", strings.Join(keys, ", "))
+	fmt.Println("  Template and fragment changes are not applied until these are captured or discarded.")
+	fmt.Printf("  → keep them: ccp profile capture %s && ccp profile sync %s\n", profileName, profileName)
+	fmt.Printf("  → discard them: ccp profile sync %s --force\n", profileName)
+}
+
+// noteUncaptured is reportUncaptured in one line, for commands where settings
+// are a side effect.
+func noteUncaptured(profileName string, keys []string) {
+	fmt.Printf("Note: kept settings.json edits not in settings-fragment.json (%s); updated hooks only, template and fragment changes wait — 'ccp profile capture %s' saves them\n",
+		strings.Join(keys, ", "), profileName)
 }

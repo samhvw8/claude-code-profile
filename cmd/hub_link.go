@@ -242,8 +242,8 @@ func syncAddedLinks(paths *config.Paths, p *profile.Profile, selections map[stri
 	}
 
 	if hasHooks {
-		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
-			return fmt.Errorf("failed to regenerate settings.json: %w", err)
+		if err := profile.SyncHooks(paths, p.Path, p.Manifest); err != nil {
+			return fmt.Errorf("failed to update settings.json hooks: %w", err)
 		}
 	}
 

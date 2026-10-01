@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -11,7 +10,6 @@ import (
 	"github.com/samhvw8/claude-code-profile/internal/hub"
 	"github.com/samhvw8/claude-code-profile/internal/picker"
 	"github.com/samhvw8/claude-code-profile/internal/profile"
-	"github.com/samhvw8/claude-code-profile/internal/symlink"
 )
 
 var (
@@ -255,78 +253,17 @@ func runFlagEdit(paths *config.Paths, p *profile.Profile) error {
 }
 
 func syncProfileEdit(paths *config.Paths, p *profile.Profile) error {
-	symMgr := symlink.New()
-
-	// Sync hub item symlinks
-	for _, itemType := range config.AllHubItemTypes() {
-		itemDir := filepath.Join(p.Path, string(itemType))
-
-		// Ensure directory exists
-		if err := os.MkdirAll(itemDir, 0755); err != nil {
-			return fmt.Errorf("failed to create %s directory: %w", itemType, err)
-		}
-
-		// Get items from manifest — for rules, use basename as link name
-		manifestLinks := make(map[string]bool)
-		for _, name := range p.Manifest.GetHubItems(itemType) {
-			linkName := name
-			if itemType == config.HubRules {
-				linkName = filepath.Base(name)
-			}
-			manifestLinks[linkName] = true
-		}
-
-		// Remove symlinks not in manifest
-		entries, err := os.ReadDir(itemDir)
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read %s directory: %w", itemType, err)
-		}
-
-		for _, entry := range entries {
-			if !manifestLinks[entry.Name()] {
-				linkPath := filepath.Join(itemDir, entry.Name())
-				isLink, _ := symMgr.IsSymlink(linkPath)
-				if isLink {
-					os.Remove(linkPath)
-				}
-			}
-		}
-
-		// Create missing symlinks
-		for _, itemName := range p.Manifest.GetHubItems(itemType) {
-			hubItemPath := paths.HubItemPath(itemType, itemName)
-			linkName := itemName
-			if itemType == config.HubRules {
-				linkName = filepath.Base(itemName)
-			}
-			profileItemPath := filepath.Join(itemDir, linkName)
-
-			// Check if hub item exists
-			if _, err := os.Stat(hubItemPath); err != nil {
-				continue
-			}
-
-			// Check if symlink already exists and is correct
-			isLink, _ := symMgr.IsSymlink(profileItemPath)
-			if isLink {
-				target, err := symMgr.ReadLink(profileItemPath)
-				if err == nil && target == hubItemPath {
-					continue
-				}
-				os.Remove(profileItemPath)
-			}
-
-			if err := symMgr.Create(profileItemPath, hubItemPath); err != nil {
-				fmt.Printf("Warning: failed to create symlink for %s/%s: %v\n", itemType, itemName, err)
-			}
-		}
+	if err := profile.SyncLinks(paths, p, nil); err != nil {
+		return err
 	}
 
-	// Regenerate settings.json for hooks and templates
-	if len(p.Manifest.Hub.Hooks) > 0 || p.Manifest.SettingsTemplate != "" {
-		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
-			return fmt.Errorf("failed to regenerate settings.json: %w", err)
-		}
+	// Regenerate settings.json for hooks and templates, keeping uncaptured edits
+	uncaptured, err := profile.ApplySettings(paths, p.Path, p.Manifest, false)
+	if err != nil {
+		return fmt.Errorf("failed to regenerate settings.json: %w", err)
+	}
+	if len(uncaptured) > 0 {
+		noteUncaptured(p.Name, uncaptured)
 	}
 
 	return nil

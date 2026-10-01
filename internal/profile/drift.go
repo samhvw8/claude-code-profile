@@ -227,8 +227,18 @@ func (d *Detector) detectItemTypeDrift(profile *Profile, itemType config.HubItem
 // are not mistaken for un-tracked "extra" items.
 func (d *Detector) bundleMemberLinkNames(profile *Profile, itemType config.HubItemType) map[string]bool {
 	names := make(map[string]bool)
-	for _, bundleName := range profile.Manifest.Hub.Bundles {
-		bundle, err := hub.LoadBundle(d.paths.BundlesDir(), bundleName)
+	for linkName := range BundleMemberLinks(d.paths, profile.Manifest, itemType) {
+		names[linkName] = true
+	}
+	return names
+}
+
+// BundleMemberLinks maps each profile link name that linked bundles contribute
+// for a leaf item type to the bundle member it points at.
+func BundleMemberLinks(paths *config.Paths, manifest *Manifest, itemType config.HubItemType) map[string]string {
+	links := make(map[string]string)
+	for _, bundleName := range manifest.Hub.Bundles {
+		bundle, err := hub.LoadBundle(paths.BundlesDir(), bundleName)
 		if err != nil {
 			continue
 		}
@@ -240,10 +250,10 @@ func (d *Detector) bundleMemberLinkNames(profile *Profile, itemType config.HubIt
 			if itemType == config.HubRules {
 				linkName = filepath.Base(member.Name)
 			}
-			names[linkName] = true
+			links[linkName] = filepath.Join(paths.BundleDir(bundleName), member.Type, member.Name)
 		}
 	}
-	return names
+	return links
 }
 
 // detectBundleDrift checks each linked bundle: that it still exists in the hub

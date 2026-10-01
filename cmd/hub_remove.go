@@ -292,8 +292,8 @@ func copyHubItemToProfiles(paths *config.Paths, itemType config.HubItemType, ite
 
 		// Regenerate settings if hooks changed
 		if itemType == config.HubHooks {
-			if err := profile.RegenerateSettings(paths, profileDir, manifest); err != nil {
-				fmt.Printf("  Warning: failed to regenerate settings for profile %s: %v\n", profileName, err)
+			if err := profile.SyncHooks(paths, profileDir, manifest); err != nil {
+				fmt.Printf("  Warning: failed to update settings.json hooks for profile %s: %v\n", profileName, err)
 			}
 		}
 

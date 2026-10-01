@@ -139,41 +139,8 @@ func (sm *SettingsManager) SyncHooksFromManifest(profileDir string, manifest *Ma
 		return fmt.Errorf("failed to load settings: %w", err)
 	}
 
-	// Clear existing hooks that were managed by ccp
-	// We'll rebuild from manifest
-	settings.Hooks = make(map[config.HookType][]config.SettingsHookEntry)
-
-	// Add hooks from manifest
-	for _, hookCfg := range manifest.Hooks {
-		hookType := hookCfg.Type
-
-		// Determine command
-		command := hookCfg.Command
-		if command == "" {
-			// Default to running the hook file
-			hookPath := filepath.Join(profileDir, "hooks", hookCfg.Name)
-			command = fmt.Sprintf("bash %s", hookPath)
-		}
-
-		// Determine timeout
-		timeout := hookCfg.Timeout
-		if timeout == 0 {
-			timeout = config.DefaultHookTimeout()
-		}
-
-		entry := config.SettingsHookEntry{
-			Hooks: []config.SettingsHookCommand{
-				{
-					Command: command,
-					Timeout: timeout,
-					Type:    "command",
-				},
-			},
-			Matcher: hookCfg.Matcher,
-		}
-
-		settings.Hooks[hookType] = append(settings.Hooks[hookType], entry)
-	}
+	// Rebuild the ccp-managed hooks from the manifest
+	settings.Hooks = legacyManifestHooks(profileDir, manifest)
 
 	return sm.SaveSettings(profileDir, settings)
 }
@@ -208,4 +175,26 @@ func (m *Manifest) RemoveHookConfig(name string) bool {
 		}
 	}
 	return false
+}
+
+// legacyManifestHooks builds settings.json hook entries from an old-style
+// manifest's Hooks list.
+func legacyManifestHooks(profileDir string, manifest *Manifest) map[config.HookType][]config.SettingsHookEntry {
+	hooks := make(map[config.HookType][]config.SettingsHookEntry)
+	for _, hookCfg := range manifest.Hooks {
+		command := hookCfg.Command
+		if command == "" {
+			// Default to running the hook file
+			command = fmt.Sprintf("bash %s", filepath.Join(profileDir, "hooks", hookCfg.Name))
+		}
+		timeout := hookCfg.Timeout
+		if timeout == 0 {
+			timeout = config.DefaultHookTimeout()
+		}
+		hooks[hookCfg.Type] = append(hooks[hookCfg.Type], config.SettingsHookEntry{
+			Hooks:   []config.SettingsHookCommand{{Command: command, Timeout: timeout, Type: "command"}},
+			Matcher: hookCfg.Matcher,
+		})
+	}
+	return hooks
 }

@@ -177,27 +177,63 @@ func computeFragment(paths *config.Paths, profileDir string, manifest *Manifest)
 		base = tmpl.Settings
 	}
 
-	return DiffSettings(base, current), nil
+	return fragmentDiff(base, current), nil
+}
+
+// fragmentDiff is DiffSettings plus removals: a key the template has but
+// settings.json does not becomes null, which deepMerge reads as "delete".
+// Without it a removed template key (say, a plugin dropped from
+// enabledPlugins) could never be captured, and every regeneration restored it.
+func fragmentDiff(base, current map[string]interface{}) map[string]interface{} {
+	diff := make(map[string]interface{})
+	for k, cv := range current {
+		bv, exists := base[k]
+		if !exists {
+			diff[k] = cv
+			continue
+		}
+		cm, cok := cv.(map[string]interface{})
+		bm, bok := bv.(map[string]interface{})
+		if cok && bok {
+			if sub := fragmentDiff(bm, cm); len(sub) > 0 {
+				diff[k] = sub
+			}
+			continue
+		}
+		if !reflect.DeepEqual(bv, cv) {
+			diff[k] = cv
+		}
+	}
+	for k := range base {
+		if _, ok := current[k]; !ok && k != "hooks" {
+			diff[k] = nil
+		}
+	}
+	return diff
 }
 
 // deepMerge merges src into dst recursively.
-// Objects merge recursively; arrays and scalars in src replace dst.
+// Objects merge recursively; arrays and scalars in src replace dst. A null in
+// src removes the key from dst (how a fragment records a removed template key)
+// and is never copied: ccp does not write nulls into settings.json.
 func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{}, len(dst))
 	for k, v := range dst {
 		result[k] = v
 	}
 	for k, srcVal := range src {
-		dstVal, exists := result[k]
-		if !exists {
-			result[k] = srcVal
+		if srcVal == nil {
+			delete(result, k)
 			continue
 		}
 		srcMap, srcOK := srcVal.(map[string]interface{})
-		dstMap, dstOK := dstVal.(map[string]interface{})
-		if srcOK && dstOK {
+		dstMap, dstOK := result[k].(map[string]interface{})
+		switch {
+		case srcOK && dstOK:
 			result[k] = deepMerge(dstMap, srcMap)
-		} else {
+		case srcOK:
+			result[k] = stripNullsMap(srcMap)
+		default:
 			result[k] = srcVal
 		}
 	}

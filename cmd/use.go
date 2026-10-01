@@ -179,8 +179,10 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 			return fmt.Errorf("failed to set active profile: %w", err)
 		}
 
-		if err := profile.RegenerateSettings(paths, p.Path, p.Manifest); err != nil {
+		if uncaptured, err := profile.ApplySettings(paths, p.Path, p.Manifest, false); err != nil {
 			fmt.Printf("Warning: failed to regenerate settings.json: %v\n", err)
+		} else if len(uncaptured) > 0 {
+			noteUncaptured(p.Name, uncaptured)
 		}
 
 		fmt.Printf("Switched global profile to: %s\n", profileName)

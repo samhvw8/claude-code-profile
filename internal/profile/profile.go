@@ -215,7 +215,10 @@ func (m *Manager) Create(name string, manifest *Manifest) (*Profile, error) {
 func (m *Manager) Delete(name string) error {
 	// Don't allow deleting default if it's the only profile
 	profileDir := m.paths.ProfileDir(name)
-	return os.RemoveAll(profileDir)
+	if err := os.RemoveAll(profileDir); err != nil {
+		return err
+	}
+	return RemoveSettingsSnapshot(m.paths, profileDir)
 }
 
 // Exists checks if a profile exists
@@ -251,14 +254,19 @@ func (m *Manager) LinkHubItem(profileName string, itemType config.HubItemType, i
 		return err
 	}
 
-	// Create symlink
-	if err := m.symMgr.Create(profileItemPath, hubItemPath); err != nil {
-		return err
+	// Create symlink, unless an identical one is already there
+	if ok, _ := m.symMgr.Validate(profileItemPath, hubItemPath); !ok {
+		if err := m.symMgr.Create(profileItemPath, hubItemPath); err != nil {
+			return err
+		}
 	}
 
 	// Update manifest
 	profile.Manifest.AddHubItem(itemType, itemName)
-	return profile.Manifest.Save(ManifestPath(profile.Path))
+	if err := profile.Manifest.Save(ManifestPath(profile.Path)); err != nil {
+		return err
+	}
+	return m.syncHooksFor(profile, itemType)
 }
 
 // UnlinkHubItem removes a hub item from a profile
@@ -283,7 +291,25 @@ func (m *Manager) UnlinkHubItem(profileName string, itemType config.HubItemType,
 
 	// Update manifest
 	profile.Manifest.RemoveHubItem(itemType, itemName)
-	return profile.Manifest.Save(ManifestPath(profile.Path))
+	if err := profile.Manifest.Save(ManifestPath(profile.Path)); err != nil {
+		return err
+	}
+	return m.syncHooksFor(profile, itemType)
+}
+
+// syncHooksFor keeps settings.json's hooks in step with the manifest after a
+// hook (or a bundle, which may carry hooks) is linked or unlinked. Only the
+// hooks key is rewritten, so other settings are never touched.
+func (m *Manager) syncHooksFor(profile *Profile, itemType config.HubItemType) error {
+	if itemType != config.HubHooks && itemType != config.HubBundles {
+		return nil
+	}
+	if err := SyncHooks(m.paths, profile.Path, profile.Manifest); err != nil {
+		// The link and manifest are already updated; failing now would make a
+		// retry hit "file exists". Say what is left to do instead.
+		fmt.Fprintf(os.Stderr, "Warning: settings.json hooks not updated: %v\n  → fix settings.json, then run 'ccp profile sync %s'\n", err, profile.Name)
+	}
+	return nil
 }
 
 // LinkHubBundle links an entire bundle to a profile by materializing each of
@@ -321,7 +347,10 @@ func (m *Manager) LinkHubBundle(profileName, bundleName string) error {
 	}
 
 	profile.Manifest.AddHubItem(config.HubBundles, bundleName)
-	return profile.Manifest.Save(ManifestPath(profile.Path))
+	if err := profile.Manifest.Save(ManifestPath(profile.Path)); err != nil {
+		return err
+	}
+	return m.syncHooksFor(profile, config.HubBundles)
 }
 
 // UnlinkHubBundle removes a linked bundle and all of its materialized member
@@ -352,7 +381,10 @@ func (m *Manager) UnlinkHubBundle(profileName, bundleName string) error {
 	}
 
 	profile.Manifest.RemoveHubItem(config.HubBundles, bundleName)
-	return profile.Manifest.Save(ManifestPath(profile.Path))
+	if err := profile.Manifest.Save(ManifestPath(profile.Path)); err != nil {
+		return err
+	}
+	return m.syncHooksFor(profile, config.HubBundles)
 }
 
 // GetActive returns the currently active profile (via symlink)
