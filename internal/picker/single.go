@@ -96,10 +96,7 @@ func (m *SingleModel) adjustScroll() {
 	}
 
 	// Clamp offset
-	maxOffset := itemCount - maxVisibleItems
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
+	maxOffset := max(itemCount-maxVisibleItems, 0)
 	if m.offset > maxOffset {
 		m.offset = maxOffset
 	}
@@ -241,10 +238,7 @@ func (m SingleModel) View() string {
 
 		// Calculate visible range
 		start := m.offset
-		end := start + maxVisibleItems
-		if end > len(filteredItems) {
-			end = len(filteredItems)
-		}
+		end := min(start+maxVisibleItems, len(filteredItems))
 
 		// Render visible items
 		for i := start; i < end; i++ {

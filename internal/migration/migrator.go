@@ -17,12 +17,12 @@ import (
 // MigrationPlan describes what will be migrated
 type MigrationPlan struct {
 	HubItems           map[config.HubItemType][]string
-	FilesToCopy        []string // CLAUDE.md, settings.json, etc.
-	DataDirs           []string // tasks, todos, etc.
+	FilesToCopy        []string            // CLAUDE.md, settings.json, etc.
+	DataDirs           []string            // tasks, todos, etc.
 	HookClassification *HookClassification // Classified hooks from settings.json
 	HookMigrationPlan  *HookMigrationPlan  // User decisions for hook migration
 	MigratedHooks      []MigratedHook      // Successfully migrated hooks
-	SettingsTemplate   map[string]interface{}   // Extracted settings template
+	SettingsTemplate   map[string]any      // Extracted settings template
 }
 
 // Migrator handles the init migration process
@@ -561,13 +561,13 @@ func (m *Migrator) rewriteSettingsHooks(settingsPath string, _ string, migrated 
 	}
 
 	// Parse existing settings
-	var settings map[string]interface{}
+	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return fmt.Errorf("failed to parse settings.json: %w", err)
 	}
 
 	// Build new hooks section from migrated hooks
-	newHooks := make(map[string][]map[string]interface{})
+	newHooks := make(map[string][]map[string]any)
 
 	for _, hook := range migrated {
 		// Get hook entries from HooksJSON
@@ -578,8 +578,8 @@ func (m *Migrator) rewriteSettingsHooks(settingsPath string, _ string, migrated 
 		for hookType, entries := range hook.HooksJSON.Hooks {
 			for _, hookEntry := range entries {
 				for _, cmd := range hookEntry.Hooks {
-					entry := map[string]interface{}{
-						"hooks": []map[string]interface{}{{
+					entry := map[string]any{
+						"hooks": []map[string]any{{
 							"command": BuildSettingsCommandFromHooksJSON(cmd.Command, hook.HubPath),
 							"timeout": cmd.Timeout,
 							"type":    cmd.Type,
@@ -601,8 +601,8 @@ func (m *Migrator) rewriteSettingsHooks(settingsPath string, _ string, migrated 
 		for _, hook := range plan.GetHooksToKeep() {
 			hookType := string(hook.HookType)
 
-			entry := map[string]interface{}{
-				"hooks": []map[string]interface{}{{
+			entry := map[string]any{
+				"hooks": []map[string]any{{
 					"command": hook.Command,
 					"timeout": hook.Timeout,
 					"type":    "command",
@@ -625,7 +625,7 @@ func (m *Migrator) rewriteSettingsHooks(settingsPath string, _ string, migrated 
 }
 
 // writeJSONFile writes data as JSON without HTML escaping
-func writeJSONFile(path string, data interface{}) error {
+func writeJSONFile(path string, data any) error {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)

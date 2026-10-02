@@ -202,13 +202,11 @@ func (r *GitHubRegistry) Get(ctx context.Context, packageID string) (*PackageDet
 	}
 
 	return &PackageDetails{
-		PackageInfo: PackageInfo{
-			ID:          result.FullName,
-			Name:        result.FullName,
-			Description: result.Description,
-			Registry:    "github",
-			Tags:        result.Topics,
-		},
+		ID:           result.FullName,
+		Name:         result.FullName,
+		Description:  result.Description,
+		Registry:     "github",
+		Tags:         result.Topics,
 		DownloadURL:  result.CloneURL,
 		ProviderType: "git",
 		Ref:          ref,

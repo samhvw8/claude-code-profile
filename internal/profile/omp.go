@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -888,12 +889,7 @@ var ompScannedTypes = append(append([]config.HubItemType{}, OmpLinkTypes...), om
 
 // ompRetiredType reports whether ccp no longer links an item type.
 func ompRetiredType(itemType config.HubItemType) bool {
-	for _, retired := range ompRetiredTypes {
-		if itemType == retired {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ompRetiredTypes, itemType)
 }
 
 // ompScanLinks returns every ccp link omp currently holds, in type/name order.
@@ -1225,10 +1221,8 @@ func parseOmpItem(ref string) (config.HubItemType, string, error) {
 	}
 
 	itemType := config.HubItemType(parts[0])
-	for _, linkable := range OmpLinkTypes {
-		if itemType == linkable {
-			return itemType, parts[1], nil
-		}
+	if slices.Contains(OmpLinkTypes, itemType) {
+		return itemType, parts[1], nil
 	}
 	if ompRetiredType(itemType) {
 		return "", "", fmt.Errorf("omp cannot link %s: omp rules travel in RULES.md, which 'ccp omp sync' writes", ref)

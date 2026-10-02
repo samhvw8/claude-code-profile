@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -229,10 +230,8 @@ func (r *Registry) AddInstalled(sourceID, item string) error {
 		return &SourceError{Op: "add installed", Source: sourceID, Err: ErrSourceNotFound}
 	}
 
-	for _, i := range source.Installed {
-		if i == item {
-			return nil
-		}
+	if slices.Contains(source.Installed, item) {
+		return nil
 	}
 
 	source.Installed = append(source.Installed, item)
@@ -263,10 +262,8 @@ func (r *Registry) RemoveInstalled(sourceID, item string) error {
 // FindSourceByItem finds which source an item belongs to
 func (r *Registry) FindSourceByItem(item string) *SourceEntry {
 	for id, source := range r.Sources {
-		for _, inst := range source.Installed {
-			if inst == item {
-				return &SourceEntry{ID: id, Source: source}
-			}
+		if slices.Contains(source.Installed, item) {
+			return &SourceEntry{ID: id, Source: source}
 		}
 	}
 	return nil

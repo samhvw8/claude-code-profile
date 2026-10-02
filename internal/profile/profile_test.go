@@ -130,12 +130,12 @@ func TestProfileManager_SetActive_GlobalVsProject(t *testing.T) {
 	globalClaudeDir := filepath.Join(testDir, "global-claude-link")
 
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      projectClaudeDir, // as if CLAUDE_CONFIG_DIR is set
+		CcpDir:          testDir,
+		ClaudeDir:       projectClaudeDir, // as if CLAUDE_CONFIG_DIR is set
 		GlobalClaudeDir: globalClaudeDir,
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
 	}
 
 	// Create hub + profile
@@ -182,12 +182,12 @@ func TestProfileManager_SetActive_GlobalVsProject(t *testing.T) {
 func TestProfileManager_SetActive_NonexistentProfile(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
 	}
 
 	mgr := NewManager(paths)
@@ -204,12 +204,12 @@ func TestProfileManager_GetActive_NotSymlink(t *testing.T) {
 	os.MkdirAll(claudeDir, 0755) // real dir, not symlink
 
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      claudeDir,
+		CcpDir:          testDir,
+		ClaudeDir:       claudeDir,
 		GlobalClaudeDir: claudeDir,
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
 	}
 
 	mgr := NewManager(paths)
@@ -227,12 +227,12 @@ func TestProfileManager_SetActive_SwapExistingSymlink(t *testing.T) {
 	claudeLink := filepath.Join(testDir, "claude-link")
 
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      claudeLink,
+		CcpDir:          testDir,
+		ClaudeDir:       claudeLink,
 		GlobalClaudeDir: claudeLink,
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
 	}
 
 	// Create hub + two profiles
@@ -265,12 +265,12 @@ func TestProfileManager_SetActive_SwapExistingSymlink(t *testing.T) {
 func TestProfileManager(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
 	}
 
 	// Create hub structure
@@ -332,13 +332,13 @@ func TestProfileManager(t *testing.T) {
 func TestProfileManager_Create_AlreadyExists(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	for _, itemType := range config.AllHubItemTypes() {
@@ -367,13 +367,13 @@ func TestProfileManager_Create_AlreadyExists(t *testing.T) {
 func TestProfileManager_Create_WithHubItemSymlinks(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	for _, itemType := range config.AllHubItemTypes() {
@@ -435,13 +435,13 @@ func TestProfileManager_Create_WithHubItemSymlinks(t *testing.T) {
 func TestProfileManager_Create_SharedDataDirs(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	for _, itemType := range config.AllHubItemTypes() {
@@ -482,13 +482,13 @@ func TestProfileManager_Create_SharedDataDirs(t *testing.T) {
 func TestProfileManager_Create_SettingsJSON_WithHooks(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	for _, itemType := range config.AllHubItemTypes() {
@@ -530,7 +530,7 @@ func TestProfileManager_Create_SettingsJSON_WithHooks(t *testing.T) {
 		t.Fatalf("settings.json not created: %v", err)
 	}
 
-	var settings map[string]interface{}
+	var settings map[string]any
 	if err := json.Unmarshal(settingsData, &settings); err != nil {
 		t.Fatalf("settings.json invalid JSON: %v", err)
 	}
@@ -543,13 +543,13 @@ func TestProfileManager_Create_SettingsJSON_WithHooks(t *testing.T) {
 func TestProfileManager_LinkHubItem(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	for _, itemType := range config.AllHubItemTypes() {
@@ -591,13 +591,13 @@ func TestProfileManager_LinkHubItem(t *testing.T) {
 func TestProfileManager_LinkHubItem_NonexistentProfile(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	mgr := NewManager(paths)
@@ -610,13 +610,13 @@ func TestProfileManager_LinkHubItem_NonexistentProfile(t *testing.T) {
 func TestProfileManager_LinkHubItem_MissingHubItem(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	for _, itemType := range config.AllHubItemTypes() {
@@ -637,13 +637,13 @@ func TestProfileManager_LinkHubItem_MissingHubItem(t *testing.T) {
 func TestProfileManager_UnlinkHubItem(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	for _, itemType := range config.AllHubItemTypes() {
@@ -682,13 +682,13 @@ func TestProfileManager_UnlinkHubItem(t *testing.T) {
 func TestProfileManager_UnlinkHubItem_NonexistentProfile(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	mgr := NewManager(paths)
@@ -701,13 +701,13 @@ func TestProfileManager_UnlinkHubItem_NonexistentProfile(t *testing.T) {
 func TestProfileManager_Get_NonexistentReturnsNil(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	mgr := NewManager(paths)
@@ -723,13 +723,13 @@ func TestProfileManager_Get_NonexistentReturnsNil(t *testing.T) {
 func TestProfileManager_Get_DirWithoutManifest(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	// Create profile dir without manifest
@@ -751,13 +751,13 @@ func TestProfileManager_Get_DirWithoutManifest(t *testing.T) {
 func TestProfileManager_List_SkipsSharedDir(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	for _, itemType := range config.AllHubItemTypes() {
@@ -785,13 +785,13 @@ func TestProfileManager_List_SkipsSharedDir(t *testing.T) {
 func TestProfileManager_List_EmptyProfilesDir(t *testing.T) {
 	testDir := t.TempDir()
 	paths := &config.Paths{
-		CcpDir:         testDir,
-		ClaudeDir:      filepath.Join(testDir, "claude-link"),
+		CcpDir:          testDir,
+		ClaudeDir:       filepath.Join(testDir, "claude-link"),
 		GlobalClaudeDir: filepath.Join(testDir, "claude-link"),
-		HubDir:         filepath.Join(testDir, "hub"),
-		ProfilesDir:    filepath.Join(testDir, "profiles"),
-		SharedDir:      filepath.Join(testDir, "profiles", "shared"),
-		StoreDir:       filepath.Join(testDir, "store"),
+		HubDir:          filepath.Join(testDir, "hub"),
+		ProfilesDir:     filepath.Join(testDir, "profiles"),
+		SharedDir:       filepath.Join(testDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(testDir, "store"),
 	}
 
 	// No profiles dir at all
@@ -1259,7 +1259,7 @@ func TestSettingsManager_SaveSettings(t *testing.T) {
 				},
 			},
 		},
-		rawData: make(map[string]interface{}),
+		rawData: make(map[string]any),
 	}
 
 	if err := sm.SaveSettings(testDir, settings); err != nil {
@@ -1271,7 +1271,7 @@ func TestSettingsManager_SaveSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile error: %v", err)
 	}
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("json.Unmarshal error: %v", err)
 	}
@@ -1307,7 +1307,7 @@ func TestSettingsManager_SyncHooksFromManifest(t *testing.T) {
 		t.Fatalf("settings.json not created: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("json.Unmarshal error: %v", err)
 	}

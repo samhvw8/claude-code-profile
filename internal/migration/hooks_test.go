@@ -122,10 +122,10 @@ func TestHookMigrationChoice_String(t *testing.T) {
 }
 
 func TestHookMigrationPlan_GetHooksToMigrate(t *testing.T) {
-	inside := ClassifiedHook{ExtractedHook: ExtractedHook{FilePath: "/inside.sh"}, Location: HookLocationInside}
-	inline := ClassifiedHook{ExtractedHook: ExtractedHook{Command: "echo"}, Location: HookLocationInline}
-	outside1 := ClassifiedHook{ExtractedHook: ExtractedHook{FilePath: "/out1.sh"}, Location: HookLocationOutside}
-	outside2 := ClassifiedHook{ExtractedHook: ExtractedHook{FilePath: "/out2.sh"}, Location: HookLocationOutside}
+	inside := ClassifiedHook{FilePath: "/inside.sh", Location: HookLocationInside}
+	inline := ClassifiedHook{Command: "echo", Location: HookLocationInline}
+	outside1 := ClassifiedHook{FilePath: "/out1.sh", Location: HookLocationOutside}
+	outside2 := ClassifiedHook{FilePath: "/out2.sh", Location: HookLocationOutside}
 
 	plan := &HookMigrationPlan{
 		Inside: []ClassifiedHook{inside},
@@ -145,8 +145,8 @@ func TestHookMigrationPlan_GetHooksToMigrate(t *testing.T) {
 }
 
 func TestHookMigrationPlan_GetHooksToKeep(t *testing.T) {
-	outside1 := ClassifiedHook{ExtractedHook: ExtractedHook{FilePath: "/out1.sh"}, Location: HookLocationOutside}
-	outside2 := ClassifiedHook{ExtractedHook: ExtractedHook{FilePath: "/out2.sh"}, Location: HookLocationOutside}
+	outside1 := ClassifiedHook{FilePath: "/out1.sh", Location: HookLocationOutside}
+	outside2 := ClassifiedHook{FilePath: "/out2.sh", Location: HookLocationOutside}
 
 	plan := &HookMigrationPlan{
 		Decisions: []HookMigrationDecision{

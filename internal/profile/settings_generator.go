@@ -161,7 +161,7 @@ func RemoveSettingsSnapshot(paths *config.Paths, profileDir string) error {
 // it that ccp generated. They differ by hooks that ccp did not create — added
 // by hand or with Claude Code's /hooks — which are carried over from disk. An
 // unreadable settings.json contributes nothing.
-func buildSettings(paths *config.Paths, profileDir string, manifest *Manifest) (final, generated map[string]interface{}, err error) {
+func buildSettings(paths *config.Paths, profileDir string, manifest *Manifest) (final, generated map[string]any, err error) {
 	raw, err := GenerateSettings(manifest, paths, profileDir)
 	if err != nil {
 		return nil, nil, err
@@ -304,7 +304,7 @@ func SyncHooks(paths *config.Paths, profileDir string, manifest *Manifest) error
 // point), when ccp wrote
 // it last time (per the snapshot), or when some hub hook would generate it —
 // which recognises ccp's own entries on profiles that have no snapshot yet.
-func foreignHooks(paths *config.Paths, profileDir string, manifest *Manifest, current map[string]interface{}) map[string][]interface{} {
+func foreignHooks(paths *config.Paths, profileDir string, manifest *Manifest, current map[string]any) map[string][]any {
 	written := hooksOf(loadSnapshot(paths, profileDir))
 	known := knownHookEntries(paths, profileDir, manifest)
 	var dirs []string
@@ -313,9 +313,9 @@ func foreignHooks(paths *config.Paths, profileDir string, manifest *Manifest, cu
 		dirs = append(dirs, dir, config.ToPortablePath(dir))
 	}
 
-	foreign := make(map[string][]interface{})
+	foreign := make(map[string][]any)
 	for hookType, entries := range hooksOf(current) {
-		list, _ := entries.([]interface{})
+		list, _ := entries.([]any)
 	entry:
 		for _, entry := range list {
 			data, _ := marshalJSON(entry)
@@ -335,7 +335,7 @@ func foreignHooks(paths *config.Paths, profileDir string, manifest *Manifest, cu
 
 // knownHookEntries returns every entry a hub hook, bundle hook or legacy
 // manifest hook would generate for this profile, linked or not.
-func knownHookEntries(paths *config.Paths, profileDir string, manifest *Manifest) map[string]interface{} {
+func knownHookEntries(paths *config.Paths, profileDir string, manifest *Manifest) map[string]any {
 	hooks := make(map[config.HookType][]config.SettingsHookEntry)
 	profileHooksDir := filepath.Join(profileDir, "hooks")
 	entries, _ := os.ReadDir(paths.HubItemDir(config.HubHooks))
@@ -361,23 +361,23 @@ func knownHookEntries(paths *config.Paths, profileDir string, manifest *Manifest
 	for hookType, list := range legacyManifestHooks(profileDir, manifest) {
 		hooks[hookType] = append(hooks[hookType], list...)
 	}
-	generic, _ := toGeneric(map[string]interface{}{"hooks": hooks})
+	generic, _ := toGeneric(map[string]any{"hooks": hooks})
 	return hooksOf(generic)
 }
 
 // mergeForeignHooks appends foreign hook entries after the generated ones,
 // skipping any the generation already produced.
-func mergeForeignHooks(hooks map[string]interface{}, foreign map[string][]interface{}) map[string]interface{} {
+func mergeForeignHooks(hooks map[string]any, foreign map[string][]any) map[string]any {
 	if len(foreign) == 0 {
 		return hooks
 	}
 	if hooks == nil {
-		hooks = make(map[string]interface{})
+		hooks = make(map[string]any)
 	}
 	for hookType, entries := range foreign {
 		for _, entry := range entries {
 			if !containsEntry(hooks[hookType], entry) {
-				list, _ := hooks[hookType].([]interface{})
+				list, _ := hooks[hookType].([]any)
 				hooks[hookType] = append(list, entry)
 			}
 		}
@@ -385,8 +385,8 @@ func mergeForeignHooks(hooks map[string]interface{}, foreign map[string][]interf
 	return hooks
 }
 
-func containsEntry(list interface{}, entry interface{}) bool {
-	entries, _ := list.([]interface{})
+func containsEntry(list any, entry any) bool {
+	entries, _ := list.([]any)
 	for _, e := range entries {
 		if reflect.DeepEqual(e, entry) {
 			return true
@@ -396,13 +396,13 @@ func containsEntry(list interface{}, entry interface{}) bool {
 }
 
 // hooksOf returns the hooks object of a generic settings map, or nil.
-func hooksOf(settings map[string]interface{}) map[string]interface{} {
-	hooks, _ := settings["hooks"].(map[string]interface{})
+func hooksOf(settings map[string]any) map[string]any {
+	hooks, _ := settings["hooks"].(map[string]any)
 	return hooks
 }
 
 // setHooks stores hooks in settings, removing the key when there are none.
-func setHooks(settings map[string]interface{}, hooks map[string]interface{}) {
+func setHooks(settings map[string]any, hooks map[string]any) {
 	if len(hooks) == 0 {
 		delete(settings, "hooks")
 		return
@@ -411,16 +411,16 @@ func setHooks(settings map[string]interface{}, hooks map[string]interface{}) {
 }
 
 // stripNullsMap returns m without null values, at any depth.
-func stripNullsMap(m map[string]interface{}) map[string]interface{} {
+func stripNullsMap(m map[string]any) map[string]any {
 	if m == nil {
 		return nil
 	}
-	out := make(map[string]interface{}, len(m))
+	out := make(map[string]any, len(m))
 	for k, v := range m {
 		if v == nil {
 			continue
 		}
-		if sub, ok := v.(map[string]interface{}); ok {
+		if sub, ok := v.(map[string]any); ok {
 			v = stripNullsMap(sub)
 		}
 		out[k] = v
@@ -430,17 +430,17 @@ func stripNullsMap(m map[string]interface{}) map[string]interface{} {
 
 // toGeneric round-trips a value through JSON so it compares equal to what
 // reading settings.json back would produce.
-func toGeneric(v interface{}) (map[string]interface{}, error) {
+func toGeneric(v any) (map[string]any, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, err
 	}
 	if m == nil {
-		m = make(map[string]interface{})
+		m = make(map[string]any)
 	}
 	return m, nil
 }
@@ -449,7 +449,7 @@ func toGeneric(v interface{}) (map[string]interface{}, error) {
 // snapshot only costs precision (ccp falls back to comparing with a fresh
 // generation), so it is never fatal; a corrupt one is reported and replaced on
 // the next write.
-func loadSnapshot(paths *config.Paths, profileDir string) map[string]interface{} {
+func loadSnapshot(paths *config.Paths, profileDir string) map[string]any {
 	path := snapshotPath(paths, profileDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -458,18 +458,18 @@ func loadSnapshot(paths *config.Paths, profileDir string) map[string]interface{}
 		}
 		return nil
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: ignoring corrupt %s: %v\n", path, err)
 		return nil
 	}
 	if m == nil {
-		m = make(map[string]interface{})
+		m = make(map[string]any)
 	}
 	return m
 }
 
-func saveSnapshot(paths *config.Paths, profileDir string, snapshot map[string]interface{}) error {
+func saveSnapshot(paths *config.Paths, profileDir string, snapshot map[string]any) error {
 	path := snapshotPath(paths, profileDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -478,7 +478,7 @@ func saveSnapshot(paths *config.Paths, profileDir string, snapshot map[string]in
 }
 
 // readSettingsMap reads settings.json as a generic map; nil when it does not exist.
-func readSettingsMap(profileDir string) (map[string]interface{}, error) {
+func readSettingsMap(profileDir string) (map[string]any, error) {
 	data, err := os.ReadFile(filepath.Join(profileDir, "settings.json"))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -486,12 +486,12 @@ func readSettingsMap(profileDir string) (map[string]interface{}, error) {
 		}
 		return nil, err
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("settings.json is not valid JSON (%v): fix it, or regenerate it with 'ccp profile sync --force', which keeps the old file as settings.json.bak", err)
 	}
 	if m == nil {
-		m = make(map[string]interface{})
+		m = make(map[string]any)
 	}
 	return m, nil
 }
@@ -520,7 +520,7 @@ func RegenerateSettings(paths *config.Paths, profileDir string, manifest *Manife
 }
 
 // marshalJSON serializes data as pretty JSON without HTML escaping
-func marshalJSON(data interface{}) ([]byte, error) {
+func marshalJSON(data any) ([]byte, error) {
 	var buf bytes.Buffer
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
@@ -532,7 +532,7 @@ func marshalJSON(data interface{}) ([]byte, error) {
 }
 
 // writeJSONFile writes data as JSON without HTML escaping
-func writeJSONFile(path string, data interface{}) error {
+func writeJSONFile(path string, data any) error {
 	b, err := marshalJSON(data)
 	if err != nil {
 		return err

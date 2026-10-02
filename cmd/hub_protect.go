@@ -73,7 +73,7 @@ func loadProtectedItems(paths *config.Paths) (map[string]bool, error) {
 		return nil, err
 	}
 
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" && !strings.HasPrefix(line, "#") {
 			protected[line] = true
@@ -92,12 +92,13 @@ func saveProtectedItems(paths *config.Paths, protected map[string]bool) error {
 	}
 	sort.Strings(items)
 
-	content := "# Protected hub items (won't be removed by 'hub prune')\n"
+	var content strings.Builder
+	content.WriteString("# Protected hub items (won't be removed by 'hub prune')\n")
 	for _, item := range items {
-		content += item + "\n"
+		content.WriteString(item + "\n")
 	}
 
-	return os.WriteFile(filePath, []byte(content), 0644)
+	return os.WriteFile(filePath, []byte(content.String()), 0644)
 }
 
 func runHubProtect(cmd *cobra.Command, args []string) error {

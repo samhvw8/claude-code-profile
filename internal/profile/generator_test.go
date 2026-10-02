@@ -19,7 +19,7 @@ func TestGenerateSettings_WithTemplate(t *testing.T) {
 	if err := os.MkdirAll(tmplDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	tmplSettings := map[string]interface{}{
+	tmplSettings := map[string]any{
 		"model":       "claude-sonnet-4-20250514",
 		"temperature": 0.7,
 	}
@@ -213,7 +213,7 @@ func TestGenerateSettings_TemplateAndHooks_MergedCorrectly(t *testing.T) {
 	if err := os.MkdirAll(tmplDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	tmplSettings := map[string]interface{}{
+	tmplSettings := map[string]any{
 		"model":       "opus",
 		"temperature": 0.9,
 		"maxTokens":   4096.0,
@@ -319,7 +319,7 @@ func TestGenerateSettings_FragmentOverridesTemplate(t *testing.T) {
 	if err := os.MkdirAll(tmplDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	tmplSettings := map[string]interface{}{
+	tmplSettings := map[string]any{
 		"model":       "sonnet",
 		"temperature": 0.7,
 		"verbose":     true,
@@ -331,7 +331,7 @@ func TestGenerateSettings_FragmentOverridesTemplate(t *testing.T) {
 	if err := os.MkdirAll(profileDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	fragment := map[string]interface{}{
+	fragment := map[string]any{
 		"model":   "opus",
 		"newFlag": "enabled",
 	}
@@ -371,12 +371,12 @@ func TestGenerateSettings_FragmentDeepMerge(t *testing.T) {
 	// Create template with nested object
 	tmplDir := filepath.Join(hubDir, "settings-templates", "base")
 	os.MkdirAll(tmplDir, 0755)
-	tmplSettings := map[string]interface{}{
-		"permissions": map[string]interface{}{
-			"allow":       []interface{}{"Read", "Write"},
+	tmplSettings := map[string]any{
+		"permissions": map[string]any{
+			"allow":       []any{"Read", "Write"},
 			"defaultMode": "plan",
 		},
-		"env": map[string]interface{}{
+		"env": map[string]any{
 			"FOO": "1",
 			"BAR": "2",
 		},
@@ -386,13 +386,13 @@ func TestGenerateSettings_FragmentDeepMerge(t *testing.T) {
 
 	// Fragment overrides env.FOO and adds env.BAZ, replaces permissions.allow
 	os.MkdirAll(profileDir, 0755)
-	fragment := map[string]interface{}{
-		"env": map[string]interface{}{
+	fragment := map[string]any{
+		"env": map[string]any{
 			"FOO": "override",
 			"BAZ": "3",
 		},
-		"permissions": map[string]interface{}{
-			"allow": []interface{}{"Read", "Write", "Bash"},
+		"permissions": map[string]any{
+			"allow": []any{"Read", "Write", "Bash"},
 		},
 	}
 	fdata, _ := json.Marshal(fragment)
@@ -408,7 +408,7 @@ func TestGenerateSettings_FragmentDeepMerge(t *testing.T) {
 		t.Fatalf("GenerateSettings() error = %v", err)
 	}
 
-	env := settings["env"].(map[string]interface{})
+	env := settings["env"].(map[string]any)
 	if env["FOO"] != "override" {
 		t.Errorf("env.FOO = %v, want 'override'", env["FOO"])
 	}
@@ -419,11 +419,11 @@ func TestGenerateSettings_FragmentDeepMerge(t *testing.T) {
 		t.Errorf("env.BAZ = %v, want '3' (added by fragment)", env["BAZ"])
 	}
 
-	perms := settings["permissions"].(map[string]interface{})
+	perms := settings["permissions"].(map[string]any)
 	if perms["defaultMode"] != "plan" {
 		t.Errorf("permissions.defaultMode = %v, want 'plan' (preserved from base)", perms["defaultMode"])
 	}
-	allow := perms["allow"].([]interface{})
+	allow := perms["allow"].([]any)
 	if len(allow) != 3 {
 		t.Errorf("permissions.allow length = %d, want 3 (replaced by fragment)", len(allow))
 	}
@@ -438,7 +438,7 @@ func TestGenerateSettings_FragmentOnly_NoTemplate(t *testing.T) {
 	os.MkdirAll(profileDir, 0755)
 	os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755)
 
-	fragment := map[string]interface{}{
+	fragment := map[string]any{
 		"model":   "haiku",
 		"verbose": false,
 	}
@@ -484,14 +484,14 @@ func TestGenerateSettings_InvalidFragment(t *testing.T) {
 func TestDeepMerge(t *testing.T) {
 	tests := []struct {
 		name     string
-		dst, src map[string]interface{}
-		check    func(t *testing.T, result map[string]interface{})
+		dst, src map[string]any
+		check    func(t *testing.T, result map[string]any)
 	}{
 		{
 			name: "scalar override",
-			dst:  map[string]interface{}{"a": "1", "b": "2"},
-			src:  map[string]interface{}{"a": "override"},
-			check: func(t *testing.T, r map[string]interface{}) {
+			dst:  map[string]any{"a": "1", "b": "2"},
+			src:  map[string]any{"a": "override"},
+			check: func(t *testing.T, r map[string]any) {
 				if r["a"] != "override" {
 					t.Errorf("a = %v, want 'override'", r["a"])
 				}
@@ -502,10 +502,10 @@ func TestDeepMerge(t *testing.T) {
 		},
 		{
 			name: "nested merge",
-			dst:  map[string]interface{}{"nested": map[string]interface{}{"x": 1, "y": 2}},
-			src:  map[string]interface{}{"nested": map[string]interface{}{"y": 99, "z": 3}},
-			check: func(t *testing.T, r map[string]interface{}) {
-				n := r["nested"].(map[string]interface{})
+			dst:  map[string]any{"nested": map[string]any{"x": 1, "y": 2}},
+			src:  map[string]any{"nested": map[string]any{"y": 99, "z": 3}},
+			check: func(t *testing.T, r map[string]any) {
+				n := r["nested"].(map[string]any)
 				if n["x"] != 1 {
 					t.Errorf("nested.x = %v, want 1", n["x"])
 				}
@@ -519,10 +519,10 @@ func TestDeepMerge(t *testing.T) {
 		},
 		{
 			name: "array replaces",
-			dst:  map[string]interface{}{"arr": []interface{}{1, 2}},
-			src:  map[string]interface{}{"arr": []interface{}{3, 4, 5}},
-			check: func(t *testing.T, r map[string]interface{}) {
-				arr := r["arr"].([]interface{})
+			dst:  map[string]any{"arr": []any{1, 2}},
+			src:  map[string]any{"arr": []any{3, 4, 5}},
+			check: func(t *testing.T, r map[string]any) {
+				arr := r["arr"].([]any)
 				if len(arr) != 3 {
 					t.Errorf("arr length = %d, want 3", len(arr))
 				}
@@ -530,9 +530,9 @@ func TestDeepMerge(t *testing.T) {
 		},
 		{
 			name: "does not mutate dst",
-			dst:  map[string]interface{}{"a": "original"},
-			src:  map[string]interface{}{"a": "changed"},
-			check: func(t *testing.T, r map[string]interface{}) {
+			dst:  map[string]any{"a": "original"},
+			src:  map[string]any{"a": "changed"},
+			check: func(t *testing.T, r map[string]any) {
 				// result should have the change, but we can't check original dst here
 				if r["a"] != "changed" {
 					t.Errorf("a = %v, want 'changed'", r["a"])
@@ -559,10 +559,10 @@ func TestGenerateSettings_TemplateWithHooksKey_OverriddenByGeneratedHooks(t *tes
 	if err := os.MkdirAll(tmplDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	tmplSettings := map[string]interface{}{
+	tmplSettings := map[string]any{
 		"model": "sonnet",
-		"hooks": map[string]interface{}{
-			"SessionStart": []interface{}{},
+		"hooks": map[string]any{
+			"SessionStart": []any{},
 		},
 	}
 	data, _ := json.Marshal(tmplSettings)
@@ -606,7 +606,7 @@ func TestGenerateSettings_TemplateWithHooksKey_OverriddenByGeneratedHooks(t *tes
 	// Template has SessionStart (existing), hub has Stop (fills gap)
 	// Result is map[string]interface{} because template hooks were present
 	hooksVal := settings["hooks"]
-	hooksMap, ok := hooksVal.(map[string]interface{})
+	hooksMap, ok := hooksVal.(map[string]any)
 	if !ok {
 		t.Fatalf("hooks should be map[string]interface{}, got %T", hooksVal)
 	}
@@ -621,14 +621,14 @@ func TestGenerateSettings_TemplateWithHooksKey_OverriddenByGeneratedHooks(t *tes
 func TestDiffSettings(t *testing.T) {
 	tests := []struct {
 		name          string
-		base, current map[string]interface{}
-		check         func(t *testing.T, diff map[string]interface{})
+		base, current map[string]any
+		check         func(t *testing.T, diff map[string]any)
 	}{
 		{
 			name:    "identical maps produce empty diff",
-			base:    map[string]interface{}{"a": "1", "b": "2"},
-			current: map[string]interface{}{"a": "1", "b": "2"},
-			check: func(t *testing.T, diff map[string]interface{}) {
+			base:    map[string]any{"a": "1", "b": "2"},
+			current: map[string]any{"a": "1", "b": "2"},
+			check: func(t *testing.T, diff map[string]any) {
 				if len(diff) != 0 {
 					t.Errorf("expected empty diff, got %v", diff)
 				}
@@ -636,9 +636,9 @@ func TestDiffSettings(t *testing.T) {
 		},
 		{
 			name:    "new key in current",
-			base:    map[string]interface{}{"a": "1"},
-			current: map[string]interface{}{"a": "1", "b": "2"},
-			check: func(t *testing.T, diff map[string]interface{}) {
+			base:    map[string]any{"a": "1"},
+			current: map[string]any{"a": "1", "b": "2"},
+			check: func(t *testing.T, diff map[string]any) {
 				if diff["b"] != "2" {
 					t.Errorf("expected b=2, got %v", diff["b"])
 				}
@@ -649,9 +649,9 @@ func TestDiffSettings(t *testing.T) {
 		},
 		{
 			name:    "changed scalar",
-			base:    map[string]interface{}{"model": "sonnet"},
-			current: map[string]interface{}{"model": "opus"},
-			check: func(t *testing.T, diff map[string]interface{}) {
+			base:    map[string]any{"model": "sonnet"},
+			current: map[string]any{"model": "opus"},
+			check: func(t *testing.T, diff map[string]any) {
 				if diff["model"] != "opus" {
 					t.Errorf("expected model=opus, got %v", diff["model"])
 				}
@@ -659,14 +659,14 @@ func TestDiffSettings(t *testing.T) {
 		},
 		{
 			name: "nested object partial change",
-			base: map[string]interface{}{
-				"env": map[string]interface{}{"A": "1", "B": "2"},
+			base: map[string]any{
+				"env": map[string]any{"A": "1", "B": "2"},
 			},
-			current: map[string]interface{}{
-				"env": map[string]interface{}{"A": "1", "B": "changed"},
+			current: map[string]any{
+				"env": map[string]any{"A": "1", "B": "changed"},
 			},
-			check: func(t *testing.T, diff map[string]interface{}) {
-				env := diff["env"].(map[string]interface{})
+			check: func(t *testing.T, diff map[string]any) {
+				env := diff["env"].(map[string]any)
 				if env["B"] != "changed" {
 					t.Errorf("expected env.B=changed, got %v", env["B"])
 				}
@@ -677,10 +677,10 @@ func TestDiffSettings(t *testing.T) {
 		},
 		{
 			name:    "array replaced wholesale",
-			base:    map[string]interface{}{"arr": []interface{}{1, 2}},
-			current: map[string]interface{}{"arr": []interface{}{1, 2, 3}},
-			check: func(t *testing.T, diff map[string]interface{}) {
-				arr := diff["arr"].([]interface{})
+			base:    map[string]any{"arr": []any{1, 2}},
+			current: map[string]any{"arr": []any{1, 2, 3}},
+			check: func(t *testing.T, diff map[string]any) {
+				arr := diff["arr"].([]any)
 				if len(arr) != 3 {
 					t.Errorf("expected full array in diff, got len %d", len(arr))
 				}
@@ -688,9 +688,9 @@ func TestDiffSettings(t *testing.T) {
 		},
 		{
 			name:    "deleted key in current not in diff",
-			base:    map[string]interface{}{"a": "1", "b": "2"},
-			current: map[string]interface{}{"a": "1"},
-			check: func(t *testing.T, diff map[string]interface{}) {
+			base:    map[string]any{"a": "1", "b": "2"},
+			current: map[string]any{"a": "1"},
+			check: func(t *testing.T, diff map[string]any) {
 				if len(diff) != 0 {
 					t.Errorf("deletions should not appear in diff, got %v", diff)
 				}
@@ -698,9 +698,9 @@ func TestDiffSettings(t *testing.T) {
 		},
 		{
 			name:    "empty base means everything is diff",
-			base:    map[string]interface{}{},
-			current: map[string]interface{}{"a": "1", "b": "2"},
-			check: func(t *testing.T, diff map[string]interface{}) {
+			base:    map[string]any{},
+			current: map[string]any{"a": "1", "b": "2"},
+			check: func(t *testing.T, diff map[string]any) {
 				if len(diff) != 2 {
 					t.Errorf("expected 2 keys, got %d", len(diff))
 				}
@@ -724,20 +724,20 @@ func TestUpdateFragment(t *testing.T) {
 	// Create template with base settings
 	tmplDir := filepath.Join(hubDir, "settings-templates", "base")
 	os.MkdirAll(tmplDir, 0755)
-	baseTmpl := map[string]interface{}{
+	baseTmpl := map[string]any{
 		"model":       "sonnet",
-		"permissions": map[string]interface{}{"allow": []interface{}{"read"}},
+		"permissions": map[string]any{"allow": []any{"read"}},
 	}
 	data, _ := json.Marshal(baseTmpl)
 	os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644)
 
 	// Create profile with modified settings.json (user added a key + changed model)
 	os.MkdirAll(profileDir, 0755)
-	currentSettings := map[string]interface{}{
+	currentSettings := map[string]any{
 		"model":       "opus",
-		"permissions": map[string]interface{}{"allow": []interface{}{"read"}},
-		"env":         map[string]interface{}{"DEBUG": "true"},
-		"hooks":       map[string]interface{}{"Stop": []interface{}{}},
+		"permissions": map[string]any{"allow": []any{"read"}},
+		"env":         map[string]any{"DEBUG": "true"},
+		"hooks":       map[string]any{"Stop": []any{}},
 	}
 	data, _ = json.Marshal(currentSettings)
 	os.WriteFile(filepath.Join(profileDir, "settings.json"), data, 0644)
@@ -768,7 +768,7 @@ func TestUpdateFragment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fragment file not written: %v", err)
 	}
-	var saved map[string]interface{}
+	var saved map[string]any
 	json.Unmarshal(fragData, &saved)
 	if saved["model"] != "opus" {
 		t.Errorf("saved fragment model = %v, want opus", saved["model"])
@@ -781,9 +781,9 @@ func TestUpdateFragment_NoTemplate(t *testing.T) {
 	os.MkdirAll(profileDir, 0755)
 
 	// Settings with no base template — everything becomes the fragment
-	settings := map[string]interface{}{
+	settings := map[string]any{
 		"model": "opus",
-		"env":   map[string]interface{}{"X": "1"},
+		"env":   map[string]any{"X": "1"},
 	}
 	data, _ := json.Marshal(settings)
 	os.WriteFile(filepath.Join(profileDir, "settings.json"), data, 0644)
@@ -809,7 +809,7 @@ func TestUpdateFragment_NoDiff_RemovesFragment(t *testing.T) {
 	// Template and settings are identical
 	tmplDir := filepath.Join(hubDir, "settings-templates", "same")
 	os.MkdirAll(tmplDir, 0755)
-	settings := map[string]interface{}{"model": "sonnet"}
+	settings := map[string]any{"model": "sonnet"}
 	data, _ := json.Marshal(settings)
 	os.WriteFile(filepath.Join(tmplDir, "settings.json"), data, 0644)
 

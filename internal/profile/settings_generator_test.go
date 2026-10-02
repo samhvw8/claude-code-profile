@@ -385,7 +385,7 @@ func TestRegenerateSettings_WritesValidJSON(t *testing.T) {
 		t.Fatalf("settings.json not created: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("settings.json is not valid JSON: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestRegenerateSettings_WithTemplateAndHooks(t *testing.T) {
 	// Create template
 	tmplDir := filepath.Join(hubDir, "settings-templates", "regen-tmpl")
 	os.MkdirAll(tmplDir, 0755)
-	tmplSettings := map[string]interface{}{
+	tmplSettings := map[string]any{
 		"model":       "opus",
 		"temperature": 0.5,
 	}
@@ -440,7 +440,7 @@ func TestRegenerateSettings_WithTemplateAndHooks(t *testing.T) {
 		t.Fatalf("settings.json not created: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("json.Unmarshal error: %v", err)
 	}
@@ -457,7 +457,7 @@ func TestWriteJSONFile_NoHTMLEscaping(t *testing.T) {
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "test.json")
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"url": "https://example.com?foo=bar&baz=qux",
 		"tag": "<script>alert('xss')</script>",
 	}
@@ -481,7 +481,7 @@ func TestWriteJSONFile_NoHTMLEscaping(t *testing.T) {
 	}
 
 	// Verify it's valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(content, &parsed); err != nil {
 		t.Fatalf("output is not valid JSON: %v", err)
 	}
@@ -580,7 +580,7 @@ func TestWriteJSONFile_EmptyMap(t *testing.T) {
 	tmpDir := t.TempDir()
 	outPath := filepath.Join(tmpDir, "empty.json")
 
-	if err := writeJSONFile(outPath, map[string]interface{}{}); err != nil {
+	if err := writeJSONFile(outPath, map[string]any{}); err != nil {
 		t.Fatalf("writeJSONFile() error: %v", err)
 	}
 
@@ -589,7 +589,7 @@ func TestWriteJSONFile_EmptyMap(t *testing.T) {
 		t.Fatalf("ReadFile error: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("output is not valid JSON: %v", err)
 	}
@@ -597,4 +597,3 @@ func TestWriteJSONFile_EmptyMap(t *testing.T) {
 		t.Errorf("expected empty map, got %v", parsed)
 	}
 }
-

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -59,13 +60,7 @@ func runHubList(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		itemType := config.HubItemType(args[0])
 		// Validate type
-		valid := false
-		for _, t := range config.AllHubItemTypes() {
-			if t == itemType {
-				valid = true
-				break
-			}
-		}
+		valid := slices.Contains(config.AllHubItemTypes(), itemType)
 		if !valid {
 			return fmt.Errorf("invalid type: %s (valid: skills, agents, hooks, rules, commands)", args[0])
 		}

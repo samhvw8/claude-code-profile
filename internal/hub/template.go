@@ -11,8 +11,8 @@ import (
 
 // Template represents a settings.json template in the hub
 type Template struct {
-	Name     string                 // Directory name
-	Settings map[string]interface{} // Raw settings content (hooks excluded)
+	Name     string         // Directory name
+	Settings map[string]any // Raw settings content (hooks excluded)
 }
 
 // TemplateManager handles settings template CRUD operations
@@ -47,7 +47,7 @@ func (m *TemplateManager) Load(name string) (*Template, error) {
 		return nil, err
 	}
 
-	var settings map[string]interface{}
+	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return nil, err
 	}
@@ -109,13 +109,13 @@ func (m *TemplateManager) Exists(name string) bool {
 // excluding hooks (which are managed separately by the hub hooks system).
 // If keys is non-empty, only those top-level keys are included; any key
 // not present in the settings produces an error.
-func ExtractFromSettings(settingsPath string, keys ...string) (map[string]interface{}, error) {
+func ExtractFromSettings(settingsPath string, keys ...string) (map[string]any, error) {
 	data, err := os.ReadFile(settingsPath)
 	if err != nil {
 		return nil, err
 	}
 
-	var settings map[string]interface{}
+	var settings map[string]any
 	if err := json.Unmarshal(data, &settings); err != nil {
 		return nil, err
 	}
@@ -126,7 +126,7 @@ func ExtractFromSettings(settingsPath string, keys ...string) (map[string]interf
 		return settings, nil
 	}
 
-	filtered := make(map[string]interface{}, len(keys))
+	filtered := make(map[string]any, len(keys))
 	for _, k := range keys {
 		if k == "hooks" {
 			continue

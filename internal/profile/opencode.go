@@ -232,7 +232,7 @@ func convertOpencodeAgent(data []byte) ([]byte, error) {
 		for _, name := range claudeToOpencodeTools {
 			out.Tools[name] = false
 		}
-		for _, name := range strings.Split(tools, ",") {
+		for name := range strings.SplitSeq(tools, ",") {
 			if oc, ok := claudeToOpencodeTools[strings.TrimSpace(name)]; ok {
 				out.Tools[oc] = true
 			}

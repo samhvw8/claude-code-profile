@@ -191,10 +191,7 @@ func runBootstrapPush() error {
 	// chezmoi add in batches to avoid arg limits
 	batchSize := 50
 	for i := 0; i < len(addPaths); i += batchSize {
-		end := i + batchSize
-		if end > len(addPaths) {
-			end = len(addPaths)
-		}
+		end := min(i+batchSize, len(addPaths))
 		batch := addPaths[i:end]
 		args := append([]string{"add"}, batch...)
 		cmd := exec.Command("chezmoi", args...)

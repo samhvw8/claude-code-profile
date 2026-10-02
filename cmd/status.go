@@ -43,7 +43,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	if !paths.IsInitialized() {
 		if statusJSON {
-			output := map[string]interface{}{
+			output := map[string]any{
 				"initialized": false,
 			}
 			enc := json.NewEncoder(os.Stdout)
@@ -92,7 +92,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			BrokenLinks int    `json:"broken_links,omitempty"`
 		}
 
-		output := map[string]interface{}{
+		output := map[string]any{
 			"initialized":    true,
 			"active_profile": activeProfile,
 			"ccp_dir":        paths.CcpDir,

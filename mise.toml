@@ -1,6 +1,6 @@
 # mise.toml - ccp development environment
 [tools]
-go = "1.25.1"
+go = "1.27.1"
 
 [env]
 CGO_ENABLED = "0"

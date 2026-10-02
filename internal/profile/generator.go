@@ -3,6 +3,7 @@ package profile
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,8 +16,8 @@ const SettingsFragmentFile = "settings-fragment.json"
 
 // GenerateSettings creates a complete settings map from the manifest.
 // Pipeline: base template → deep merge fragment → overlay hooks.
-func GenerateSettings(manifest *Manifest, paths *config.Paths, profileDir string) (map[string]interface{}, error) {
-	settings := make(map[string]interface{})
+func GenerateSettings(manifest *Manifest, paths *config.Paths, profileDir string) (map[string]any, error) {
+	settings := make(map[string]any)
 
 	// Load settings template (base)
 	if manifest.SettingsTemplate != "" {
@@ -25,9 +26,7 @@ func GenerateSettings(manifest *Manifest, paths *config.Paths, profileDir string
 		if err != nil {
 			return nil, fmt.Errorf("failed to load template %s: %w", manifest.SettingsTemplate, err)
 		}
-		for key, value := range tmpl.Settings {
-			settings[key] = value
-		}
+		maps.Copy(settings, tmpl.Settings)
 	}
 
 	// Load and merge per-profile fragment
@@ -59,8 +58,8 @@ func FragmentExists(profileDir string) bool {
 
 // mergeHubHooks merges hub-generated hooks into settings.
 // Fragment hooks take priority per hook type; hub hooks fill gaps.
-func mergeHubHooks(settings map[string]interface{}, hubHooks map[config.HookType][]config.SettingsHookEntry) {
-	existing, hasExisting := settings["hooks"].(map[string]interface{})
+func mergeHubHooks(settings map[string]any, hubHooks map[config.HookType][]config.SettingsHookEntry) {
+	existing, hasExisting := settings["hooks"].(map[string]any)
 	if !hasExisting {
 		settings["hooks"] = hubHooks
 		return
@@ -75,7 +74,7 @@ func mergeHubHooks(settings map[string]interface{}, hubHooks map[config.HookType
 		if err != nil {
 			continue
 		}
-		var arr interface{}
+		var arr any
 		json.Unmarshal(data, &arr)
 		existing[key] = arr
 	}
@@ -84,7 +83,7 @@ func mergeHubHooks(settings map[string]interface{}, hubHooks map[config.HookType
 
 // loadFragment reads settings-fragment.json from the profile directory.
 // Returns nil if the file doesn't exist.
-func loadFragment(profileDir string) (map[string]interface{}, error) {
+func loadFragment(profileDir string) (map[string]any, error) {
 	path := filepath.Join(profileDir, SettingsFragmentFile)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -94,7 +93,7 @@ func loadFragment(profileDir string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to read settings fragment: %w", err)
 	}
 
-	var fragment map[string]interface{}
+	var fragment map[string]any
 	if err := json.Unmarshal(data, &fragment); err != nil {
 		return nil, fmt.Errorf("failed to parse settings fragment: %w", err)
 	}
@@ -103,16 +102,16 @@ func loadFragment(profileDir string) (map[string]interface{}, error) {
 
 // DiffSettings returns keys in current that differ from base.
 // Objects are compared recursively; arrays and scalars use reflect.DeepEqual.
-func DiffSettings(base, current map[string]interface{}) map[string]interface{} {
-	diff := make(map[string]interface{})
+func DiffSettings(base, current map[string]any) map[string]any {
+	diff := make(map[string]any)
 	for k, cv := range current {
 		bv, exists := base[k]
 		if !exists {
 			diff[k] = cv
 			continue
 		}
-		cm, cok := cv.(map[string]interface{})
-		bm, bok := bv.(map[string]interface{})
+		cm, cok := cv.(map[string]any)
+		bm, bok := bv.(map[string]any)
 		if cok && bok {
 			sub := DiffSettings(bm, cm)
 			if len(sub) > 0 {
@@ -128,13 +127,13 @@ func DiffSettings(base, current map[string]interface{}) map[string]interface{} {
 }
 
 // PreviewFragment computes the diff without writing to disk.
-func PreviewFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]interface{}, error) {
+func PreviewFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]any, error) {
 	return computeFragment(paths, profileDir, manifest)
 }
 
 // UpdateFragment computes the diff between current settings.json and the base
 // template, strips hooks, and saves the result as settings-fragment.json.
-func UpdateFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]interface{}, error) {
+func UpdateFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]any, error) {
 	fragment, err := computeFragment(paths, profileDir, manifest)
 	if err != nil {
 		return nil, err
@@ -153,21 +152,21 @@ func UpdateFragment(paths *config.Paths, profileDir string, manifest *Manifest) 
 	return fragment, nil
 }
 
-func computeFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]interface{}, error) {
+func computeFragment(paths *config.Paths, profileDir string, manifest *Manifest) (map[string]any, error) {
 	settingsPath := filepath.Join(profileDir, "settings.json")
 	currentData, err := os.ReadFile(settingsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read settings.json: %w", err)
 	}
 
-	var current map[string]interface{}
+	var current map[string]any
 	if err := json.Unmarshal(currentData, &current); err != nil {
 		return nil, fmt.Errorf("failed to parse settings.json: %w", err)
 	}
 
 	delete(current, "hooks")
 
-	base := make(map[string]interface{})
+	base := make(map[string]any)
 	if manifest.SettingsTemplate != "" {
 		tmplMgr := hub.NewTemplateManager(paths.HubDir)
 		tmpl, err := tmplMgr.Load(manifest.SettingsTemplate)
@@ -184,16 +183,16 @@ func computeFragment(paths *config.Paths, profileDir string, manifest *Manifest)
 // settings.json does not becomes null, which deepMerge reads as "delete".
 // Without it a removed template key (say, a plugin dropped from
 // enabledPlugins) could never be captured, and every regeneration restored it.
-func fragmentDiff(base, current map[string]interface{}) map[string]interface{} {
-	diff := make(map[string]interface{})
+func fragmentDiff(base, current map[string]any) map[string]any {
+	diff := make(map[string]any)
 	for k, cv := range current {
 		bv, exists := base[k]
 		if !exists {
 			diff[k] = cv
 			continue
 		}
-		cm, cok := cv.(map[string]interface{})
-		bm, bok := bv.(map[string]interface{})
+		cm, cok := cv.(map[string]any)
+		bm, bok := bv.(map[string]any)
 		if cok && bok {
 			if sub := fragmentDiff(bm, cm); len(sub) > 0 {
 				diff[k] = sub
@@ -216,18 +215,16 @@ func fragmentDiff(base, current map[string]interface{}) map[string]interface{} {
 // Objects merge recursively; arrays and scalars in src replace dst. A null in
 // src removes the key from dst (how a fragment records a removed template key)
 // and is never copied: ccp does not write nulls into settings.json.
-func deepMerge(dst, src map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{}, len(dst))
-	for k, v := range dst {
-		result[k] = v
-	}
+func deepMerge(dst, src map[string]any) map[string]any {
+	result := make(map[string]any, len(dst))
+	maps.Copy(result, dst)
 	for k, srcVal := range src {
 		if srcVal == nil {
 			delete(result, k)
 			continue
 		}
-		srcMap, srcOK := srcVal.(map[string]interface{})
-		dstMap, dstOK := result[k].(map[string]interface{})
+		srcMap, srcOK := srcVal.(map[string]any)
+		dstMap, dstOK := result[k].(map[string]any)
 		switch {
 		case srcOK && dstOK:
 			result[k] = deepMerge(dstMap, srcMap)

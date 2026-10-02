@@ -51,8 +51,8 @@ func ompGetStateFrames() (string, error) {
 
 // firstLine keeps an error message to one line: omp's stderr is often a banner.
 func firstLine(s string) string {
-	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		return s[:i]
+	if before, _, ok := strings.Cut(s, "\n"); ok {
+		return before
 	}
 	return s
 }

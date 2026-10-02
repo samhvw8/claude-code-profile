@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -24,12 +25,12 @@ type Manifest struct {
 	Version          int                 `toml:"version" yaml:"-"`
 	Name             string              `toml:"name" yaml:"name"`
 	Description      string              `toml:"description,omitempty" yaml:"description,omitempty"`
-	Engine           string              `toml:"engine,omitempty" yaml:"engine,omitempty"`     // Deprecated: flattened by migration
-	Context          string              `toml:"context,omitempty" yaml:"context,omitempty"`   // Deprecated: flattened by migration
+	Engine           string              `toml:"engine,omitempty" yaml:"engine,omitempty"`   // Deprecated: flattened by migration
+	Context          string              `toml:"context,omitempty" yaml:"context,omitempty"` // Deprecated: flattened by migration
 	SettingsTemplate string              `toml:"settings-template,omitempty" yaml:"settings-template,omitempty"`
 	Created          time.Time           `toml:"created" yaml:"created"`
-	Hub   HubLinks            `toml:"hub" yaml:"hub"`
-	Hooks []config.HookConfig `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
+	Hub              HubLinks            `toml:"hub" yaml:"hub"`
+	Hooks            []config.HookConfig `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
 }
 
 // HubLinks defines which hub items are linked to this profile
@@ -183,10 +184,8 @@ func (m *Manifest) SetHubItems(itemType config.HubItemType, items []string) {
 // AddHubItem adds a hub item to the manifest
 func (m *Manifest) AddHubItem(itemType config.HubItemType, name string) {
 	items := m.GetHubItems(itemType)
-	for _, existing := range items {
-		if existing == name {
-			return // Already exists
-		}
+	if slices.Contains(items, name) {
+		return // Already exists
 	}
 	m.SetHubItems(itemType, append(items, name))
 }

@@ -175,14 +175,12 @@ func (r *SkillsShRegistry) Get(ctx context.Context, packageID string) (*PackageD
 	}
 
 	return &PackageDetails{
-		PackageInfo: PackageInfo{
-			ID:          fmt.Sprintf("%s/%s", result.Owner, result.Slug),
-			Name:        result.Name,
-			Description: result.Description,
-			Registry:    "skills.sh",
-			Version:     result.Version,
-			Tags:        result.Tags,
-		},
+		ID:           fmt.Sprintf("%s/%s", result.Owner, result.Slug),
+		Name:         result.Name,
+		Description:  result.Description,
+		Registry:     "skills.sh",
+		Version:      result.Version,
+		Tags:         result.Tags,
 		DownloadURL:  result.RepoURL,
 		ProviderType: providerType,
 		Ref:          result.RepoRef,

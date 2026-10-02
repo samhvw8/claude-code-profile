@@ -13,7 +13,7 @@ func TestTemplateManager_SaveAndLoad(t *testing.T) {
 
 	tmpl := &Template{
 		Name: "test",
-		Settings: map[string]interface{}{
+		Settings: map[string]any{
 			"model":       "claude-sonnet-4-20250514",
 			"temperature": 0.7,
 		},
@@ -50,8 +50,8 @@ func TestTemplateManager_List(t *testing.T) {
 	}
 
 	// Save two templates
-	mgr.Save(&Template{Name: "a", Settings: map[string]interface{}{"k": "v"}})
-	mgr.Save(&Template{Name: "b", Settings: map[string]interface{}{"k": "v"}})
+	mgr.Save(&Template{Name: "a", Settings: map[string]any{"k": "v"}})
+	mgr.Save(&Template{Name: "b", Settings: map[string]any{"k": "v"}})
 
 	templates, err = mgr.List()
 	if err != nil {
@@ -66,7 +66,7 @@ func TestTemplateManager_Delete(t *testing.T) {
 	hubDir := t.TempDir()
 	mgr := NewTemplateManager(hubDir)
 
-	mgr.Save(&Template{Name: "del", Settings: map[string]interface{}{"k": "v"}})
+	mgr.Save(&Template{Name: "del", Settings: map[string]any{"k": "v"}})
 
 	if !mgr.Exists("del") {
 		t.Fatal("expected template to exist")
@@ -241,7 +241,7 @@ func TestTemplateManager_List_MultipleTemplates(t *testing.T) {
 	for _, name := range []string{"alpha", "beta", "gamma"} {
 		mgr.Save(&Template{
 			Name: name,
-			Settings: map[string]interface{}{
+			Settings: map[string]any{
 				"model": name + "-model",
 			},
 		})
@@ -275,7 +275,7 @@ func TestTemplateManager_List_SkipsInvalid(t *testing.T) {
 	mgr := NewTemplateManager(hubDir)
 
 	// Save a valid template
-	mgr.Save(&Template{Name: "valid", Settings: map[string]interface{}{"k": "v"}})
+	mgr.Save(&Template{Name: "valid", Settings: map[string]any{"k": "v"}})
 
 	// Create an invalid template (directory without valid settings.json)
 	invalidDir := filepath.Join(hubDir, "settings-templates", "invalid")
@@ -317,15 +317,15 @@ func TestTemplateManager_Save_ComplexSettings(t *testing.T) {
 
 	tmpl := &Template{
 		Name: "complex",
-		Settings: map[string]interface{}{
+		Settings: map[string]any{
 			"model":       "opus",
 			"temperature": 0.9,
 			"maxTokens":   4096.0,
-			"nested": map[string]interface{}{
+			"nested": map[string]any{
 				"key1": "value1",
 				"key2": true,
 			},
-			"list": []interface{}{"a", "b", "c"},
+			"list": []any{"a", "b", "c"},
 		},
 	}
 
@@ -341,7 +341,7 @@ func TestTemplateManager_Save_ComplexSettings(t *testing.T) {
 	if loaded.Settings["model"] != "opus" {
 		t.Errorf("model = %v, want 'opus'", loaded.Settings["model"])
 	}
-	nested, ok := loaded.Settings["nested"].(map[string]interface{})
+	nested, ok := loaded.Settings["nested"].(map[string]any)
 	if !ok {
 		t.Fatal("nested should be a map")
 	}

@@ -1,5 +1,8 @@
 # Update Log
 
+## 2026-10-02
+* **Update**: Go 1.25.1 → 1.27.1 in `mise.toml`, `go.mod` and both CI workflows, then `go fix ./...`: `interface{}` → `any`, loops → `slices.Contains`/`maps.Copy`/`min`/`max`/`slices.Backward`/`strings.SplitSeq`/`strings.Cut`/`range n`. No behavior change; tests pass on 1.27.1.
+
 ## 2026-10-01
 * **Update**: The [workflow](/engineering/workflow.md) now requires annotated release tags — v0.46.0's was lightweight, which `--follow-tags` does not push.
 * **Update**: Released v0.48.0 — added the release to [release history](/product/release-history.md) and moved the status line in [user stories](/product/user-stories.md) to v0.48.

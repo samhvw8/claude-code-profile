@@ -11,13 +11,13 @@ import (
 	"github.com/samhvw8/claude-code-profile/internal/config"
 )
 
-func readSettingsForTest(t *testing.T, profileDir string) map[string]interface{} {
+func readSettingsForTest(t *testing.T, profileDir string) map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(profileDir, "settings.json"))
 	if err != nil {
 		t.Fatalf("read settings.json: %v", err)
 	}
-	var m map[string]interface{}
+	var m map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {
 		t.Fatalf("parse settings.json: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestLinkHook_UpdatesSettingsHooksOnly(t *testing.T) {
 		t.Fatalf("LinkHubItem: %v", err)
 	}
 	s := readSettingsForTest(t, profileDir)
-	hooks, _ := s["hooks"].(map[string]interface{})
+	hooks, _ := s["hooks"].(map[string]any)
 	if _, ok := hooks["Stop"]; !ok {
 		t.Errorf("Stop hook not written to settings.json after link: %v", s)
 	}
@@ -206,8 +206,8 @@ func TestSettings_KeepForeignHooks(t *testing.T) {
 
 	hasGuard := func(when string) {
 		t.Helper()
-		hooks, _ := readSettingsForTest(t, profileDir)["hooks"].(map[string]interface{})
-		if list, _ := hooks["PreToolUse"].([]interface{}); len(list) != 1 {
+		hooks, _ := readSettingsForTest(t, profileDir)["hooks"].(map[string]any)
+		if list, _ := hooks["PreToolUse"].([]any); len(list) != 1 {
 			t.Errorf("%s: foreign PreToolUse hook lost or duplicated: %v", when, hooks)
 		}
 	}
@@ -229,7 +229,7 @@ func TestSettings_KeepForeignHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	hasGuard("after unlink")
-	hooks, _ := readSettingsForTest(t, profileDir)["hooks"].(map[string]interface{})
+	hooks, _ := readSettingsForTest(t, profileDir)["hooks"].(map[string]any)
 	if _, ok := hooks["Stop"]; ok {
 		t.Errorf("unlinked hub hook still in settings: %v", hooks)
 	}
@@ -241,7 +241,7 @@ func TestLinkHook_BadSettingsWarnsAndIsRetryable(t *testing.T) {
 	addStopHook(t, paths)
 	mustWrite(t, filepath.Join(paths.ProfileDir("p"), "settings.json"), `{not json`)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if err := mgr.LinkHubItem("p", config.HubHooks, "okf-stop"); err != nil {
 			t.Fatalf("LinkHubItem attempt %d: %v", i+1, err)
 		}
@@ -305,8 +305,8 @@ func TestSettings_KeepLegacyManifestHooks(t *testing.T) {
 
 	hasLegacy := func(when string) {
 		t.Helper()
-		hooks, _ := readSettingsForTest(t, profileDir)["hooks"].(map[string]interface{})
-		if list, _ := hooks["PreToolUse"].([]interface{}); len(list) != 1 {
+		hooks, _ := readSettingsForTest(t, profileDir)["hooks"].(map[string]any)
+		if list, _ := hooks["PreToolUse"].([]any); len(list) != 1 {
 			t.Errorf("%s: legacy hook lost or duplicated: %v", when, hooks)
 		}
 	}
@@ -367,7 +367,7 @@ func TestCapture_RecordsRemovedTemplateKeys(t *testing.T) {
 		t.Errorf("captured removals still reported: %v", uncaptured)
 	}
 	s := readSettingsForTest(t, profileDir)
-	plugins, _ := s["enabledPlugins"].(map[string]interface{})
+	plugins, _ := s["enabledPlugins"].(map[string]any)
 	if _, ok := plugins["drop@x"]; ok {
 		t.Errorf("removed plugin restored: %v", s)
 	}
@@ -389,8 +389,8 @@ func TestLinkHook_ReplacesHubPathEntry(t *testing.T) {
 	if err := mgr.LinkHubItem("p", config.HubHooks, "okf-stop"); err != nil {
 		t.Fatal(err)
 	}
-	hooks, _ := readSettingsForTest(t, profileDir)["hooks"].(map[string]interface{})
-	if list, _ := hooks["Stop"].([]interface{}); len(list) != 1 {
+	hooks, _ := readSettingsForTest(t, profileDir)["hooks"].(map[string]any)
+	if list, _ := hooks["Stop"].([]any); len(list) != 1 {
 		t.Errorf("Stop hook duplicated: %v", hooks)
 	}
 }

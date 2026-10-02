@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -244,11 +245,12 @@ func updateProjectEnv(profilePath, profileName string) error {
 		fmt.Scanln(&response)
 		if response == "" || response == "y" || response == "Y" {
 			// Create minimal mise.toml with env vars
-			content := "[env]\n"
+			var content strings.Builder
+			content.WriteString("[env]\n")
 			for k, v := range envVars {
-				content += fmt.Sprintf("%s = \"%s\"\n", k, v)
+				content.WriteString(fmt.Sprintf("%s = \"%s\"\n", k, v))
 			}
-			if err := os.WriteFile("mise.toml", []byte(content), 0644); err != nil {
+			if err := os.WriteFile("mise.toml", []byte(content.String()), 0644); err != nil {
 				return fmt.Errorf("failed to create mise.toml: %w", err)
 			}
 			fmt.Printf("Created mise.toml with Claude profile env vars\n")

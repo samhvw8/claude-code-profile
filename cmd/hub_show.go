@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -174,11 +175,8 @@ func findProfilesUsingItemByName(paths *config.Paths, itemType config.HubItemTyp
 		}
 
 		linkedItems := manifest.GetHubItems(itemType)
-		for _, linked := range linkedItems {
-			if linked == itemName {
-				usedBy = append(usedBy, entry.Name())
-				break
-			}
+		if slices.Contains(linkedItems, itemName) {
+			usedBy = append(usedBy, entry.Name())
 		}
 	}
 

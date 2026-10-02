@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -116,12 +117,7 @@ func findProjectClaudeDir(dirFlag string) (string, error) {
 
 // isValidProjectHubType checks if a type is valid for project commands
 func isValidProjectHubType(t config.HubItemType) bool {
-	for _, valid := range projectHubItemTypes {
-		if t == valid {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(projectHubItemTypes, t)
 }
 
 // parseItemRef parses "type/name" into HubItemType and name, validating the type

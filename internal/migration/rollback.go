@@ -2,12 +2,13 @@ package migration
 
 import (
 	"os"
+	"slices"
 )
 
 // Rollback tracks changes for rollback on failure
 type Rollback struct {
-	dirs   []string            // directories created
-	moves  []struct{ src, dst string } // files/dirs moved (src is new location)
+	dirs  []string                    // directories created
+	moves []struct{ src, dst string } // files/dirs moved (src is new location)
 }
 
 // NewRollback creates a new rollback tracker
@@ -30,8 +31,8 @@ func (r *Rollback) Execute() error {
 	var firstErr error
 
 	// Undo moves first (in reverse order)
-	for i := len(r.moves) - 1; i >= 0; i-- {
-		move := r.moves[i]
+	for _, move := range slices.Backward(r.moves) {
+
 		if err := os.Rename(move.src, move.dst); err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -40,8 +41,8 @@ func (r *Rollback) Execute() error {
 	}
 
 	// Remove directories (in reverse order)
-	for i := len(r.dirs) - 1; i >= 0; i-- {
-		if err := os.RemoveAll(r.dirs[i]); err != nil {
+	for _, v := range slices.Backward(r.dirs) {
+		if err := os.RemoveAll(v); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}

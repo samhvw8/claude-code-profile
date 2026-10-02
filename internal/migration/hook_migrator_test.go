@@ -77,12 +77,10 @@ func TestHookMigrator_MigrateInlineHook(t *testing.T) {
 	plan := &HookMigrationPlan{
 		Inline: []ClassifiedHook{
 			{
-				ExtractedHook: ExtractedHook{
-					HookType: config.HookType("SessionStart"),
-					Command:  "echo 'Hello World'",
-					IsInline: true,
-					Timeout:  5000,
-				},
+				HookType: config.HookType("SessionStart"),
+				Command:  "echo 'Hello World'",
+				IsInline: true,
+				Timeout:  5000,
 				Location: HookLocationInline,
 			},
 		},
@@ -149,14 +147,12 @@ func TestHookMigrator_MigrateInsideHook(t *testing.T) {
 	plan := &HookMigrationPlan{
 		Inside: []ClassifiedHook{
 			{
-				ExtractedHook: ExtractedHook{
-					HookType:    config.HookType("PreToolUse"),
-					Command:     "bash " + scriptPath,
-					FilePath:    scriptPath,
-					Interpreter: "bash",
-					IsInside:    true,
-					Timeout:     3000,
-				},
+				HookType:     config.HookType("PreToolUse"),
+				Command:      "bash " + scriptPath,
+				FilePath:     scriptPath,
+				Interpreter:  "bash",
+				IsInside:     true,
+				Timeout:      3000,
 				Location:     HookLocationInside,
 				RelativePath: "hooks/test-hook.sh",
 			},

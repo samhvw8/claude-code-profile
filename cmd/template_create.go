@@ -51,7 +51,7 @@ func runTemplateCreate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("template already exists: %s (use 'ccp template edit %s' to modify)", name, name)
 	}
 
-	var settings map[string]interface{}
+	var settings map[string]any
 
 	if templateCreateFromFile != "" {
 		data, err := os.ReadFile(templateCreateFromFile)
@@ -80,7 +80,7 @@ func runTemplateCreate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func editSettingsInEditor(initial map[string]interface{}) (map[string]interface{}, error) {
+func editSettingsInEditor(initial map[string]any) (map[string]any, error) {
 	editor := os.Getenv("EDITOR")
 	if editor == "" {
 		editor = "vi"
@@ -118,7 +118,7 @@ func editSettingsInEditor(initial map[string]interface{}) (map[string]interface{
 		return nil, err
 	}
 
-	var settings map[string]interface{}
+	var settings map[string]any
 	if err := json.Unmarshal(edited, &settings); err != nil {
 		return nil, fmt.Errorf("invalid JSON after editing: %w", err)
 	}

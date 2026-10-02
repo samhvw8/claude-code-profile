@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -62,13 +63,7 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 	}
 
 	// Validate item type
-	valid := false
-	for _, t := range config.AllHubItemTypes() {
-		if t == itemType {
-			valid = true
-			break
-		}
-	}
+	valid := slices.Contains(config.AllHubItemTypes(), itemType)
 	if !valid {
 		return fmt.Errorf("invalid item type: %s (valid: skills, agents, hooks, rules, commands)", parts[0])
 	}

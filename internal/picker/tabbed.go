@@ -122,10 +122,7 @@ func (m *TabbedModel) adjustScroll() {
 	}
 
 	// Clamp offset
-	maxOffset := itemCount - maxVisibleItems
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
+	maxOffset := max(itemCount-maxVisibleItems, 0)
 	if tab.offset > maxOffset {
 		tab.offset = maxOffset
 	}
@@ -357,10 +354,7 @@ func (m TabbedModel) View() string {
 
 		// Calculate visible range
 		start := tab.offset
-		end := start + maxVisibleItems
-		if end > len(filteredItems) {
-			end = len(filteredItems)
-		}
+		end := min(start+maxVisibleItems, len(filteredItems))
 
 		// Render visible items
 		for i := start; i < end; i++ {

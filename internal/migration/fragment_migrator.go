@@ -15,10 +15,10 @@ import (
 
 // legacyFragment represents an old setting-fragment YAML file
 type legacyFragment struct {
-	Name        string      `yaml:"name"`
-	Description string      `yaml:"description,omitempty"`
-	Key         string      `yaml:"key"`
-	Value       interface{} `yaml:"value"`
+	Name        string `yaml:"name"`
+	Description string `yaml:"description,omitempty"`
+	Key         string `yaml:"key"`
+	Value       any    `yaml:"value"`
 }
 
 // FragmentMigrator converts legacy setting-fragments to settings templates
@@ -58,7 +58,7 @@ func (m *FragmentMigrator) Migrate() (int, error) {
 		return 0, nil // dir doesn't exist, nothing to do
 	}
 
-	settings := make(map[string]interface{})
+	settings := make(map[string]any)
 	count := 0
 
 	for _, e := range entries {

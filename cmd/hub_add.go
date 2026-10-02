@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -177,12 +178,7 @@ func runHubAddFromPath(paths *config.Paths, itemType config.HubItemType, srcPath
 }
 
 func isValidHubType(t config.HubItemType) bool {
-	for _, valid := range config.AllHubItemTypes() {
-		if valid == t {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(config.AllHubItemTypes(), t)
 }
 
 func copyFileSimple(src, dst string) error {

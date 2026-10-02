@@ -23,8 +23,8 @@ func NewSettingsManager(paths *config.Paths) *SettingsManager {
 // Uses config.SettingsHookEntry for hook entries to avoid type duplication
 type Settings struct {
 	Hooks         map[config.HookType][]config.SettingsHookEntry `json:"hooks,omitempty"`
-	OtherSettings map[string]interface{}                         `json:"-"` // Preserve other settings
-	rawData       map[string]interface{}
+	OtherSettings map[string]any                                 `json:"-"` // Preserve other settings
+	rawData       map[string]any
 }
 
 // LoadSettings loads settings.json from a profile directory
@@ -36,13 +36,13 @@ func (sm *SettingsManager) LoadSettings(profileDir string) (*Settings, error) {
 		if os.IsNotExist(err) {
 			return &Settings{
 				Hooks:   make(map[config.HookType][]config.SettingsHookEntry),
-				rawData: make(map[string]interface{}),
+				rawData: make(map[string]any),
 			}, nil
 		}
 		return nil, err
 	}
 
-	var rawData map[string]interface{}
+	var rawData map[string]any
 	if err := json.Unmarshal(data, &rawData); err != nil {
 		return nil, err
 	}
@@ -53,19 +53,19 @@ func (sm *SettingsManager) LoadSettings(profileDir string) (*Settings, error) {
 	}
 
 	// Parse hooks if present
-	if hooksData, ok := rawData["hooks"].(map[string]interface{}); ok {
+	if hooksData, ok := rawData["hooks"].(map[string]any); ok {
 		for hookTypeName, entries := range hooksData {
 			hookType := config.HookType(hookTypeName)
-			if entriesArr, ok := entries.([]interface{}); ok {
+			if entriesArr, ok := entries.([]any); ok {
 				for _, entry := range entriesArr {
-					if entryMap, ok := entry.(map[string]interface{}); ok {
+					if entryMap, ok := entry.(map[string]any); ok {
 						hookEntry := config.SettingsHookEntry{}
 						if matcher, ok := entryMap["matcher"].(string); ok {
 							hookEntry.Matcher = matcher
 						}
-						if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
+						if hooksArr, ok := entryMap["hooks"].([]any); ok {
 							for _, h := range hooksArr {
-								if hMap, ok := h.(map[string]interface{}); ok {
+								if hMap, ok := h.(map[string]any); ok {
 									cmd := config.SettingsHookCommand{Type: "command"}
 									if c, ok := hMap["command"].(string); ok {
 										cmd.Command = c
@@ -97,22 +97,22 @@ func (sm *SettingsManager) SaveSettings(profileDir string, settings *Settings) e
 	// Start with raw data to preserve unknown fields
 	output := settings.rawData
 	if output == nil {
-		output = make(map[string]interface{})
+		output = make(map[string]any)
 	}
 
 	// Convert hooks to JSON structure
 	if len(settings.Hooks) > 0 {
-		hooksData := make(map[string]interface{})
+		hooksData := make(map[string]any)
 		for hookType, entries := range settings.Hooks {
-			var entriesData []interface{}
+			var entriesData []any
 			for _, entry := range entries {
-				entryData := make(map[string]interface{})
+				entryData := make(map[string]any)
 				if entry.Matcher != "" {
 					entryData["matcher"] = entry.Matcher
 				}
-				var hooksArr []interface{}
+				var hooksArr []any
 				for _, h := range entry.Hooks {
-					hookData := map[string]interface{}{
+					hookData := map[string]any{
 						"command": h.Command,
 						"type":    h.Type,
 					}

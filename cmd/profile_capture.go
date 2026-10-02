@@ -103,10 +103,10 @@ func runProfileCapture(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func countKeys(m map[string]interface{}) int {
+func countKeys(m map[string]any) int {
 	n := 0
 	for _, v := range m {
-		if sub, ok := v.(map[string]interface{}); ok {
+		if sub, ok := v.(map[string]any); ok {
 			n += countKeys(sub)
 		} else {
 			n++
