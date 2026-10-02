@@ -24,7 +24,7 @@ sources:
 | `description` | string | Optional |
 | `settings-template` | string | Optional [settings template](/reference/settings-templates.md) name |
 | `created`, `updated` | datetime | Timestamps |
-| `[hub].skills/agents/hooks/rules/commands` | string list | Hub item names to link |
+| `[hub].skills/agents/hooks/rules/commands/output-styles` | string list | Hub item names to link; `output-styles` makes a style selectable by `outputStyle` |
 | `[hub].bundles` | string list | [Bundle](/features/bundles.md) names only; members are not recorded |
 | `engine`, `context` | string | Deprecated since v0.28, flattened by migration |
 

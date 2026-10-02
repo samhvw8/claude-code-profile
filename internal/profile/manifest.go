@@ -40,6 +40,9 @@ type HubLinks struct {
 	Hooks    []string `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
 	Rules    []string `toml:"rules,omitempty" yaml:"rules,omitempty"`
 	Commands []string `toml:"commands,omitempty" yaml:"commands,omitempty"`
+	// OutputStyles are Claude Code output styles. Linking one makes it
+	// selectable; the profile's outputStyle setting picks the active one.
+	OutputStyles []string `toml:"output-styles,omitempty" yaml:"output-styles,omitempty"`
 	// Bundles lists linked composite items by name only. Their members are
 	// materialized as per-member symlinks at link time and are deliberately not
 	// recorded here, so a bundle can only be linked/unlinked as a whole.
@@ -156,6 +159,8 @@ func (m *Manifest) GetHubItems(itemType config.HubItemType) []string {
 		return m.Hub.Rules
 	case config.HubCommands:
 		return m.Hub.Commands
+	case config.HubOutputStyles:
+		return m.Hub.OutputStyles
 	case config.HubBundles:
 		return m.Hub.Bundles
 	default:
@@ -176,6 +181,8 @@ func (m *Manifest) SetHubItems(itemType config.HubItemType, items []string) {
 		m.Hub.Rules = items
 	case config.HubCommands:
 		m.Hub.Commands = items
+	case config.HubOutputStyles:
+		m.Hub.OutputStyles = items
 	case config.HubBundles:
 		m.Hub.Bundles = items
 	}

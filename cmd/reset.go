@@ -71,6 +71,16 @@ func runReset(cmd *cobra.Command, args []string) error {
 	} else if len(ompManaged) > 0 {
 		fmt.Printf("  Will remove: %d ccp link(s) in %s\n", len(ompManaged), profile.OmpAgentDir())
 	}
+	// Output-style carriers in omp, pi and opencode are listed now, while the
+	// ledger that proves ccp wrote them still exists; left behind, nothing would
+	// keep them current.
+	styleCarriers, err := profile.OwnedStyleCarriers(paths, "")
+	if err != nil {
+		fmt.Printf("  Warning: cannot read the output-style ledger: %v\n", err)
+	}
+	for _, c := range styleCarriers {
+		fmt.Printf("  Will remove: %s (output style ccp generated)\n", c.Path)
+	}
 	fmt.Println()
 
 	if !resetForce {
@@ -104,6 +114,14 @@ func runReset(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Printf("Removed %d ccp link(s) from %s\n", len(removed), profile.OmpAgentDir())
 		}
+	}
+
+	removed, kept := profile.RemoveStyleCarriers(styleCarriers)
+	for _, path := range removed {
+		fmt.Printf("Removed %s\n", path)
+	}
+	for _, path := range kept {
+		fmt.Printf("Kept %s: it changed since ccp wrote it\n", path)
 	}
 
 	fmt.Println()

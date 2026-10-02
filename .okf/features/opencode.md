@@ -4,7 +4,7 @@ title: "opencode integration"
 description: "Mirroring a profile into opencode: what opencode already reads, what ccp converts and writes, ownership, and when it follows automatically."
 resource: internal/profile/opencode.go
 tags: [feature, integration, opencode]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T09:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-02T12:00:00Z }
 sources:
   - id: opencode-rules-docs
     resource: https://github.com/anomalyco/opencode/blob/dev/packages/web/src/content/docs/rules.mdx
@@ -21,6 +21,7 @@ sources:
 | `CLAUDE.md`, skills | opencode reads `~/.claude/CLAUDE.md` and `~/.claude/skills/` itself, so they follow the active profile with no ccp work[^opencode-rules-docs] |
 | Rules | The user points opencode's `instructions` at `"{env:HOME}/.claude/rules/*.md"` once; the glob follows the profile |
 | Agents, commands | `ccp opencode sync` writes converted copies into `~/.config/opencode/agent/` and `command/` |
+| Output style | `ccp opencode sync` writes the active style's body into `~/.config/opencode/output-style.md`; the user adds that path to `instructions` once, and sync prints the entry while `opencode.json` does not name the file ([output styles](/features/output-styles.md)) |
 | Hooks | Not mirrored: opencode runs hooks as TypeScript plugins, which ccp cannot generate; sync names the profile's hooks so the gap is visible |
 
 The directory is `$XDG_CONFIG_HOME/opencode` when set, else `~/.config/opencode` — the same rule
@@ -42,6 +43,15 @@ frontmatter fields to the model provider as options, so ccp writes only fields o
 
 Commands keep `description` and a `provider/model` `model`; `allowed-tools` and `argument-hint`
 have no opencode equivalent. Bodies are unchanged — both harnesses use `$ARGUMENTS`.
+
+The style file is not converted: it is the body of the style the profile's `outputStyle` selects,
+and it is removed when the profile selects none. Unlike agents and commands, it is owned through
+the shared carrier ledger of [output styles](/features/output-styles.md), not `opencode.json`'s
+state, so `ccp reset` can remove it. ccp never edits
+`opencode.json`; the `instructions` check is a plain text search that only decides whether to print
+the hint, and only for a style file ccp owns — a user's own `output-style.md`, or ccp's edited by
+hand, gets no hint. When the style lookup is unknown (unreadable `settings.json`), ccp's file is
+kept, neither rewritten nor removed.
 
 # Ownership
 

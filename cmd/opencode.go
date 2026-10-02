@@ -23,6 +23,10 @@ opencode.json — point it at "{env:HOME}/.claude/rules/*.md". What it cannot re
 is agents and commands, whose frontmatter differs from Claude Code's, so ccp
 writes converted copies into opencode's agent/ and command/ directories.
 
+opencode has no output styles. ccp writes the body of the style the profile's
+outputStyle setting selects into output-style.md; add that file to the
+"instructions" list once, and sync reminds you while it is missing.
+
 ccp records the files it writes and only ever replaces or removes those: a file
 you wrote, or one of ccp's you edited by hand, is left alone and reported.
 Hooks are not mirrored — opencode runs hooks as plugins.
@@ -33,7 +37,7 @@ unlinking in the active profile, and on 'ccp bootstrap'.`,
 
 var opencodeSyncCmd = &cobra.Command{
 	Use:   "sync [profile]",
-	Short: "Mirror a profile's agents and commands into opencode (default: active profile)",
+	Short: "Mirror a profile's agents, commands and output style into opencode (default: active profile)",
 	Args:  cobra.MaximumNArgs(1),
 	RunE:  runOpencodeSync,
 }
@@ -70,6 +74,7 @@ func runOpencodeSync(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	fmt.Printf("Mirrored profile '%s' into %s\n", p.Name, profile.OpencodeConfigDir())
+	warnInactiveCarrier(paths, p)
 	reportOpencodeResult(result, true)
 	return nil
 }
@@ -87,8 +92,14 @@ func reportOpencodeResult(r profile.OpencodeResult, verbose bool) {
 	line("left alone (edited by hand since ccp wrote it)", r.Edited)
 	line("left alone (not written by ccp — remove it to let ccp manage it)", r.Occupied)
 	line("skipped", r.Skipped)
+	for _, s := range r.Style {
+		fmt.Printf("  %s\n", s)
+	}
+	if r.Instructions != "" {
+		fmt.Printf("  to load the output style, add %q to \"instructions\" in opencode.json\n", r.Instructions)
+	}
 	if verbose {
-		if len(r.Written)+len(r.Removed) == 0 {
+		if len(r.Written)+len(r.Removed)+len(r.Style) == 0 {
 			fmt.Println("  already up to date")
 		}
 		if len(r.Hooks) > 0 {
@@ -113,7 +124,7 @@ func followOpencode(paths *config.Paths, profileName string) {
 		fmt.Fprintf(os.Stderr, "Warning: could not sync opencode: %v\n", err)
 		return
 	}
-	if len(result.Written)+len(result.Removed)+len(result.Edited)+len(result.Occupied)+len(result.Skipped) > 0 {
+	if len(result.Written)+len(result.Removed)+len(result.Edited)+len(result.Occupied)+len(result.Skipped)+len(result.Style) > 0 {
 		fmt.Println("opencode:")
 		reportOpencodeResult(result, false)
 	}

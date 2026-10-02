@@ -31,7 +31,7 @@ type Paths struct {
     StoreDir        string // ~/.ccp/store
 }
 
-type HubItemType string     // skills, agents, hooks, rules, commands; bundles is composite
+type HubItemType string     // skills, agents, hooks, rules, commands, output-styles; bundles is composite
 type DataItemType string    // tasks, todos, history, …
 type PluginStoreItem string // marketplaces, cache, known_marketplaces.json
 
@@ -42,7 +42,7 @@ type Manifest struct {
     Engine, Context  string    // Deprecated: flattened by migration (v0.28)
     SettingsTemplate string    // toml: settings-template
     Created, Updated time.Time
-    Hub              HubLinks  // skills, agents, hooks, rules, commands, bundles
+    Hub              HubLinks  // skills, agents, hooks, rules, commands, output-styles, bundles
     Hooks            []config.HookConfig
 }
 

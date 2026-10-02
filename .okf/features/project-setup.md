@@ -33,7 +33,7 @@ ccp project remove skills/coding
 | Aspect | Behavior |
 |--------|----------|
 | Project root | Nearest `.git/` walking up from cwd; override with `--dir` |
-| Valid types | skills, agents, hooks, rules, commands |
+| Valid types | skills, agents, hooks, rules, commands, output-styles |
 | `project add` | Copies from the local hub |
 | `project install` | Fetches from GitHub/skills.sh straight into the project; not tracked in the registry; overwrites existing items |
 | Other harnesses | omp loads project `.claude/` by default, and Codex reads project `.agents/skills/`, so project setup already covers them — see [omp overview](/features/omp/overview.md) |

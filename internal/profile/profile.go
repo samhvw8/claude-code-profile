@@ -247,7 +247,11 @@ func (m *Manager) LinkHubItem(profileName string, itemType config.HubItemType, i
 	if itemType == config.HubRules {
 		linkName = filepath.Base(itemName)
 	}
-	profileItemPath := filepath.Join(profile.Path, string(itemType), linkName)
+	itemDir, err := profileItemDir(profile.Path, itemType)
+	if err != nil {
+		return err
+	}
+	profileItemPath := filepath.Join(itemDir, linkName)
 
 	// Check hub item exists
 	if _, err := os.Stat(hubItemPath); err != nil {
@@ -323,6 +327,10 @@ func (m *Manager) LinkHubBundle(profileName, bundleName string) error {
 	}
 	if profile == nil {
 		return os.ErrNotExist
+	}
+
+	if err := checkProfileItemDirs(profile.Path); err != nil {
+		return err
 	}
 
 	bundleDir := m.paths.BundleDir(bundleName)

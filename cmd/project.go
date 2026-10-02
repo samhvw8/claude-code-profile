@@ -23,6 +23,7 @@ var projectHubItemTypes = []config.HubItemType{
 	config.HubHooks,
 	config.HubRules,
 	config.HubCommands,
+	config.HubOutputStyles,
 }
 
 var projectDirFlag string

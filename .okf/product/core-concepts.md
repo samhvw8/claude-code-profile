@@ -20,7 +20,7 @@ one ([design principles](/engineering/design-principles.md)).[^identity-rule]
 
 | Concept | What |
 |---------|------|
-| **Hub** | Central directory of reusable components: skills, agents, hooks, rules, commands |
+| **Hub** | Central directory of reusable components: skills, agents, hooks, rules, commands, output styles |
 | **Profile** | Named configuration that references hub items plus an optional settings template |
 | **Settings Template** | Complete `settings.json` stored in the hub, referenced by name ([details](/reference/settings-templates.md)) |
 | **Source** | External repository providing hub items — GitHub, skills.sh ([details](/features/source-system.md)) |

@@ -62,7 +62,7 @@ func completeHubItems(cmd *cobra.Command, args []string, toComplete string) ([]s
 
 // completeHubTypes returns completion for hub item types
 func completeHubTypes(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	types := []string{"skills", "agents", "hooks", "rules", "commands", "settings-templates", "bundles"}
+	types := []string{"skills", "agents", "hooks", "rules", "commands", "output-styles", "settings-templates", "bundles"}
 	return types, cobra.ShellCompDirectiveNoFileComp
 }
 
@@ -99,7 +99,7 @@ func completeProjectAddArgs(cmd *cobra.Command, args []string, toComplete string
 
 	projectTypes := []config.HubItemType{
 		config.HubSkills, config.HubAgents, config.HubHooks,
-		config.HubRules, config.HubCommands,
+		config.HubRules, config.HubCommands, config.HubOutputStyles,
 	}
 
 	var items []string
@@ -128,7 +128,7 @@ func completeProjectRemoveArgs(cmd *cobra.Command, args []string, toComplete str
 
 	projectTypes := []config.HubItemType{
 		config.HubSkills, config.HubAgents, config.HubHooks,
-		config.HubRules, config.HubCommands,
+		config.HubRules, config.HubCommands, config.HubOutputStyles,
 	}
 
 	var items []string

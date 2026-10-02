@@ -23,6 +23,11 @@ With no arguments: Interactive selection for current active profile
 With profile only: Interactive selection for specified profile
 With profile and path: Link specific item (path format: type/name)
 
+Output styles (output-styles/<name>.md) become selectable in Claude Code; the
+profile's outputStyle setting picks one. omp, pi and opencode get the selected
+style through 'ccp omp sync', 'ccp pi sync' and 'ccp opencode sync', and follow
+later changes from then on. A project's /output-style choice is not carried.
+
 Examples:
   ccp link                                    # Interactive for active profile
   ccp link quickfix                           # Interactive for 'quickfix' profile
@@ -110,7 +115,7 @@ func runLink(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to link bundle: %w", err)
 		}
 		fmt.Printf("Linked bundle %s to profile %s\n", itemName, profileName)
-		followOpencode(paths, profileName)
+		followHarnesses(paths, profileName)
 		return nil
 	}
 
@@ -137,7 +142,7 @@ func runLink(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Linked %s/%s to profile %s\n", itemType, itemName, profileName)
-	followOpencode(paths, profileName)
+	followHarnesses(paths, profileName)
 	return nil
 }
 
@@ -215,7 +220,7 @@ func runInteractiveLink(paths *config.Paths, p *profile.Profile) error {
 	}
 
 	fmt.Printf("Profile '%s' updated successfully\n", p.Name)
-	followOpencode(paths, p.Name)
+	followHarnesses(paths, p.Name)
 	return nil
 }
 

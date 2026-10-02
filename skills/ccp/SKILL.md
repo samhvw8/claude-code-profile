@@ -130,6 +130,22 @@ After the first sync, `ccp use -g`, link/unlink and `ccp bootstrap` keep it
 current. ccp only replaces files it wrote; hooks are not mirrored (opencode
 uses plugins). `ccp opencode` is a hidden command.
 
+### Output styles
+
+`output-styles` is a hub item type. Link a style, then select it with
+`outputStyle` in the profile's settings (template or `settings-fragment.json`):
+
+```bash
+ccp link default output-styles/ste-lite.md
+ccp pi sync                  # pi: write the active style into ~/.pi/agent/APPEND_SYSTEM.md
+```
+
+omp gets it in `APPEND_SYSTEM.md` on `ccp omp sync`. opencode gets
+`~/.config/opencode/output-style.md` on `ccp opencode sync`; add that path to
+`instructions` once. ccp refuses to link into a profile type directory that is a
+symlink, such as a hand-made `~/.claude/output-styles` link: remove that link
+first.
+
 ## Picker Controls (fzf-style)
 
 | Key | Normal Mode | Search Mode (after /) |

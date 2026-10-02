@@ -411,3 +411,57 @@ func TestCopyDir(t *testing.T) {
 		t.Errorf("expected 2 files, got %d", len(entries))
 	}
 }
+
+// init moves ~/.claude/output-styles into the profile whole: hidden files
+// survive, and a directory symlinked into dotfiles is moved as a link, never
+// emptied into the hub.
+func TestMigrator_Execute_OutputStylesMovedWhole(t *testing.T) {
+	for _, linked := range []bool{false, true} {
+		t.Run(map[bool]string{false: "directory", true: "symlink"}[linked], func(t *testing.T) {
+			paths, tmp := setupTestPaths(t)
+			styles := filepath.Join(paths.ClaudeDir, "output-styles")
+			real := styles
+			if linked {
+				real = filepath.Join(tmp, "dotfiles", "output-styles")
+			}
+			for name, body := range map[string]string{"terse.md": "Be terse.\n", ".draft.md": "draft\n"} {
+				if err := os.MkdirAll(real, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(real, name), []byte(body), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if linked {
+				if err := os.MkdirAll(paths.ClaudeDir, 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(real, styles); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			m := NewMigrator(paths)
+			plan, err := m.Plan()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(plan.HubItems[config.HubOutputStyles]) != 0 {
+				t.Errorf("init planned to move styles into the hub: %v", plan.HubItems[config.HubOutputStyles])
+			}
+			if err := m.Execute(plan, false); err != nil {
+				t.Fatalf("Execute failed: %v", err)
+			}
+
+			moved := filepath.Join(paths.ProfilesDir, "default", "output-styles")
+			for _, name := range []string{"terse.md", ".draft.md"} {
+				if _, err := os.Stat(filepath.Join(moved, name)); err != nil {
+					t.Errorf("%s lost: %v", name, err)
+				}
+				if _, err := os.Stat(filepath.Join(real, name)); err != nil && linked {
+					t.Errorf("dotfiles copy of %s emptied: %v", name, err)
+				}
+			}
+		})
+	}
+}

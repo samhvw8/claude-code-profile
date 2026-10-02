@@ -57,7 +57,7 @@ Symlinks are relative so a profile tree survives being synced to another machine
 
 | Type | Category | Location | Sharing |
 |------|----------|----------|---------|
-| Hub items (skills, agents, hooks, rules, commands) | Human config | `~/.ccp/hub/` | Linked per profile |
+| Hub items (skills, agents, hooks, rules, commands, output styles) | Human config | `~/.ccp/hub/` | Linked per profile |
 | Plugin cache (marketplaces, cache) | Human config | `~/.ccp/store/plugins/` | Shared via symlinks |
 | Runtime data (tasks, todos, history) | Runtime | `~/.ccp/profiles/shared/` | Always shared ([decision](/decisions/data-sharing-always-shared.md)) |
 | Plugin state (`installed_plugins.json`) | Runtime | Profile `plugins/` | Isolated |

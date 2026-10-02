@@ -705,7 +705,7 @@ func TestOmpSyncSetsUpContextFiles(t *testing.T) {
 		t.Fatalf("RULES.md not written: %v", err)
 	}
 	content := string(data)
-	for _, want := range []string{"# Tone\nBe terse.", "# Flow\nPlan first.", ompRulesMarker} {
+	for _, want := range []string{"# Tone\nBe terse.", "# Flow\nPlan first.", generatedMarker} {
 		if !strings.Contains(content, want) {
 			t.Errorf("RULES.md missing %q; got:\n%s", want, content)
 		}

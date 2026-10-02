@@ -68,7 +68,7 @@ func saveOpencodeState(paths *config.Paths, state *opencodeState) error {
 	if err != nil {
 		return err
 	}
-	return ompWriteFileAtomic(opencodeStatePath(paths), string(data)+"\n")
+	return writeFileAtomic(opencodeStatePath(paths), string(data)+"\n")
 }
 
 // OpencodeOptedIn reports whether ccp has synced to opencode before: the test
@@ -87,9 +87,18 @@ type OpencodeResult struct {
 	Occupied []string // a file ccp did not write sits where a copy would go
 	Skipped  []string // profile items that could not be converted, with the reason
 	Hooks    []string // linked hooks, which opencode runs only as plugins
+	Style    []string // output-style carrier changes and notes
+	// Instructions is the path opencode.json's "instructions" list must name
+	// for the output style to load; empty when it already does.
+	Instructions string
 }
 
-// OpencodeSync mirrors the profile's agents and commands into opencode.
+// opencodeStyleFile carries the profile's output style. opencode has no output
+// styles, so the file reaches the model through the "instructions" list.
+const opencodeStyleFile = "output-style.md"
+
+// OpencodeSync mirrors the profile's agents, commands and output style into
+// opencode.
 func OpencodeSync(paths *config.Paths, p *Profile) (OpencodeResult, error) {
 	var result OpencodeResult
 	dir := OpencodeConfigDir()
@@ -148,7 +157,7 @@ func OpencodeSync(paths *config.Paths, p *Profile) (OpencodeResult, error) {
 			result.Edited = append(result.Edited, rel)
 			continue
 		}
-		if err := ompWriteFileAtomic(path, string(content)); err != nil {
+		if err := writeFileAtomic(path, string(content)); err != nil {
 			return result, err
 		}
 		state.Files[rel] = hashOf(content)
@@ -177,7 +186,34 @@ func OpencodeSync(paths *config.Paths, p *Profile) (OpencodeResult, error) {
 	}
 
 	result.Hooks = append(result.Hooks, p.Manifest.Hub.Hooks...)
-	return result, saveOpencodeState(paths, state)
+	if err := saveOpencodeState(paths, state); err != nil {
+		return result, err
+	}
+
+	// The output style is a carrier like omp's and pi's, owned through the
+	// carrier ledger. Only a file ccp owns is worth pointing opencode at.
+	stylePath := filepath.Join(dir, opencodeStyleFile)
+	lines, owned, err := syncStyleCarriers(paths, p, carrierGroupOpencode, stylePath)
+	result.Style = lines
+	if err != nil {
+		return result, err
+	}
+	if owned && !opencodeInstructionsName(dir, opencodeStyleFile) {
+		result.Instructions = stylePath
+	}
+	return result, nil
+}
+
+// opencodeInstructionsName reports whether opencode's global config mentions a
+// file. It only decides whether to print a hint, so a plain text search is
+// enough: ccp never edits opencode.json.
+func opencodeInstructionsName(dir, file string) bool {
+	for _, name := range []string{"opencode.json", "opencode.jsonc"} {
+		if data, err := os.ReadFile(filepath.Join(dir, name)); err == nil && strings.Contains(string(data), file) {
+			return true
+		}
+	}
+	return false
 }
 
 // OpencodeFollowProfile re-syncs after the active profile changed, once the

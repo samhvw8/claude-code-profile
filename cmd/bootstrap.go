@@ -106,7 +106,7 @@ func runBootstrapPull() error {
 
 	// Step 4: opencode, only once the user has run 'ccp opencode sync' here
 	if active, err := mgr.GetActive(); err == nil && active != nil {
-		followOpencode(paths, active.Name)
+		followHarnesses(paths, active.Name)
 	}
 
 	fmt.Println("\nBootstrap complete.")

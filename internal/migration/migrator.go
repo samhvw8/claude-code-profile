@@ -427,6 +427,10 @@ func (m *Migrator) moveRemainingItems(profileDir string) error {
 	for _, t := range config.AllHubItemTypes() {
 		knownNames[string(t)] = true
 	}
+	// Init never scans output-styles into the hub (see ScanSource): it moves the
+	// directory into the profile as it is. createDefaultProfile made an empty
+	// one there, which the move replaces.
+	delete(knownNames, string(config.HubOutputStyles))
 	for _, t := range config.AllDataItemTypes() {
 		knownNames[string(t)] = true
 	}
@@ -444,6 +448,9 @@ func (m *Migrator) moveRemainingItems(profileDir string) error {
 
 		src := filepath.Join(m.paths.ClaudeDir, entry.Name())
 		dst := filepath.Join(profileDir, entry.Name())
+		if entry.Name() == string(config.HubOutputStyles) {
+			os.Remove(dst) // only succeeds on the empty directory init made
+		}
 
 		// Move unknown item to profile
 		if err := m.moveItem(src, dst); err != nil {
@@ -459,6 +466,11 @@ func (m *Migrator) cleanupSourceDir() error {
 	// Remove empty hub item directories
 	for _, itemType := range config.AllHubItemTypes() {
 		dir := filepath.Join(m.paths.ClaudeDir, string(itemType))
+		// os.Remove would delete a symlink outright, not just an empty
+		// directory: leave links for moveRemainingItems.
+		if info, err := os.Lstat(dir); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			continue
+		}
 		// Try to remove - will fail if not empty, which is fine
 		os.Remove(dir)
 	}

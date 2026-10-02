@@ -1,10 +1,10 @@
 ---
 type: Mechanism
-title: omp global context (AGENTS.md and RULES.md)
-description: The two user-level files ccp sets up so omp sessions get the profile's CLAUDE.md and every rule.
+title: omp global context (AGENTS.md, RULES.md, APPEND_SYSTEM.md)
+description: The user-level files ccp sets up so omp sessions get the profile's CLAUDE.md, every rule, and its output style.
 resource: internal/profile/omp.go
 tags: [omp, rules, context]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-02T12:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md, section omp (oh-my-pi) Portability (removed 2026-09-14 by the OKF migration)"
@@ -14,12 +14,13 @@ sources:
 
 # Files
 
-`ccp omp sync` sets up two files omp reads in every session:
+`ccp omp sync` sets up three files omp reads in every session:
 
 | File | Source | Notes |
 |------|--------|-------|
 | `~/.omp/agent/AGENTS.md` | symlink → `<profile>/CLAUDE.md` | omp's user context file; the next sync re-points it when the active profile changes |
 | `~/.omp/agent/RULES.md` | generated from **every** rule in the profile | omp's sticky always-apply rule: the whole file is injected into every session's system prompt, so keep the rule set small (a 14 KB, 6-rule set is injected verbatim) |
+| `~/.omp/agent/APPEND_SYSTEM.md` | generated from the profile's active output style | appended to every system prompt; written where omp reads it (ignoring `PI_CODING_AGENT_DIR`), owned through the carrier ledger rather than the marker, removed when the profile selects no linked style ([output styles](/features/output-styles.md)) |
 
 # RULES.md
 
@@ -33,3 +34,8 @@ sources:
 - Whether the user's own `~/.omp/agent/rules/` holds a file of the same name changes nothing:
   `RULES.md` is the one carrier a rule needs.
 - An unreadable rule is skipped and reported, never fatal.
+- `ccp omp list` and `ccp doctor` report `APPEND_SYSTEM.md` beside `RULES.md`; teardown removes it
+  while it still holds what ccp wrote. It counts as opt-in evidence only through the ledger's
+  omp group, never through pi's, so a pi carrier in a shared directory opts nothing in.
+- Unlike the links, the style carrier also refreshes on link/unlink, `profile edit` and
+  `profile sync`, with opencode and pi ([output styles](/features/output-styles.md)).

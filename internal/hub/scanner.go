@@ -53,11 +53,15 @@ func (s *Scanner) ScanSource(claudeDir string) (*Hub, error) {
 
 	// Map source directories to hub types
 	dirMap := map[string]config.HubItemType{
-		"skills":   config.HubSkills,
-		"agents":   config.HubAgents,
-		"hooks":    config.HubHooks,
-		"rules":    config.HubRules,
+		"skills":        config.HubSkills,
+		"agents":        config.HubAgents,
+		"hooks":         config.HubHooks,
+		"rules":         config.HubRules,
 		"commands": config.HubCommands,
+		// output-styles is deliberately absent: init moves ~/.claude/output-styles
+		// into the profile whole, as before it was a hub type, rather than
+		// moving each style into the hub — that would drop hidden files and
+		// empty a directory symlinked into the user's dotfiles.
 	}
 
 	for dirName, itemType := range dirMap {

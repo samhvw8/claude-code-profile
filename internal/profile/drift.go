@@ -84,6 +84,12 @@ func NewDetector(paths *config.Paths) *Detector {
 func (d *Detector) Detect(profile *Profile) (*DriftReport, error) {
 	report := &DriftReport{Profile: profile.Name}
 
+	// Through a symlinked type directory, Fix would remove or replace the files
+	// it points at — hub items themselves.
+	if err := checkProfileItemDirs(profile.Path); err != nil {
+		return nil, err
+	}
+
 	// Check each hub item type (except settings-templates which are referenced by name, not symlinked)
 	for _, itemType := range config.AllHubItemTypes() {
 		if itemType == config.HubSettingsTemplates {
@@ -210,6 +216,9 @@ func (d *Detector) detectItemTypeDrift(profile *Profile, itemType config.HubItem
 			continue
 		}
 
+		if !ccpMayRemove(d.paths, itemType, filepath.Join(itemDir, name)) {
+			continue // the user's own style, never ccp's to remove
+		}
 		if !manifestLinkNames[name] {
 			issues = append(issues, DriftItem{
 				Type:     DriftExtra,

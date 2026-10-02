@@ -26,6 +26,7 @@ const (
 	HubHooks             HubItemType = "hooks"
 	HubRules             HubItemType = "rules"
 	HubCommands          HubItemType = "commands"
+	HubOutputStyles      HubItemType = "output-styles"
 	HubSettingsTemplates HubItemType = "settings-templates"
 
 	// HubBundles is a composite item type: an atomic, non-separable group of
@@ -40,7 +41,7 @@ const (
 // Note: HubBundles is intentionally excluded — it is a composite type handled
 // separately (see scanner.Scan and profile.LinkHubBundle).
 func AllHubItemTypes() []HubItemType {
-	return []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubSettingsTemplates}
+	return []HubItemType{HubSkills, HubAgents, HubHooks, HubRules, HubCommands, HubOutputStyles, HubSettingsTemplates}
 }
 
 // DataItemType represents data directories that can be shared or isolated
