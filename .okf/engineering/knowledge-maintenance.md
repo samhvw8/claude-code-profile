@@ -15,7 +15,7 @@ sources:
 | Location | Holds | Loaded |
 |----------|-------|--------|
 | `.okf/` | All project knowledge: product, architecture, reference, features, CLI, engineering, decisions, anti-patterns | On demand, from `.okf/index.md` |
-| `CLAUDE.md` | Version line, dev commands, a map into `.okf/`, the generated GitNexus block | Every session |
+| `CLAUDE.md` | Version line, dev commands, a map into `.okf/` | Every session |
 | `.claude/rules/` | Only constraints that must be in context before acting (identity, principles, workflow) | Every session |
 | `README.md`, `skills/ccp/SKILL.md` | User-facing docs and agent config; they keep their own conventions | — |
 
