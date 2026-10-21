@@ -97,8 +97,17 @@ func (s *Scanner) scanItemDir(dir string, itemType config.HubItemType) ([]Item, 
 
 		name := entry.Name()
 
+		// A DirEntry reports a symlink's own type; a shadow item (a symlink
+		// into a source clone) is whatever its target is.
+		isDir := entry.IsDir()
+		if entry.Type()&os.ModeSymlink != 0 {
+			if info, err := os.Stat(filepath.Join(dir, name)); err == nil {
+				isDir = info.IsDir()
+			}
+		}
+
 		// Rules: flatten directories into individual .md files
-		if itemType == config.HubRules && entry.IsDir() {
+		if itemType == config.HubRules && isDir {
 			subItems, err := s.flattenRuleDir(filepath.Join(dir, name), name)
 			if err == nil && len(subItems) > 0 {
 				items = append(items, subItems...)
@@ -110,11 +119,11 @@ func (s *Scanner) scanItemDir(dir string, itemType config.HubItemType) ([]Item, 
 			Name:  name,
 			Type:  itemType,
 			Path:  filepath.Join(dir, entry.Name()),
-			IsDir: entry.IsDir(),
+			IsDir: isDir,
 		}
 
 		// Try to load source manifest for directory items
-		if entry.IsDir() {
+		if isDir {
 			if source, err := LoadSourceManifest(item.Path); err == nil {
 				item.Source = source
 			}

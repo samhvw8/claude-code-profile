@@ -492,3 +492,25 @@ func TestScanner_ScanSource_EmptyDir(t *testing.T) {
 		t.Errorf("ItemCount() = %d, want 0", h.ItemCount())
 	}
 }
+
+// A shadow item (a symlink into a source clone) is scanned as what it points at.
+func TestScan_ShadowDirIsDir(t *testing.T) {
+	root := t.TempDir()
+	hubDir := filepath.Join(root, "hub")
+	target := filepath.Join(root, "sources", "o--r", "skills", "x")
+	os.MkdirAll(target, 0755)
+	os.WriteFile(filepath.Join(target, "SKILL.md"), []byte("# x"), 0644)
+	os.MkdirAll(filepath.Join(hubDir, "skills"), 0755)
+	if err := os.Symlink("../../sources/o--r/skills/x", filepath.Join(hubDir, "skills", "x")); err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := NewScanner().Scan(hubDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := h.Items[config.HubSkills]
+	if len(items) != 1 || !items[0].IsDir {
+		t.Errorf("skills = %+v, want one directory item", items)
+	}
+}
