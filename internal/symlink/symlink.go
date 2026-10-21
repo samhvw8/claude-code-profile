@@ -3,6 +3,7 @@ package symlink
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Manager handles symlink operations
@@ -129,4 +130,64 @@ func (m *Manager) ReadLink(path string) (string, error) {
 // EnsureDir creates a directory if it doesn't exist
 func (m *Manager) EnsureDir(path string) error {
 	return os.MkdirAll(path, 0755)
+}
+
+// RealPath resolves symlinks in a path, falling back to the cleaned path when
+// part of it does not exist yet.
+func RealPath(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return filepath.Clean(path)
+}
+
+// CreateRelative makes a relative symlink at linkPath pointing at target. Both
+// the link's parent and the target are resolved first, so the link still
+// resolves when a parent directory is itself a symlink (a dotfiles-managed
+// ~/.ccp or ~/.omp). The link therefore points at target's real location.
+func CreateRelative(linkPath, target string) error {
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(RealPath(filepath.Dir(linkPath)), RealPath(target))
+	if err != nil {
+		return err
+	}
+	return os.Symlink(rel, linkPath)
+}
+
+// Within reports whether path lies strictly inside dir (textually).
+func Within(path, dir string) bool {
+	return strings.HasPrefix(path, filepath.Clean(dir)+string(filepath.Separator))
+}
+
+// PointsInto reports whether path is a symlink whose target lies inside dir,
+// whether or not the target exists. A relative target is read against the
+// link's textual parent and against its resolved parent (CreateRelative writes
+// the latter), and either side may sit behind a symlink.
+func PointsInto(path, dir string) bool {
+	raw, err := os.Readlink(path)
+	if err != nil {
+		return false
+	}
+	candidates := []string{raw}
+	if !filepath.IsAbs(raw) {
+		candidates = []string{
+			filepath.Join(filepath.Dir(path), raw),
+			filepath.Join(RealPath(filepath.Dir(path)), raw),
+		}
+	}
+	realDir := RealPath(dir)
+	for _, target := range candidates {
+		target = filepath.Clean(target)
+		if Within(target, dir) {
+			return true
+		}
+		// Resolve the target's directory, which exists even when the item is gone.
+		parent, err := filepath.EvalSymlinks(filepath.Dir(target))
+		if err == nil && Within(filepath.Join(parent, filepath.Base(target)), realDir) {
+			return true
+		}
+	}
+	return false
 }

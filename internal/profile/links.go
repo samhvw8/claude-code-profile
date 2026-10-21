@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/symlink"
 )
 
 // SyncLinks makes a profile's hub item symlinks match its manifest: the leaf
@@ -115,26 +115,5 @@ func ccpMayRemove(paths *config.Paths, itemType config.HubItemType, path string)
 
 // isHubLink reports whether path is a symlink into the hub (bundles included).
 func isHubLink(paths *config.Paths, path string) bool {
-	target, err := os.Readlink(path)
-	if err != nil {
-		return false
-	}
-	if !filepath.IsAbs(target) {
-		target = filepath.Join(filepath.Dir(path), target)
-	}
-	if within(filepath.Clean(target), paths.HubDir) {
-		return true
-	}
-	// Either side may sit behind a symlink (a linked ~/.ccp or hub). Resolve the
-	// target's directory, which exists even when the item itself is gone.
-	dir, err := filepath.EvalSymlinks(filepath.Dir(target))
-	if err != nil {
-		return false
-	}
-	hub, err := filepath.EvalSymlinks(paths.HubDir)
-	return err == nil && within(filepath.Join(dir, filepath.Base(target)), hub)
-}
-
-func within(path, dir string) bool {
-	return strings.HasPrefix(path, filepath.Clean(dir)+string(filepath.Separator))
+	return symlink.PointsInto(path, paths.HubDir)
 }

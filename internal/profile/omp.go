@@ -1085,34 +1085,16 @@ func ompLinkTargets(target, source string) bool {
 	return ompRealPath(target) == ompRealPath(source)
 }
 
-// ompRealPath resolves symlinks in a path, falling back to the cleaned path when
-// part of it does not exist yet.
+// ompRealPath resolves symlinks in a path (see symlink.RealPath).
 func ompRealPath(path string) string {
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		return resolved
-	}
-	return filepath.Clean(path)
+	return symlink.RealPath(path)
 }
 
-// ompCreateLink makes a relative link at linkPath pointing at source, computing
-// the relative path from the *resolved* parent so the link still resolves when a
-// parent directory is a symlink.
+// ompCreateLink makes a relative link at linkPath pointing at source, computed
+// from the *resolved* parent so the link still resolves when a parent directory
+// is a symlink (see symlink.CreateRelative).
 func ompCreateLink(linkPath, source string) error {
-	if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
-		return err
-	}
-
-	parent := filepath.Dir(linkPath)
-	if resolved, err := filepath.EvalSymlinks(parent); err == nil {
-		parent = resolved
-	}
-	target := ompRealPath(source)
-
-	rel, err := filepath.Rel(parent, target)
-	if err != nil {
-		return err
-	}
-	return os.Symlink(rel, linkPath)
+	return symlink.CreateRelative(linkPath, source)
 }
 
 // resolveCcpLink resolves the symlink at linkPath. ok is false when the path is
