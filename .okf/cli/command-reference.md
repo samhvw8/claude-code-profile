@@ -36,7 +36,7 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
 | `ccp which [--path]` | Show the active profile, or its directory | `ccp which --path` |
 | `ccp status` | Status and health | `ccp status` |
-| `ccp doctor` | Diagnose, and with `--fix` repair | `ccp doctor --fix` |
+| `ccp doctor` | Diagnose, and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
 | `ccp env <profile>` | Configure a project env for a profile (hidden) | `ccp env dev --format=mise` |
 | `ccp config init` | Write a default `ccp.toml` | `ccp config init` |
@@ -89,7 +89,7 @@ Link a bundle with `ccp link <profile> bundles/<name>` ([bundles](/features/bund
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp find <query>` | Search skills.sh (`-r github` for GitHub) | `ccp find testing` |
-| `ccp install [source] [items]` | Install from a source, or replay `ccp.toml`; `--link <profile>` also links it (`.` = active) | `ccp install owner/repo skills/x --link .` |
+| `ccp install [source] [items]` | Install from a source as shadow links, or replay `ccp.toml`; `--link <profile>` also links it (`.` = active); `--clone` makes an editable local copy | `ccp install owner/repo skills/x --link .` |
 | `ccp source add/list/update/remove` | Manage sources | `ccp source update` |
 
 Workflow and discovery layouts: [source system](/features/source-system.md).

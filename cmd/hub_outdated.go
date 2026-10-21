@@ -12,6 +12,7 @@ import (
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
 	"github.com/samhvw8/claude-code-profile/internal/hub"
+	"github.com/samhvw8/claude-code-profile/internal/source"
 )
 
 var hubOutdatedCmd = &cobra.Command{
@@ -53,16 +54,27 @@ func runHubOutdated(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to scan hub: %w", err)
 	}
 
-	// Find all items with source tracking
+	// Find all items with source tracking. Shadows (items from 'ccp install')
+	// follow their clone and are checked by 'ccp source update' instead.
 	var checkable []hub.Item
 	var local []hub.Item
+	shadows := 0
+	installer := source.NewInstaller(paths, nil)
 
 	for _, item := range h.AllItems() {
+		if installer.IsShadow(item.Path) {
+			shadows++
+			continue
+		}
 		if item.Source != nil && item.Source.Type == hub.SourceTypeGitHub && item.Source.GitHub != nil {
 			checkable = append(checkable, item)
 		} else if item.IsDir {
 			local = append(local, item)
 		}
+	}
+
+	if shadows > 0 {
+		fmt.Printf("%d items follow their source clone: update them with 'ccp source update'\n\n", shadows)
 	}
 
 	if len(checkable) == 0 {

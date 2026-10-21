@@ -53,7 +53,8 @@ func (p *GitProvider) Fetch(ctx context.Context, url string, destPath string, op
 	if opts.Ref != "" {
 		args = append(args, "--branch", opts.Ref)
 	}
-	args = append(args, url, destPath)
+	// "--" keeps a URL from ccp.toml that starts with "-" from being read as an option
+	args = append(args, "--", url, destPath)
 
 	cmd := exec.CommandContext(ctx, "git", args...)
 	if !opts.Progress {
@@ -83,6 +84,10 @@ func (p *GitProvider) Update(ctx context.Context, sourcePath string, opts Update
 		result.NewCommit = p.getCommit(sourcePath)
 		result.Updated = true
 		return result, nil
+	}
+
+	if !validRef(opts.Ref) {
+		return nil, &SourceError{Op: "git update", Source: sourcePath, Err: fmt.Errorf("invalid ref: %q", opts.Ref)}
 	}
 
 	result.OldCommit = p.getCommit(sourcePath)

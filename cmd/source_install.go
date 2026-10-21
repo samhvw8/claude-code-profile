@@ -19,6 +19,7 @@ var (
 	sourceInstallAll         bool
 	sourceInstallInteractive bool
 	sourceInstallLink        string
+	sourceInstallClone       bool
 )
 
 // activeProfileMarker is the --link value that means the active profile.
@@ -26,9 +27,10 @@ var (
 // bare --link followed by an item named "work".
 const activeProfileMarker = "."
 
-// addInstallLinkFlag registers --link on an install command.
+// addInstallLinkFlag registers --link and --clone on an install command.
 func addInstallLinkFlag(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&sourceInstallLink, "link", "l", "", "Also link installed items to this profile ('.' for the active profile)")
+	cmd.Flags().BoolVar(&sourceInstallClone, "clone", false, "Copy items into the hub as local items you can edit (converts an existing shadow)")
 }
 
 var sourceInstallCmd = &cobra.Command{
@@ -40,9 +42,13 @@ var sourceInstallCmd = &cobra.Command{
 If the source is not already added, it will be added automatically.
 If no items are specified, interactive selection is shown.
 
+An installed item is a shadow: a symlink into the source's clone, so
+'ccp source update' updates it in place. To edit an item, install it with
+--clone: ccp copies it into the hub as a local item and stops tracking it.
+
 When called without arguments, syncs all sources from ccp.toml:
-- Clones missing sources
-- Reinstalls items listed in registry
+- Clones missing sources at the commit ccp.toml records
+- Recreates missing shadow links
 
 Examples:
   ccp source install                                  # Sync all from ccp.toml
@@ -50,7 +56,8 @@ Examples:
   ccp source install owner/repo skills/my-skill
   ccp source install owner/repo --all
   ccp source install owner/repo skills/my-skill --link .        # ...and link to the active profile
-  ccp source install owner/repo skills/my-skill --link work     # ...and link to 'work'`,
+  ccp source install owner/repo skills/my-skill --link work     # ...and link to 'work'
+  ccp source install owner/repo skills/my-skill --clone         # local copy to edit`,
 	Args: cobra.MinimumNArgs(0),
 	RunE: runSourceInstall,
 }
@@ -67,6 +74,9 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		if sourceInstallLink != "" {
 			return fmt.Errorf("--link needs a package to install; it does not apply to syncing ccp.toml")
+		}
+		if sourceInstallClone {
+			return fmt.Errorf("--clone needs a package and items; it does not apply to syncing ccp.toml")
 		}
 		return runSourceSync()
 	}
@@ -119,6 +129,10 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	installer := source.NewInstaller(paths, registry)
+	mode := source.Shadow
+	if sourceInstallClone {
+		mode = source.Clone
+	}
 
 	// URL pointed at a specific skill: install exactly that, copying everything
 	// at the SKILL.md's level (handles both root-level and skills/<name>/).
@@ -127,14 +141,14 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 		if strings.EqualFold(path.Base(relDir), "SKILL.md") {
 			relDir = path.Dir(relDir)
 		}
-		item, instErr := installer.InstallPath(sourceID, relDir)
+		item, instErr := installer.InstallPath(sourceID, relDir, mode)
 		if instErr != nil {
 			return instErr
 		}
 		if err := registry.Save(); err != nil {
 			return err
 		}
-		fmt.Printf("Installed %s from %s\n", item, sourceID)
+		fmt.Printf("Installed %s from %s%s\n", item, sourceID, cloneNote())
 		return linkInstalled(paths, linkProfile, []string{item})
 	}
 
@@ -188,21 +202,32 @@ func runSourceInstall(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	installed, err := installer.Install(sourceID, items)
+	installed, err := installer.Install(sourceID, items, mode)
+	// Items placed before a failure are in the hub: record them either way.
+	if saveErr := registry.Save(); saveErr != nil {
+		return saveErr
+	}
 	if err != nil {
+		if len(installed) > 0 {
+			fmt.Printf("Installed %d items before the failure: %s\n", len(installed), strings.Join(installed, ", "))
+		}
 		return err
 	}
 
-	if err := registry.Save(); err != nil {
-		return err
-	}
-
-	fmt.Printf("Installed %d items from %s:\n", len(installed), sourceID)
+	fmt.Printf("Installed %d items from %s%s:\n", len(installed), sourceID, cloneNote())
 	for _, item := range installed {
 		fmt.Printf("  - %s\n", item)
 	}
 
 	return linkInstalled(paths, linkProfile, installed)
+}
+
+// cloneNote marks install output for --clone, whose items are local items.
+func cloneNote() string {
+	if sourceInstallClone {
+		return " as local items"
+	}
+	return ""
 }
 
 // resolveLinkProfile returns the profile named by --link ("" when not given),
@@ -364,7 +389,8 @@ func addSourceForInstall(identifier, refOverride string, paths *config.Paths, re
 // runSourceSync syncs all sources from ccp.toml
 // For each source in registry:
 // 1. Clone if missing
-// 2. Reinstall items from Installed list
+// 2. Check out the commit ccp.toml records
+// 3. Recreate missing items from the Installed list
 func runSourceSync() error {
 	paths, err := config.ResolvePaths()
 	if err != nil {
@@ -428,6 +454,12 @@ func runSourceSync() error {
 			fmt.Printf("  ✓ Source exists\n")
 		}
 
+		// ccp.toml's commit is a lock: move the clone to it, so every machine
+		// that syncs the same ccp.toml gets the same item content.
+		if err := checkoutLockedCommit(ctx, installer, entry, sourceDir); err != nil {
+			fmt.Printf("  ⚠ %v\n", err)
+		}
+
 		// Reinstall items if any are missing from hub
 		if len(entry.Source.Installed) > 0 {
 			var missing []string
@@ -436,6 +468,7 @@ func runSourceSync() error {
 				if len(parts) != 2 {
 					continue
 				}
+				// Stat follows a shadow link: a link whose target is gone is missing.
 				itemPath := paths.HubDir + "/" + item
 				if _, err := os.Stat(itemPath); os.IsNotExist(err) {
 					missing = append(missing, item)
@@ -445,19 +478,15 @@ func runSourceSync() error {
 			if len(missing) > 0 {
 				fmt.Printf("  Installing %d missing items...\n", len(missing))
 
-				// Remove items from registry first so Install can add them back
+				// One at a time, so one bad item does not stop the rest. A failed
+				// item stays in ccp.toml: it is wanted, and a later sync retries it.
 				for _, item := range missing {
-					registry.RemoveInstalled(entry.ID, item)
-				}
-
-				installed, err := installer.Install(entry.ID, missing)
-				if err != nil {
-					fmt.Printf("  ⚠ Install failed: %v\n", err)
-				} else {
-					for _, item := range installed {
-						fmt.Printf("    + %s\n", item)
+					if _, err := installer.Install(entry.ID, []string{item}, source.Shadow); err != nil {
+						fmt.Printf("    ⚠ %s: %v\n", item, err)
+						continue
 					}
-					totalInstalled += len(installed)
+					fmt.Printf("    + %s\n", item)
+					totalInstalled++
 				}
 			} else {
 				fmt.Printf("  ✓ All %d items present\n", len(entry.Source.Installed))
@@ -471,5 +500,35 @@ func runSourceSync() error {
 	}
 
 	fmt.Printf("Sync complete: %d sources cloned, %d items installed\n", totalCloned, totalInstalled)
+	return nil
+}
+
+// checkoutLockedCommit moves a git source clone to the commit ccp.toml records.
+// A clone with local edits is left alone: the checkout would discard them. A
+// failure (offline, rate-limited, a commit force-pushed away) only warns: the
+// lock in ccp.toml is never rewritten here, so a transient error cannot lose it.
+func checkoutLockedCommit(ctx context.Context, installer *source.Installer, entry source.SourceEntry, sourceDir string) error {
+	git, ok := source.GetProvider(entry.Source.Provider).(*source.GitProvider)
+	if !ok || entry.Source.Commit == "" {
+		return nil
+	}
+	if !source.ValidCommit(entry.Source.Commit) {
+		return fmt.Errorf("ccp.toml commit %q is not a full commit id: ignored", entry.Source.Commit)
+	}
+	head := git.GetCommit(sourceDir)
+	if head == "" || head == entry.Source.Commit {
+		return nil
+	}
+	edits, err := installer.LocalEdits(entry.ID)
+	if err != nil {
+		return err
+	}
+	if len(edits) > 0 {
+		return fmt.Errorf("not moved to locked commit %s: local edits in %s", shortenSHA(entry.Source.Commit), strings.Join(edits, ", "))
+	}
+	if err := git.CheckoutCommit(ctx, sourceDir, entry.Source.Commit); err != nil {
+		return fmt.Errorf("could not move to locked commit %s, still at %s: %v", shortenSHA(entry.Source.Commit), shortenSHA(head), err)
+	}
+	fmt.Printf("  ✓ At locked commit %s\n", shortenSHA(entry.Source.Commit))
 	return nil
 }

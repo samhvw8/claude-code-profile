@@ -414,7 +414,7 @@ func TestInstallPath_RootSkill(t *testing.T) {
 	}
 
 	installer := NewInstaller(paths, registry)
-	item, err := installer.InstallPath(sourceID, ".")
+	item, err := installer.InstallPath(sourceID, ".", Shadow)
 	if err != nil {
 		t.Fatalf("InstallPath: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestInstallPath_RootSkill(t *testing.T) {
 		t.Errorf("item = %q, want skills/frontend-audit", item)
 	}
 
-	// Everything at SKILL.md's level was copied.
+	// Everything at SKILL.md's level is reachable through the shadow.
 	for _, f := range []string{"SKILL.md", "README.md", "scripts/run.mjs"} {
 		if _, err := os.Stat(filepath.Join(hubDir, "skills", "frontend-audit", f)); err != nil {
 			t.Errorf("expected %s copied: %v", f, err)
@@ -453,7 +453,7 @@ func TestInstallPath_SubdirSkill(t *testing.T) {
 	}
 
 	installer := NewInstaller(paths, registry)
-	item, err := installer.InstallPath(sourceID, "skills/debug")
+	item, err := installer.InstallPath(sourceID, "skills/debug", Shadow)
 	if err != nil {
 		t.Fatalf("InstallPath: %v", err)
 	}
@@ -479,7 +479,7 @@ func TestInstallPath_NoSkillMd(t *testing.T) {
 	}
 
 	installer := NewInstaller(paths, registry)
-	if _, err := installer.InstallPath(sourceID, "."); err == nil {
+	if _, err := installer.InstallPath(sourceID, ".", Shadow); err == nil {
 		t.Error("expected error when no SKILL.md is present, got nil")
 	}
 }

@@ -181,7 +181,7 @@ func runSourceAdd(cmd *cobra.Command, args []string) error {
 	if sourceAddInstall && len(available) > 0 {
 		fmt.Println()
 		fmt.Println("Installing all items...")
-		installed, err := installer.Install(sourceID, available)
+		installed, err := installer.Install(sourceID, available, source.Shadow)
 		if err != nil {
 			return err
 		}

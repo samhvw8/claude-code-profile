@@ -57,6 +57,7 @@ ccp install owner/repo                    # Add source + interactive install
 ccp install owner/repo -a                 # Install all items
 ccp install owner/repo skills/x --link .    # Install and link to the active profile
 ccp install owner/repo skills/x --link dev  # Install and link to 'dev'
+ccp install owner/repo skills/x --clone     # Editable local copy instead of a shadow link
 ```
 
 ### Link Items to Profiles
@@ -167,7 +168,8 @@ first.
 
 ## Tips
 
-- `ccp install` (no args) syncs all sources — useful for new machines
+- `ccp install` (no args) syncs all sources at the commits `ccp.toml` locks — useful for new machines
+- Installed items are shadows (symlinks into `~/.ccp/sources/`), so `ccp source update` updates them in place. To edit one, use `--clone` first; `source update` refuses a clone with local edits
 - `ccp project add` copies (not symlinks) so projects are git-committable
 - `ccp doctor` diagnoses broken hub links, manifests, and hub structure; `--fix` removes links whose hub item is gone
 - `ccp status` shows the active profile, hub counts and per-profile health

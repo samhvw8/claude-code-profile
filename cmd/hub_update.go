@@ -24,7 +24,10 @@ var (
 var hubUpdateCmd = &cobra.Command{
 	Use:   "update [<type>/<name>]",
 	Short: "Update hub items from their source repositories",
-	Long: `Update hub items that were installed from GitHub.
+	Long: `Update hub items that carry a GitHub source manifest (.ccp-source),
+such as items added with 'ccp hub add'. Items installed with 'ccp install' are
+shadows of a source clone: 'ccp source update' updates those, and this command
+refuses them.
 
 Without arguments, shows updateable items and prompts for confirmation.
 With a specific item, updates just that item.
@@ -181,6 +184,11 @@ func updateFromGitHub(paths *config.Paths, item hub.Item) error {
 	src := item.Source.GitHub
 	if src == nil {
 		return fmt.Errorf("missing GitHub source information")
+	}
+
+	// A shadow item follows its clone; replacing it here would turn it into a copy.
+	if info, err := os.Lstat(item.Path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%s/%s is a shadow of a source: use 'ccp source update'", item.Type, item.Name)
 	}
 
 	// Clone the repo to temp dir

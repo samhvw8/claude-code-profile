@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
 	"github.com/samhvw8/claude-code-profile/internal/profile"
+	"github.com/samhvw8/claude-code-profile/internal/source"
 )
 
 var (
@@ -27,6 +29,7 @@ Checks:
 - Are there broken symlinks?
 - Are profile manifests valid?
 - Is the hub structure correct?
+- Are items installed from sources shadows (links into the clone), not copies?
 
 Use --fix to automatically repair issues that can be fixed.
 
@@ -181,7 +184,13 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		issues += len(brokenLinks)
 	}
 
-	// Check 6: omp links. Informational — only inspected once ccp has linked
+	// Check 6: items installed from sources are shadows, not copies
+	fmt.Print("Checking source items... ")
+	srcIssues, srcFixed := checkSourceItems(paths, doctorFix)
+	issues += srcIssues
+	fixed += srcFixed
+
+	// Check 7: omp links. Informational — only inspected once ccp has linked
 	// items there, so users who never ran 'ccp omp link' see nothing.
 	fmt.Print("Checking omp links... ")
 	ompManaged, managedErr := profile.OmpManaged(paths)
@@ -263,7 +272,7 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	} else {
 		fmt.Printf("Found %d issue(s)\n", issues)
-		if !doctorFix && (len(missingHubDirs) > 0 || len(brokenLinks) > 0) {
+		if !doctorFix && (len(missingHubDirs) > 0 || len(brokenLinks) > 0 || srcIssues > 0) {
 			fmt.Println("Run 'ccp doctor --fix' to attempt automatic repair")
 		}
 	}
@@ -419,4 +428,100 @@ func pruneBrokenLinks(paths *config.Paths, links []string) (int, error) {
 		}
 	}
 	return removed, nil
+}
+
+// checkSourceItems reports items installed from sources that are still copies
+// in the hub (installs before shadows), and with fix replaces each unchanged
+// copy with a shadow link. A copy that differs from its source may hold a local
+// edit: it is reported and never touched. It also sweeps what an interrupted
+// migration or clone left behind.
+func checkSourceItems(paths *config.Paths, fix bool) (issues, fixed int) {
+	registry, err := source.LoadRegistry(paths.RegistryPath())
+	if err != nil {
+		fmt.Println("SKIP")
+		fmt.Printf("  → %v\n", err)
+		return 0, 0
+	}
+	installer := source.NewInstaller(paths, registry)
+
+	leftovers, err := source.SweepLeftovers(paths.HubDir, fix)
+	if err != nil {
+		fmt.Printf("\n  → %v", err)
+		issues++
+	}
+	if fix {
+		fixed += len(leftovers)
+		leftovers = nil
+	}
+
+	var same, differs, unresolved, missing, foreign []string
+	sources := registry.ListSources()
+	sort.Slice(sources, func(a, b int) bool { return sources[a].ID < sources[b].ID })
+	for _, entry := range sources {
+		for _, item := range entry.Source.Installed {
+			ref := item + " (" + entry.ID + ")"
+			switch installer.State(entry.ID, item) {
+			case source.ItemCopySame:
+				if fix {
+					if err := installer.Reshadow(entry.ID, item); err != nil {
+						fmt.Printf("\n  → %s: %v", ref, err)
+						issues++
+						continue
+					}
+					fixed++
+					continue
+				}
+				same = append(same, ref)
+			case source.ItemCopyDiffers:
+				differs = append(differs, ref)
+			case source.ItemUnresolved:
+				unresolved = append(unresolved, ref)
+			case source.ItemMissing:
+				missing = append(missing, ref)
+			case source.ItemForeignLink:
+				foreign = append(foreign, ref)
+			}
+		}
+	}
+
+	issues += len(same) + len(differs) + len(unresolved) + len(missing) + len(foreign) + len(leftovers)
+	switch {
+	case issues == 0 && fixed > 0:
+		fmt.Printf("FIXED (%d)\n", fixed)
+		return issues, fixed
+	case issues == 0:
+		fmt.Println("OK")
+		return issues, fixed
+	}
+
+	if fixed > 0 {
+		fmt.Printf("WARN (%d fixed, %d left)\n", fixed, issues)
+	} else {
+		fmt.Printf("WARN (%d)\n", issues)
+	}
+	if len(leftovers) > 0 {
+		fmt.Printf("  → left by an interrupted migration or clone: %s\n", strings.Join(leftovers, ", "))
+		fmt.Println("    run 'ccp doctor --fix' to remove the redundant ones and restore the rest")
+	}
+	if len(same) > 0 {
+		fmt.Printf("  → %d unchanged copies of source items: run 'ccp doctor --fix' to make them shadow links\n", len(same))
+	}
+	if len(differs) > 0 {
+		fmt.Printf("  → copies that differ from their source (a local edit or an older version; left alone): %s\n", strings.Join(differs, ", "))
+		fmt.Println("    keep one as a local item: 'ccp install <source> <item> --clone'")
+		fmt.Println("    take the source version: 'ccp hub remove <item>', then 'ccp install' recreates it as a shadow")
+	}
+	if len(foreign) > 0 {
+		fmt.Printf("  → links to somewhere outside sources/ (yours; left alone): %s\n", strings.Join(foreign, ", "))
+		fmt.Println("    keep one as a local item: 'ccp install <source> <item> --clone'")
+	}
+	if len(unresolved) > 0 {
+		fmt.Printf("  → copies whose source path cannot be found (removed upstream?): %s\n", strings.Join(unresolved, ", "))
+		fmt.Println("    keep one as a local item: 'ccp install <source> <item> --clone'")
+	}
+	if len(missing) > 0 {
+		fmt.Printf("  → missing from the hub: %s\n", strings.Join(missing, ", "))
+		fmt.Println("    run 'ccp install' to recreate them")
+	}
+	return issues, fixed
 }

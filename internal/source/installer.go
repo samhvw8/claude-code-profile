@@ -6,13 +6,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
-// Installer handles copying items from sources to hub
+// Installer places items from sources into the hub (see InstallMode).
 type Installer struct {
 	paths    *config.Paths
 	registry *Registry
@@ -44,8 +45,9 @@ type marketplaceJSON struct {
 	} `json:"plugins"`
 }
 
-// Install copies items from a source to the hub
-func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
+// Install places items from a source into the hub (see place). Items are
+// source specs (skills/x, plugins/p/skills/x) or the hub names ccp.toml lists.
+func (i *Installer) Install(sourceID string, items []string, mode InstallMode) ([]string, error) {
 	source, err := i.registry.GetSource(sourceID)
 	if err != nil {
 		return nil, err
@@ -61,10 +63,30 @@ func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
 	var installed []string
 
 	for _, item := range items {
-		// Resolve source and destination paths
+		// --clone of a tracked item already in the hub as something other
+		// than a shadow (a copy from before shadows, or the user's own link)
+		// keeps it as it is and stops tracking it. Its source path may be gone.
+		if mode == Clone && validItem(item) && i.tracks(sourceID, item) {
+			dstPath := filepath.Join(i.paths.HubDir, filepath.FromSlash(item))
+			if _, err := os.Lstat(dstPath); err == nil && !i.IsShadow(dstPath) {
+				if err := i.registry.RemoveInstalled(sourceID, item); err != nil {
+					return installed, err
+				}
+				installed = append(installed, item)
+				continue
+			}
+		}
+
+		// Resolve source and destination paths. A hub name from ccp.toml that
+		// does not match the source layout (a plugin or URL install) is found
+		// by the name each candidate would install as.
 		srcPath, dstItem, err := i.resolveItemPaths(sourceDir, item)
 		if err != nil {
-			return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
+			found, findErr := i.resolveInstalled(sourceDir, item)
+			if findErr != nil {
+				return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
+			}
+			srcPath, dstItem = found, item
 		}
 
 		if _, err := os.Stat(srcPath); err != nil {
@@ -72,41 +94,76 @@ func (i *Installer) Install(sourceID string, items []string) ([]string, error) {
 				Err: fmt.Errorf("item not found: %s", item)}
 		}
 
-		parts := strings.SplitN(dstItem, "/", 2)
-		if len(parts) != 2 {
+		if !validItem(dstItem) {
 			return installed, &SourceError{Op: "install", Source: sourceID,
 				Err: fmt.Errorf("invalid item format: %s", dstItem)}
 		}
-		itemType, itemName := parts[0], parts[1]
 
-		dstPath := filepath.Join(i.paths.HubDir, itemType, itemName)
-
-		if _, err := os.Stat(dstPath); err == nil {
-			return installed, &SourceError{Op: "install", Source: sourceID,
-				Err: fmt.Errorf("item already exists: %s", dstItem)}
-		}
-
-		if err := CopyTree(srcPath, dstPath); err != nil {
-			return installed, &SourceError{Op: "install", Source: sourceID, Err: err}
-		}
-
-		if err := i.registry.AddInstalled(sourceID, dstItem); err != nil {
-			os.RemoveAll(dstPath)
+		dstPath := filepath.Join(i.paths.HubDir, filepath.FromSlash(dstItem))
+		if err := i.place(sourceID, sourceDir, srcPath, dstItem, dstPath, mode); err != nil {
 			return installed, err
 		}
-
 		installed = append(installed, dstItem)
 	}
 
 	return installed, nil
 }
 
+// place puts one item into the hub: a shadow link tracked in the source's
+// installed list, or with Clone a local copy that is not tracked. With Clone,
+// an existing shadow is converted into a local copy in place, and an existing
+// tracked copy is kept as it is and untracked.
+func (i *Installer) place(sourceID, sourceDir, srcPath, dstItem, dstPath string, mode InstallMode) error {
+	if info, err := os.Lstat(dstPath); err == nil {
+		_, statErr := os.Stat(dstPath)
+		isLink := info.Mode()&os.ModeSymlink != 0
+		switch {
+		case mode == Clone && statErr == nil && i.IsShadow(dstPath):
+			if err := i.cloneShadow(sourceID, sourceDir, dstItem, dstPath); err != nil {
+				return &SourceError{Op: "clone", Source: sourceID, Err: err}
+			}
+			return nil
+		case mode == Clone && !i.IsShadow(dstPath) && i.tracks(sourceID, dstItem):
+			// A copy from before shadows, or the user's own link: keep it as
+			// it is, stop tracking it.
+			return i.registry.RemoveInstalled(sourceID, dstItem)
+		case isLink && statErr != nil && i.IsShadow(dstPath):
+			// A broken link (its clone was removed): replace it.
+			if err := os.Remove(dstPath); err != nil {
+				return &SourceError{Op: "install", Source: sourceID, Err: err}
+			}
+		default:
+			return &SourceError{Op: "install", Source: sourceID,
+				Err: fmt.Errorf("item already exists: %s", dstItem)}
+		}
+	}
+
+	if mode == Clone {
+		if err := i.checkContained(srcPath); err != nil {
+			return &SourceError{Op: "install", Source: sourceID, Err: err}
+		}
+		if err := CopyTree(srcPath, dstPath); err != nil {
+			return &SourceError{Op: "install", Source: sourceID, Err: err}
+		}
+		return nil
+	}
+
+	if err := i.linkShadow(srcPath, dstPath); err != nil {
+		return &SourceError{Op: "install", Source: sourceID, Err: err}
+	}
+	if err := i.registry.AddInstalled(sourceID, dstItem); err != nil {
+		os.Remove(dstPath)
+		return err
+	}
+	return nil
+}
+
 // InstallPath installs a single skill from an explicit directory within the
 // source — used when the user points install at a SKILL.md by URL. relDir is
 // relative to the source root ("" or "." means the repo root itself). The whole
-// directory at that level is copied; the skill name comes from its SKILL.md
+// directory at that level is installed; the skill name comes from its SKILL.md
 // frontmatter (falling back to the directory's base name).
-func (i *Installer) InstallPath(sourceID, relDir string) (string, error) {
+func (i *Installer) InstallPath(sourceID, relDir string, mode InstallMode) (string, error) {
 	sourceDir := i.paths.SourceDir(sourceID)
 	skillDir := sourceDir
 	if relDir != "" && relDir != "." {
@@ -121,21 +178,16 @@ func (i *Installer) InstallPath(sourceID, relDir string) (string, error) {
 
 	dstItem := "skills/" + name
 	dstPath := filepath.Join(i.paths.HubDir, "skills", name)
-	if _, err := os.Stat(dstPath); err == nil {
-		return "", &SourceError{Op: "install", Source: sourceID,
-			Err: fmt.Errorf("item already exists: %s", dstItem)}
-	}
-
-	if err := CopyTree(skillDir, dstPath); err != nil {
-		return "", &SourceError{Op: "install", Source: sourceID, Err: err}
-	}
-
-	if err := i.registry.AddInstalled(sourceID, dstItem); err != nil {
-		os.RemoveAll(dstPath)
+	if err := i.place(sourceID, sourceDir, skillDir, dstItem, dstPath, mode); err != nil {
 		return "", err
 	}
-
 	return dstItem, nil
+}
+
+// tracks reports whether sourceID's installed list holds item.
+func (i *Installer) tracks(sourceID, item string) bool {
+	src, err := i.registry.GetSource(sourceID)
+	return err == nil && slices.Contains(src.Installed, item)
 }
 
 // validExtensions are the file extensions to check when resolving flat file items
@@ -689,7 +741,8 @@ func CopyDir(src, dst string) error {
 			if err := CopyDir(srcPath, dstPath); err != nil {
 				return err
 			}
-		} else {
+		} else if info.Mode().IsRegular() {
+			// Sockets and FIFOs are skipped: opening a FIFO blocks forever.
 			if err := CopyFileItem(srcPath, dstPath); err != nil {
 				return err
 			}

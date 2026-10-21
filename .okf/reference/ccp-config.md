@@ -38,6 +38,10 @@ commit = 'abc123...'
 installed = ['skills/my-skill', 'agents/my-agent']
 ```
 
-`ccp install` with no arguments replays this file on a new machine: it clones missing
-sources and reinstalls their items. See [source system](/features/source-system.md) and
+`commit` is a lock: `ccp install` with no arguments replays this file on a new machine — it
+clones missing sources, checks each one out at `commit`, and recreates the shadow links for
+`installed`. `ccp source update` moves `commit` forward; a failed checkout only warns and never rewrites it.
+`commit` must be a full SHA, or sync ignores it. The lock needs a git source. `installed` lists
+only shadows, by hub name; an item installed with `--clone` is a local item and is not listed
+([decision](/decisions/shadow-source-items.md)). See [source system](/features/source-system.md) and
 [bootstrap](/features/bootstrap.md).
