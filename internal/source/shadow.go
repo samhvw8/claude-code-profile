@@ -175,11 +175,12 @@ func (i *Installer) State(sourceID, item string) ItemState {
 		}
 		return ItemShadow
 	}
-	srcPath, err := i.resolveInstalled(i.paths.SourceDir(sourceID), item)
+	sourceDir := i.paths.SourceDir(sourceID)
+	srcPath, err := i.resolveInstalled(sourceDir, item)
 	if err != nil {
 		return ItemUnresolved
 	}
-	same, err := sameTree(dstPath, srcPath)
+	same, err := sameTree(dstPath, srcPath, gitIgnored(sourceDir, srcPath))
 	if err != nil {
 		return ItemUnresolved
 	}
@@ -259,8 +260,9 @@ type treeEntry struct {
 // sameTree reports whether two files or directory trees hold the same content:
 // the same files and directories (empty ones included), file modes and bytes.
 // Symlinks are followed (CopyDir resolves them), and .git is skipped on both
-// sides (CopyDir never copies it).
-func sameTree(a, b string) (bool, error) {
+// sides (CopyDir never copies it). Entries only in a that ignored reports
+// (nil: none) do not count.
+func sameTree(a, b string, ignored func(extra map[string]treeEntry) map[string]bool) (bool, error) {
 	ta, err := treeEntries(a)
 	if err != nil {
 		return false, err
@@ -268,6 +270,17 @@ func sameTree(a, b string) (bool, error) {
 	tb, err := treeEntries(b)
 	if err != nil {
 		return false, err
+	}
+	if ignored != nil {
+		extra := map[string]treeEntry{}
+		for rel, e := range ta {
+			if _, ok := tb[rel]; !ok {
+				extra[rel] = e
+			}
+		}
+		for rel := range ignored(extra) {
+			delete(ta, rel)
+		}
 	}
 	if len(ta) != len(tb) {
 		return false, nil
@@ -293,6 +306,42 @@ func sameTree(a, b string) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// gitIgnored returns a sameTree filter that reports the entries the git clone
+// at sourceDir ignores, read as paths under srcPath: files a shadow would hold
+// as well (a __pycache__ written when a skill ran), so not local edits. Not a
+// git clone, or git fails: it reports nothing, and every extra file counts.
+func gitIgnored(sourceDir, srcPath string) func(map[string]treeEntry) map[string]bool {
+	return func(extra map[string]treeEntry) map[string]bool {
+		if len(extra) == 0 || !isGitRepo(sourceDir) {
+			return nil
+		}
+		base, err := filepath.Rel(symlink.RealPath(sourceDir), symlink.RealPath(srcPath))
+		if err != nil {
+			return nil
+		}
+		byPath := map[string]string{}
+		var input strings.Builder
+		for rel, e := range extra {
+			path := filepath.ToSlash(filepath.Join(base, rel))
+			if e.mode.IsDir() {
+				path += "/" // a pattern like "__pycache__/" matches directories only
+			}
+			byPath[path] = rel
+			input.WriteString(path + "\x00")
+		}
+		cmd := exec.Command("git", "-C", sourceDir, "check-ignore", "--stdin", "-z")
+		cmd.Stdin = strings.NewReader(input.String())
+		out, _ := cmd.Output() // exit 1 means nothing is ignored
+		ignored := map[string]bool{}
+		for path := range strings.SplitSeq(string(out), "\x00") {
+			if rel, ok := byPath[path]; ok {
+				ignored[rel] = true
+			}
+		}
+		return ignored
+	}
 }
 
 // treeEntries maps every regular file and directory under root (root itself

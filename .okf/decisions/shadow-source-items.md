@@ -59,7 +59,9 @@ history, so neither applies there.
 - An item that resolves outside `sources/` — itself, or through a symlink inside it — is refused
   in both modes: an upstream repo cannot point a hub item at `~/.ssh`.
 - `ccp doctor --fix` replaces each hub copy that is identical to its source (files, empty
-  directories, modes and bytes) with a shadow. A copy that differs, or a link to somewhere
+  directories, modes and bytes) with a shadow. Files only in the copy that the source repo's git
+  ignores (a `__pycache__/` written when a skill's script ran) do not count: a shadow would hold
+  them too, and they are dropped with the copy. A copy that differs, or a link to somewhere
   outside `sources/`, is reported and never touched. It also sweeps the hidden
   `.<name>.ccp-reshadow` / `.ccp-clone` leftovers of an interrupted migration or clone: a
   redundant one is removed, the only copy of an item is moved back.

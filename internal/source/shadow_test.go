@@ -313,6 +313,34 @@ func TestReshadow_UnchangedCopy(t *testing.T) {
 	}
 }
 
+// Files only in the copy that the source repo ignores (a __pycache__ written
+// when a skill's script ran) are not edits: a shadow would hold them too.
+// A new file the repo does not ignore still is one.
+func TestState_IgnoresFilesTheSourceIgnores(t *testing.T) {
+	i, paths, sourceDir := setupShadow(t)
+	createTestFile(t, sourceDir, ".gitignore", "__pycache__/\n")
+	testutil.CommitAll(t, sourceDir, "ignore caches")
+	dst := filepath.Join(paths.HubDir, "skills/x")
+	CopyTree(filepath.Join(sourceDir, "skills/x"), dst)
+	i.registry.AddInstalled(shadowSource, "skills/x")
+	createTestFile(t, dst, "__pycache__/run.cpython-314.pyc", "bytecode")
+	createTestFile(t, dst, "ref/__pycache__/n.pyc", "bytecode")
+
+	if s := i.State(shadowSource, "skills/x"); s != ItemCopySame {
+		t.Fatalf("state = %v, want copy-same", s)
+	}
+	if err := i.Reshadow(shadowSource, "skills/x"); err != nil {
+		t.Fatal(err)
+	}
+
+	os.Remove(dst)
+	CopyTree(filepath.Join(sourceDir, "skills/x"), dst)
+	createTestFile(t, dst, "mine.md", "a new file")
+	if s := i.State(shadowSource, "skills/x"); s != ItemCopyDiffers {
+		t.Errorf("state = %v with an unignored new file, want copy-differs", s)
+	}
+}
+
 // A copy with a local edit must never be replaced.
 func TestReshadow_RefusesEditedCopy(t *testing.T) {
 	i, paths, sourceDir := setupShadow(t)
@@ -367,11 +395,11 @@ func TestSameTree_Differences(t *testing.T) {
 		a, b := t.TempDir(), t.TempDir()
 		createTestFile(t, a, "f.md", "x")
 		createTestFile(t, b, "f.md", "x")
-		if same, _ := sameTree(a, b); !same {
+		if same, _ := sameTree(a, b, nil); !same {
 			t.Fatalf("%s: identical trees reported different", name)
 		}
 		change(b)
-		if same, _ := sameTree(a, b); same {
+		if same, _ := sameTree(a, b, nil); same {
 			t.Errorf("%s not detected", name)
 		}
 	}
@@ -381,7 +409,7 @@ func TestSameTree_SymlinkLoopIsAnError(t *testing.T) {
 	a := t.TempDir()
 	createTestFile(t, a, "f.md", "x")
 	os.Symlink("..", filepath.Join(a, "loop"))
-	if _, err := sameTree(a, a); err == nil {
+	if _, err := sameTree(a, a, nil); err == nil {
 		t.Error("symlink loop not reported")
 	}
 }

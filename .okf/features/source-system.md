@@ -49,7 +49,7 @@ The hub stores real content only for **local items** — anything that is not a 
 | `install … --clone` | Real copy replaces the link, the item leaves `installed`, and its path in the clone is reset to HEAD. On a tracked copy or the user's own link: kept as is, untracked |
 | `hub update`, `hub outdated` | Refused / skipped: use `source update` |
 | `hub remove` | Removes the link only; the clone stays, and the next `ccp install` recreates it while `installed` lists it |
-| `doctor --fix` | Replaces a hub copy identical to its source with a shadow; a copy that differs is reported, never touched; sweeps interrupted-migration leftovers |
+| `doctor --fix` | Replaces a hub copy identical to its source (ignoring files the source's git ignores) with a shadow; a copy that differs is reported, never touched; sweeps interrupted-migration leftovers |
 
 The local-edit guard and the commit lock need a git source. An item that resolves outside
 `sources/` is refused. In `internal/source/shadow.go`: `InstallMode` (`Shadow`, `Clone`),
