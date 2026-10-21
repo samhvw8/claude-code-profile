@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: "Source items are shadows, not copies"
-description: "A hub item installed from a source is a symlink into the source clone; ccp.toml's commit is a lock; --clone is the only way to get an editable copy."
+description: "A hub item installed from a source is a symlink into the source clone; ccp.lock pins each source's commit; --clone is the only way to get an editable copy."
 tags: [decision, sources, hub]
 decided: 2026-10-02
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-02T00:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T00:00:00Z }
 ---
 
 # Decision
@@ -23,8 +23,8 @@ tracked copy (or the user's own link) as it is; each way the item leaves the sou
 list. Edits made through a shadow live in the clone; `--clone` moves them into the copy first and
 resets that path in the clone last, so a failed reset never costs an edit.
 
-`commit` in `ccp.toml` is a lock. `ccp install` with no arguments checks each clone out at the
-recorded commit, and `ccp source update` moves it forward. Nothing else rewrites it: a checkout
+`ccp.lock`, beside `ccp.toml`, is the lock: it holds each source's `commit`. `ccp install` with
+no arguments checks each clone out at the locked commit, and `ccp source update` moves it forward. Nothing else rewrites it: a checkout
 that fails (offline, rate-limited, force-pushed) only warns.
 
 The lock and the local-edit guard need a git source. Another provider (HTTP) has no clone
@@ -50,7 +50,10 @@ history, so neither applies there.
   It installs missing items one at a time and keeps a failed one in `installed` for the next sync.
 - `installed` holds hub names. A plugin item (`skills/<plugin>-<name>`) or a URL install is found
   again by the name each candidate in the clone would install as.
-- `ccp.toml` is synced and hand-edited, so it is not trusted: `commit` must be a full SHA,
+- `ccp.toml` holds only what the user chose (url, ref, `installed`); `ccp.lock` holds only what
+  ccp resolved (`commit`, `checksum`). Neither holds a timestamp: a per-machine `updated` made
+  every install differ between machines that agree. Both files are synced.
+- `ccp.toml` and `ccp.lock` are synced and hand-editable, so they are not trusted: `commit` must be a full SHA,
   a `ref` or `url` cannot pass for a git option, and an `installed` entry must be a plain
   `type/name` inside the hub.
 - An item that resolves outside `sources/` — itself, or through a symlink inside it — is refused

@@ -60,7 +60,6 @@ func runSourceList(cmd *cobra.Command, args []string) error {
 			Commit       string   `json:"commit,omitempty"`
 			Installed    []string `json:"installed"`
 			InstalledCnt int      `json:"installed_count"`
-			Updated      string   `json:"updated"`
 		}
 
 		var output []sourceJSON
@@ -73,7 +72,6 @@ func runSourceList(cmd *cobra.Command, args []string) error {
 				Commit:       entry.Source.Commit,
 				Installed:    entry.Source.Installed,
 				InstalledCnt: len(entry.Source.Installed),
-				Updated:      entry.Source.Updated.Format("2006-01-02"),
 			}
 			output = append(output, sj)
 		}
@@ -84,15 +82,14 @@ func runSourceList(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "SOURCE\tPROVIDER\tINSTALLED\tUPDATED\n")
+	fmt.Fprintf(w, "SOURCE\tPROVIDER\tINSTALLED\tCOMMIT\n")
 
 	for _, entry := range entries {
-		updated := entry.Source.Updated.Format("2006-01-02")
 		fmt.Fprintf(w, "%s\t%s\t%d items\t%s\n",
 			entry.ID,
 			entry.Source.Provider,
 			len(entry.Source.Installed),
-			updated,
+			shortenSHA(entry.Source.Commit),
 		)
 	}
 	w.Flush()

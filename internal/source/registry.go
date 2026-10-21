@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/samhvw8/claude-code-profile/internal/config"
@@ -70,22 +69,30 @@ func LoadRegistry(path string) (*Registry, error) {
 		return nil, fmt.Errorf("load ccp.toml: %w", err)
 	}
 
-	// If sources exist in ccp.toml, use them
+	// If sources exist in ccp.toml, use them, with versions from ccp.lock
 	if len(ccpConfig.Sources) > 0 {
+		lock, err := config.LoadCcpLock(ccpDir)
+		if err != nil {
+			return nil, fmt.Errorf("load ccp.lock: %w", err)
+		}
 		r := &Registry{
 			Sources: make(map[string]Source),
 			ccpDir:  ccpDir,
 		}
 		for id, src := range ccpConfig.Sources {
+			// A ccp.toml from before ccp.lock carries the commit itself.
+			locked, ok := lock.Sources[id]
+			if !ok {
+				locked = config.LockedSource{Commit: src.Commit, Checksum: src.Checksum}
+			}
 			r.Sources[id] = Source{
 				Registry:  src.Registry,
 				Provider:  src.Provider,
 				URL:       src.URL,
 				Path:      r.expandPath(src.Path), // Expand to absolute
 				Ref:       src.Ref,
-				Commit:    src.Commit,
-				Checksum:  src.Checksum,
-				Updated:   src.Updated,
+				Commit:    locked.Commit,
+				Checksum:  locked.Checksum,
 				Installed: src.Installed,
 			}
 		}
@@ -122,7 +129,7 @@ func LoadRegistry(path string) (*Registry, error) {
 	return r, nil
 }
 
-// Save writes sources to ccp.toml
+// Save writes sources to ccp.toml and their versions to ccp.lock
 func (r *Registry) Save() error {
 	if err := os.MkdirAll(r.ccpDir, 0755); err != nil {
 		return err
@@ -136,6 +143,7 @@ func (r *Registry) Save() error {
 
 	// Update sources
 	ccpConfig.Sources = make(map[string]config.SourceConfig)
+	lock := &config.CcpLock{Sources: make(map[string]config.LockedSource)}
 	for id, src := range r.Sources {
 		ccpConfig.Sources[id] = config.SourceConfig{
 			Registry:  src.Registry,
@@ -143,14 +151,18 @@ func (r *Registry) Save() error {
 			URL:       src.URL,
 			Path:      r.relativePath(src.Path), // Store as relative
 			Ref:       src.Ref,
-			Commit:    src.Commit,
-			Checksum:  src.Checksum,
-			Updated:   src.Updated,
 			Installed: src.Installed,
+		}
+		if src.Commit != "" || src.Checksum != "" {
+			lock.Sources[id] = config.LockedSource{Commit: src.Commit, Checksum: src.Checksum}
 		}
 	}
 
-	// Save to ccp.toml
+	// The lock first: a ccp.toml without commits must never stand alone,
+	// or a legacy commit it carried would be lost.
+	if err := lock.Save(r.ccpDir); err != nil {
+		return err
+	}
 	if err := ccpConfig.Save(r.ccpDir); err != nil {
 		return err
 	}
@@ -170,7 +182,6 @@ func (r *Registry) AddSource(id string, source Source) error {
 		return &SourceError{Op: "add source", Source: id, Err: ErrSourceExists}
 	}
 
-	source.Updated = time.Now()
 	r.Sources[id] = source
 	return nil
 }
@@ -181,7 +192,6 @@ func (r *Registry) UpdateSource(id string, source Source) error {
 		return &SourceError{Op: "update source", Source: id, Err: ErrSourceNotFound}
 	}
 
-	source.Updated = time.Now()
 	r.Sources[id] = source
 	return nil
 }
@@ -235,7 +245,6 @@ func (r *Registry) AddInstalled(sourceID, item string) error {
 	}
 
 	source.Installed = append(source.Installed, item)
-	source.Updated = time.Now()
 	r.Sources[sourceID] = source
 	return nil
 }
@@ -250,7 +259,6 @@ func (r *Registry) RemoveInstalled(sourceID, item string) error {
 	for i, inst := range source.Installed {
 		if inst == item {
 			source.Installed = append(source.Installed[:i], source.Installed[i+1:]...)
-			source.Updated = time.Now()
 			r.Sources[sourceID] = source
 			return nil
 		}

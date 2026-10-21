@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command reference
 description: Every ccp command group with a one-line description and an example; hidden commands are marked.
 tags: [cli, reference, commands]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T03:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T00:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, CLI Command Reference (removed 2026-09-14 by the OKF migration)"
@@ -89,7 +89,7 @@ Link a bundle with `ccp link <profile> bundles/<name>` ([bundles](/features/bund
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp find <query>` | Search skills.sh (`-r github` for GitHub) | `ccp find testing` |
-| `ccp install [source] [items]` | Install from a source as shadow links, or replay `ccp.toml`; `--link <profile>` also links it (`.` = active); `--clone` makes an editable local copy | `ccp install owner/repo skills/x --link .` |
+| `ccp install [source] [items]` | Install from a source as shadow links, or replay `ccp.toml` + `ccp.lock`; `--link <profile>` also links it (`.` = active); `--clone` makes an editable local copy | `ccp install owner/repo skills/x --link .` |
 | `ccp source add/list/update/remove` | Manage sources | `ccp source update` |
 
 Workflow and discovery layouts: [source system](/features/source-system.md).

@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -23,17 +22,20 @@ type CcpConfig struct {
 	Sources map[string]SourceConfig `toml:"sources,omitempty"`
 }
 
-// SourceConfig represents an installed source in ccp.toml
+// SourceConfig represents an installed source in ccp.toml: what the user
+// chose. The resolved version lives in ccp.lock (see CcpLock).
 type SourceConfig struct {
-	Registry  string    `toml:"registry"`
-	Provider  string    `toml:"provider"`
-	URL       string    `toml:"url"`
-	Path      string    `toml:"path"`
-	Ref       string    `toml:"ref,omitempty"`
-	Commit    string    `toml:"commit,omitempty"`
-	Checksum  string    `toml:"checksum,omitempty"`
-	Updated   time.Time `toml:"updated"`
-	Installed []string  `toml:"installed,omitempty"`
+	Registry  string   `toml:"registry"`
+	Provider  string   `toml:"provider"`
+	URL       string   `toml:"url"`
+	Path      string   `toml:"path"`
+	Ref       string   `toml:"ref,omitempty"`
+	Installed []string `toml:"installed,omitempty"`
+
+	// Commit and Checksum are read from a ccp.toml written before ccp.lock
+	// existed; Save never writes them.
+	Commit   string `toml:"commit,omitempty"`
+	Checksum string `toml:"checksum,omitempty"`
 }
 
 // GitHubConfig holds GitHub registry settings
@@ -98,11 +100,17 @@ func LoadCcpConfig(ccpDir string) (*CcpConfig, error) {
 	return cfg, nil
 }
 
-// Save writes ccp.toml to disk
+// Save writes ccp.toml to disk, without lock data (see SaveCcpLock).
 func (c *CcpConfig) Save(ccpDir string) error {
 	configPath := filepath.Join(ccpDir, "ccp.toml")
 
-	data, err := toml.Marshal(c)
+	out := *c
+	out.Sources = make(map[string]SourceConfig, len(c.Sources))
+	for id, src := range c.Sources {
+		src.Commit, src.Checksum = "", ""
+		out.Sources[id] = src
+	}
+	data, err := toml.Marshal(&out)
 	if err != nil {
 		return err
 	}

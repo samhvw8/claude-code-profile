@@ -3,7 +3,7 @@ type: Feature
 title: Source system
 description: Finding and installing hub items from skills.sh and GitHub, including the repository layouts ccp discovers.
 tags: [feature, sources, install]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-02T00:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T00:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md (removed 2026-09-14 by the OKF migration)"
@@ -15,7 +15,7 @@ sources:
 ```bash
 ccp find <query>                        # search skills.sh (PACKAGE + SKILL columns)
 ccp find -r github <query>              # search GitHub repos
-ccp install                             # replay ccp.toml (machine migration)
+ccp install                             # replay ccp.toml + ccp.lock (machine migration)
 ccp install <owner/repo>                # auto-add + interactive install (recommended)
 ccp install <owner/repo> skills/<name>  # one skill, no picker
 ccp install <owner/repo> -a             # auto-add + install everything
@@ -33,7 +33,7 @@ ccp source remove <name>
 2. `install <owner/repo>` adds the source if unknown, then opens the picker.
 3. `install <owner/repo> skills/<name>` installs one skill directly.
 4. `install <blob-url>` to a `SKILL.md` adds the repo at the URL's ref and installs just that skill via `InstallPath`. `ParseGitWebURL` handles `/blob/`, `/tree/`, raw, and GitLab `/-/blob/` URLs.
-5. `install` with no args syncs every source in [ccp.toml](/reference/ccp-config.md): clones missing ones, checks each out at its locked `commit`, and recreates missing shadows.
+5. `install` with no args syncs every source in [ccp.toml](/reference/ccp-config.md): clones missing ones, checks each out at its `commit` in `ccp.lock`, and recreates missing shadows.
 6. `source add` tries skills.sh first, then GitHub on the default branch.
 
 # Shadows and local items

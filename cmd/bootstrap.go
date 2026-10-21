@@ -164,8 +164,12 @@ func runBootstrapPush() error {
 		addPaths = append(addPaths, paths.BundleDir(b.Name))
 	}
 
-	// Always add ccp.toml and profiles
+	// Always add ccp.toml (with its ccp.lock, when there is one) and profiles
 	addPaths = append(addPaths, filepath.Join(paths.CcpDir, "ccp.toml"))
+	lockPath := config.CcpLockPath(paths.CcpDir)
+	if _, err := os.Stat(lockPath); err == nil {
+		addPaths = append(addPaths, lockPath)
+	}
 	profileDirs, _ := os.ReadDir(paths.ProfilesDir)
 	for _, d := range profileDirs {
 		if !d.IsDir() || d.Name() == "shared" {

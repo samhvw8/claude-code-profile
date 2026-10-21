@@ -168,7 +168,7 @@ first.
 
 ## Tips
 
-- `ccp install` (no args) syncs all sources at the commits `ccp.toml` locks — useful for new machines
+- `ccp install` (no args) syncs all sources in `ccp.toml` at the commits `ccp.lock` pins — useful for new machines
 - Installed items are shadows (symlinks into `~/.ccp/sources/`), so `ccp source update` updates them in place. To edit one, use `--clone` first; `source update` refuses a clone with local edits
 - `ccp project add` copies (not symlinks) so projects are git-committable
 - `ccp doctor` diagnoses broken hub links, manifests, and hub structure; `--fix` removes links whose hub item is gone

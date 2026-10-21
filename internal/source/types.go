@@ -3,16 +3,14 @@
 // with provider (git, http) and registry (skills.sh, github) layers.
 package source
 
-import "time"
-
 // PackageInfo represents a package found in a registry
 type PackageInfo struct {
-	ID          string   `toml:"id"`          // e.g., "samhoang/debugging"
-	Name        string   `toml:"name"`        // display name
+	ID          string   `toml:"id"`   // e.g., "samhoang/debugging"
+	Name        string   `toml:"name"` // display name
 	Description string   `toml:"description"`
-	Registry    string   `toml:"registry"`    // which registry (skills.sh, github, manual)
+	Registry    string   `toml:"registry"` // which registry (skills.sh, github, manual)
 	Version     string   `toml:"version"`
-	Tags        []string `toml:"tags"`        // skills, agents, hooks, etc.
+	Tags        []string `toml:"tags"` // skills, agents, hooks, etc.
 }
 
 // PackageDetails extends PackageInfo with download information
@@ -26,15 +24,14 @@ type PackageDetails struct {
 
 // Source represents an installed source in registry.toml
 type Source struct {
-	Registry  string    `toml:"registry"`           // which registry it came from
-	Provider  string    `toml:"provider"`           // how it was downloaded (git, http)
-	URL       string    `toml:"url"`                // original URL
-	Path      string    `toml:"path"`               // local path in sources/
-	Ref       string    `toml:"ref"`                // git ref or version
-	Commit    string    `toml:"commit,omitempty"`   // git commit SHA
-	Checksum  string    `toml:"checksum,omitempty"` // for http downloads
-	Updated   time.Time `toml:"updated"`
-	Installed []string  `toml:"installed"` // installed items
+	Registry  string   `toml:"registry"`           // which registry it came from
+	Provider  string   `toml:"provider"`           // how it was downloaded (git, http)
+	URL       string   `toml:"url"`                // original URL
+	Path      string   `toml:"path"`               // local path in sources/
+	Ref       string   `toml:"ref"`                // git ref or version
+	Commit    string   `toml:"commit,omitempty"`   // git commit SHA
+	Checksum  string   `toml:"checksum,omitempty"` // for http downloads
+	Installed []string `toml:"installed"`          // installed items
 }
 
 // FetchOptions for Provider.Fetch
