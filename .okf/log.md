@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-10-21
+* **Update**: Released v0.49.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: Split the lock out of `ccp.toml`: each source's `commit`/`checksum` now lives in `~/.ccp/ccp.lock`, and the per-machine `updated` timestamp is gone, so two machines with the same sources write the same bytes. A legacy `ccp.toml` `commit` is read and moved on the next save. `source list` shows COMMIT instead of UPDATED; `bootstrap --push` also adds `ccp.lock`. Updated [ccp.toml](/reference/ccp-config.md), [shadow source items](/decisions/shadow-source-items.md), [source system](/features/source-system.md), [bootstrap](/features/bootstrap.md) and the [command reference](/cli/command-reference.md).
 
 ## 2026-10-02
