@@ -4,7 +4,7 @@ title: omp global context (AGENTS.md, RULES.md, APPEND_SYSTEM.md)
 description: The user-level files ccp sets up so omp sessions get the profile's CLAUDE.md, every rule, and its output style.
 resource: internal/profile/omp.go
 tags: [omp, rules, context]
-generated: { by: google-antigravity/gemini-4-argon, at: 2026-10-24T01:40:00Z }
+generated: { by: google-antigravity/gemini-4-argon, at: 2026-10-24T05:15:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md, section omp (oh-my-pi) Portability (removed 2026-09-14 by the OKF migration)"
@@ -18,7 +18,7 @@ sources:
 
 | File | Source | Notes |
 |------|--------|-------|
-| `~/.omp/agent/AGENTS.md` | symlink → `<profile>/CLAUDE.md` (or harness-adapted `AGENTS.md`) | omp's user context file; `ccp omp sync` links it to `<profile>/CLAUDE.md` unless a harness-tailored `AGENTS.md` (maintained via the `ccp` skill to match `omp`'s tools) already occupies the path, which `ccp` leaves untouched and `ccp doctor --verify-omp` verifies directly |
+| `~/.omp/agent/AGENTS.md` | symlink → `<profile>/CLAUDE.md` | omp's user context file; `<profile>/CLAUDE.md` is the single source of truth for both Claude Code and omp, and the next sync re-points `AGENTS.md` when the active profile changes (if a custom `AGENTS.md` already occupies the path, `ccp` leaves it untouched and `ccp doctor --verify-omp` verifies it directly) |
 | `~/.omp/agent/RULES.md` | generated from **every** rule in the profile | omp's sticky always-apply rule: the whole file is injected into every session's system prompt, so keep the rule set small (a 14 KB, 6-rule set is injected verbatim) |
 | `~/.omp/agent/APPEND_SYSTEM.md` | generated from the profile's active output style | appended to every system prompt; written where omp reads it (ignoring `PI_CODING_AGENT_DIR`), owned through the carrier ledger rather than the marker, removed when the profile selects no linked style ([output styles](/features/output-styles.md)) |
 
