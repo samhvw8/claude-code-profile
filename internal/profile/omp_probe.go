@@ -33,7 +33,7 @@ func ompGetStateFrames() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), ompProbeTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "omp", "--mode", "rpc", "--no-session", "-c")
+	cmd := exec.CommandContext(ctx, "omp", "--mode", "rpc", "--no-session")
 	cmd.Stdin = strings.NewReader("{\"id\":\"ccp-probe\",\"type\":\"get_state\"}\n")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -168,8 +168,12 @@ func ompCheckPrompt(paths *config.Paths, p *Profile, prompt, answer string) OmpP
 		check("rules/"+name, ompPromptNeedle(string(content)), "system prompt", prompt, true)
 	}
 
-	if content, err := os.ReadFile(filepath.Join(p.Path, "CLAUDE.md")); err == nil {
-		check("AGENTS.md", ompPromptNeedle(string(content)), "system prompt", prompt, true)
+	agentsContent, err := os.ReadFile(filepath.Join(OmpAgentDir(), "AGENTS.md"))
+	if err != nil {
+		agentsContent, err = os.ReadFile(filepath.Join(p.Path, "CLAUDE.md"))
+	}
+	if err == nil {
+		check("AGENTS.md", ompPromptNeedle(string(agentsContent)), "system prompt", prompt, true)
 	}
 
 	items, err := OmpList(paths)

@@ -1,5 +1,8 @@
 # Update Log
 
+## 2026-10-24
+* **Update**: Two-layer harness sync in `skills/ccp/SKILL.md` and [global context](/features/omp/global-context.md): `ccp` CLI handles mechanical profile sync (`skills/`, `agents/`, `commands/`, `RULES.md`, `APPEND_SYSTEM.md`), while the `ccp` skill on the active harness queries live harness tools/MCPs and adapts the harness's global instructions (`AGENTS.md`) to match those tools. Fixed `symlink.CreateRelative` and `resolveCcpLink` so leaf-symlinked hub items (such as `mise` `symlink-each` entries) stay inside `~/.ccp` instead of being disowned on the next `ccp omp sync`, removed the incompatible `-c` flag from `omp --mode rpc --no-session` in `ompGetStateFrames`, and taught `ompCheckPrompt` to verify a harness-adapted `AGENTS.md` when present.
+
 ## 2026-10-21
 * **Update**: Released v0.49.1: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: [Shadow source items](/decisions/shadow-source-items.md): `doctor` no longer calls a hub copy "differs" when the only extra files are ones the source repo's git ignores (`__pycache__/`), so `doctor --fix` turns those copies into shadows. Found by the `.dotfiles` session: heavy-think, council and ambition stayed stale copies.

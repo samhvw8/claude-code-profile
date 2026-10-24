@@ -4,7 +4,7 @@ title: omp health checks and live verification
 description: What ccp omp list and ccp doctor report about omp, and how doctor --verify-omp asks a live omp what it loaded.
 resource: internal/profile/omp_probe.go
 tags: [omp, doctor, diagnostics]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: google-antigravity/gemini-4-argon, at: 2026-10-24T01:42:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md, section omp (oh-my-pi) Portability (removed 2026-09-14 by the OKF migration)"
@@ -37,7 +37,8 @@ never opted in see nothing.
 
 Everything above predicts omp's loader, and a wrong prediction is invisible. `--verify-omp` asks
 omp itself: it runs `omp --mode rpc --no-session` with a `get_state` request, reads the system
-prompt omp built, and checks that the text of every rule and of `AGENTS.md` reached it.
+prompt omp built, and checks that the text of every rule and of `AGENTS.md` (read from omp's
+agent directory when present, falling back to `<profile>/CLAUDE.md`) reached it.
 
 | Property | Value |
 |----------|-------|

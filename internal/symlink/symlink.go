@@ -142,14 +142,15 @@ func RealPath(path string) string {
 }
 
 // CreateRelative makes a relative symlink at linkPath pointing at target. Both
-// the link's parent and the target are resolved first, so the link still
+// the link's parent and target's parent are resolved first, so the link still
 // resolves when a parent directory is itself a symlink (a dotfiles-managed
-// ~/.ccp or ~/.omp). The link therefore points at target's real location.
+// ~/.ccp or ~/.omp), without following a leaf symlink at target itself.
 func CreateRelative(linkPath, target string) error {
 	if err := os.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
 		return err
 	}
-	rel, err := filepath.Rel(RealPath(filepath.Dir(linkPath)), RealPath(target))
+	resolvedTarget := filepath.Join(RealPath(filepath.Dir(target)), filepath.Base(target))
+	rel, err := filepath.Rel(RealPath(filepath.Dir(linkPath)), resolvedTarget)
 	if err != nil {
 		return err
 	}

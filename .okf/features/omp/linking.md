@@ -4,7 +4,7 @@ title: What ccp links into omp
 description: The item types ccp links, why rules and hooks are not linked, the reporter-only loadability check, link identity, and what is never overwritten.
 resource: internal/profile/omp.go
 tags: [omp, linking]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: google-antigravity/gemini-4-argon, at: 2026-10-24T01:42:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md, section omp (oh-my-pi) Portability (removed 2026-09-14 by the OKF migration)"
@@ -49,11 +49,12 @@ CRLF fences tolerated.
 
 # Link identity
 
-Identity is resolved, never textual: a recorded target is joined against the link's *resolved*
-parent (`resolveCcpLink`), matching how `ompCreateLink` writes it. A dotfiles-managed
-`~/.omp` whose symlink points at a deeper directory cannot make ccp disown its own links. A
-broken link is still recognized as ccp's — its target names the hub item — and
-`ccp doctor --fix` prunes it once that item is gone.
+Identity is resolved on parent directories, never following a leaf symlink out of `~/.ccp`:
+`CreateRelative` resolves the link's parent and the target's parent directory, and
+`resolveCcpLink` checks both the resolved target and the target joined to its resolved parent. A
+dotfiles-managed `~/.omp` or a `mise` `symlink-each` hub item (whose leaf is a symlink into a
+dotfiles repo) cannot make ccp disown its own links. A broken link is still recognized as ccp's —
+its target names the hub item — and `ccp doctor --fix` prunes it once that item is gone.
 
 # Never overwritten
 

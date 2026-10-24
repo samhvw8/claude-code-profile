@@ -115,8 +115,10 @@ ccp omp --profile work sync                     # Target an omp named profile
 
 After the first link, `ccp use <profile> -g` mirrors the new profile additively
 (hand-made links survive and are reported, not pruned) and refreshes omp's global
-context (`AGENTS.md` → the profile's `CLAUDE.md`, `RULES.md` from its rules).
-`ccp doctor` reports broken omp links when the hub item behind them is gone.
+context (`AGENTS.md` → the profile's `CLAUDE.md` when not overridden by a
+harness-tailored `AGENTS.md`, plus `RULES.md` from its rules).
+`ccp doctor` reports broken omp links when the hub item behind them is gone, and
+`ccp doctor --verify-omp` asks a live `omp` process what reached its system prompt.
 `ccp omp` is a hidden command.
 
 opencode reads `~/.claude/CLAUDE.md` and `~/.claude/skills/` itself; point its
@@ -130,6 +132,50 @@ ccp opencode sync            # Write the active profile's agents/commands into ~
 After the first sync, `ccp use -g`, link/unlink and `ccp bootstrap` keep it
 current. ccp only replaces files it wrote; hooks are not mirrored (opencode
 uses plugins). `ccp opencode` is a hidden command.
+
+### Harness-Aware Sync (CLI + Live Tool Matching)
+
+Syncing across harnesses has two layers:
+
+1. **Mechanical sync (`ccp` CLI):** Run `ccp profile sync`, `ccp omp sync`,
+   `ccp opencode sync`, and `ccp pi sync` to link/copy `skills/`, `agents/`,
+   `commands/`, `RULES.md`, and `APPEND_SYSTEM.md` (`output-style.md`).
+2. **Live harness tool matching (via this skill on the active harness):**
+   Because `ccp` is a static CLI, it cannot inspect a harness's live session
+   tools or rewrite tool-routing prose per harness. When asked to sync or update
+   global instructions/skills for the current harness:
+   - **Query the current harness's live tools and MCPs:**
+     - On `omp`: inspect built-in tools (`eval`, `task`, `find`, `grep`, `glob`,
+       `read`, `edit`, `write`, `bash`, `web_search`, `ask`, `todo`, `wait`),
+       `eval` prelude capabilities (`await tool.mcp__<server>_<tool>(args)`,
+       `await tool.<name>(args)`, `workpool`, `agent`, `judge`, `judge_batch`,
+       `browser`), and mounted `xd://` devices (`xd://lsp`, `xd://ast_edit`,
+       `mcp__codegraph_*`, `mcp__parallax_*`, `mcp__cua_*`, `mcp__notebooklm_*`,
+       `mcp__rea_*`).
+     - On Claude Code: inspect `.claude/settings.json` (`mcpServers`,
+       `enabledPlugins`) and built-in tools (`Agent`, `Skill`, `ToolSearch`,
+       `Read`, `Edit`, `Write`, `Grep`, `Glob`, `Bash`, `WebSearch`, `WebFetch`).
+     - On `opencode`: inspect `~/.config/opencode/opencode.json` and mounted MCPs.
+   - **Match `<profile>/CLAUDE.md` to the current harness's tools:**
+     - Keep all harness-independent policies from `<profile>/CLAUDE.md` aligned
+       (`Working style` including **Orchestrator and verifier**, `Test and
+       research gate`, `No attribution`, `What to optimise for`, `When
+       corrected`, `Environment`).
+     - Adapt the harness's global context file (`~/.omp/agent/AGENTS.md` or its
+       dotfiles target for `omp`; `<profile>/CLAUDE.md` for Claude Code) so each
+       workflow routes to the current harness's real tools:
+       - On `omp`: use `eval` (`await tool.mcp__*`, `await tool.*`, `workpool`,
+         `judge`, `browser`) to chain, batch, and filter 2+ MCP or tool calls in
+         one turn; allow `omp`'s built-in `web_search` and `read` (URLs)
+         alongside Parallax MCP; route code intelligence to `codegraph` + `find`
+         + `xd://lsp` + `xd://ast_edit`; route delegation to `task` and `eval`'s
+         `workpool`/`agent`.
+       - On Claude Code: route delegation to `Agent` (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`
+         for teammates), MCP loading to `ToolSearch`, and web search to Parallax
+         MCP over `WebSearch`/`WebFetch`.
+   - **Verify:** Run `ccp omp list` and `ccp doctor --verify-omp` (plus
+     `mise run dot:check` when dotfiles-managed) to confirm every carrier and
+     skill loads cleanly.
 
 ### Output styles
 

@@ -137,6 +137,19 @@ func TestOmpVerifyProfileChecksWhatOmpCarried(t *testing.T) {
 	if want := []string{"skills/validate"}; !reflect.DeepEqual(report.Unnamed, want) {
 		t.Errorf("Unnamed = %v, want %v", report.Unnamed, want)
 	}
+	// When AGENTS.md in omp's agent dir is a harness-adapted file rather than a
+	// symlink to CLAUDE.md, the probe checks the needle of that AGENTS.md.
+	ompTestWrite(t, filepath.Join(OmpAgentDir(), "AGENTS.md"), "# Harness-adapted omp instructions\n\nUse eval with MCP.\n")
+	ompProbeGetState = func() (string, error) {
+		return ompProbeFrames("# Harness-adapted omp instructions\n\nRoute structural questions to the graph tools.\nBe terse and concrete at all times.\n"), nil
+	}
+	report, err = OmpVerifyProfile(paths, p)
+	if err != nil {
+		t.Fatalf("OmpVerifyProfile() with harness-adapted AGENTS.md error: %v", err)
+	}
+	if !report.Verified() {
+		t.Errorf("Verified() = false with harness-adapted AGENTS.md, want true (missing %v)", report.Missing)
+	}
 }
 
 func TestOmpVerifyProfileReportsAProbeFailure(t *testing.T) {

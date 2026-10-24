@@ -1573,3 +1573,56 @@ func TestOmpSyncPrunesMembersOfMissingBundle(t *testing.T) {
 		t.Error("link from an unresolvable bundle survived sync")
 	}
 }
+
+func TestOmpSyncRecognizesSymlinkedHubItems(t *testing.T) {
+	paths, agentDir := ompTestEnv(t)
+
+	// A hub item that is itself a symlink into an external dotfiles directory
+	// (such as mise symlink-each). CreateRelative must point at the hub entry
+	// rather than following the leaf symlink out of ~/.ccp, so ccp still claims
+	// the link on the next sync.
+	dotfilesDir := t.TempDir()
+	realAgent := filepath.Join(dotfilesDir, "code-reviewer.md")
+	ompTestWrite(t, realAgent, "---\nname: code-reviewer\ndescription: reviewer\n---\n")
+	hubAgent := filepath.Join(paths.HubDir, "agents", "code-reviewer.md")
+	if err := os.MkdirAll(filepath.Dir(hubAgent), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realAgent, hubAgent); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := NewManifest("dev", "")
+	manifest.Hub.Agents = []string{"code-reviewer.md"}
+	p := ompTestProfile(t, paths, manifest)
+
+	first, err := OmpSync(paths, p)
+	if err != nil {
+		t.Fatalf("first OmpSync() error: %v", err)
+	}
+	if want := []string{"agents/code-reviewer.md"}; !reflect.DeepEqual(first.Linked, want) {
+		t.Errorf("first Linked = %v, want %v", first.Linked, want)
+	}
+
+	items, err := OmpList(paths)
+	if err != nil {
+		t.Fatalf("OmpList() error: %v", err)
+	}
+	if want := []string{"agents/code-reviewer.md"}; !reflect.DeepEqual(items, want) {
+		t.Errorf("OmpList() = %v, want %v (ccp disowned its link to a symlinked hub item)", items, want)
+	}
+
+	second, err := OmpSync(paths, p)
+	if err != nil {
+		t.Fatalf("second OmpSync() error: %v", err)
+	}
+	if len(second.Notes) != 0 {
+		t.Errorf("second Notes = %v, want no occupied warning", second.Notes)
+	}
+	if want := []string{"agents/code-reviewer.md"}; !reflect.DeepEqual(second.Skipped, want) {
+		t.Errorf("second Skipped = %v, want %v", second.Skipped, want)
+	}
+	if !ompTestExists(t, filepath.Join(agentDir, "agents", "code-reviewer.md")) {
+		t.Error("linked agent missing from omp agent dir")
+	}
+}

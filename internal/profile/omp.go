@@ -1121,8 +1121,9 @@ func resolveCcpLink(symMgr *symlink.Manager, linkPath, ccpDir string) (target st
 		raw = filepath.Join(ompRealPath(filepath.Dir(linkPath)), raw)
 	}
 	target = ompRealPath(raw)
-
-	if !underDir(target, ompRealPath(ccpDir)) {
+	resolvedParentTarget := filepath.Join(ompRealPath(filepath.Dir(raw)), filepath.Base(raw))
+	realCcp := ompRealPath(ccpDir)
+	if !underDir(target, realCcp) && !underDir(resolvedParentTarget, realCcp) {
 		return "", false, false
 	}
 	return target, info.IsBroken, true
