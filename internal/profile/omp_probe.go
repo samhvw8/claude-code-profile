@@ -180,10 +180,14 @@ func ompCheckPrompt(paths *config.Paths, p *Profile, prompt, answer string) OmpP
 	if err != nil {
 		return report
 	}
+	cfg := ompReadConfig()
 	for _, ref := range items {
-		check(ref, ompItemNeedle(paths, ref), "omp's answer", answer, false)
+		needle := ompItemNeedle(paths, ref)
+		if strings.HasPrefix(ref, "skills/") && (cfg.isIgnoredSkill(needle) || cfg.isIgnoredSkill(filepath.Base(ref))) {
+			continue
+		}
+		check(ref, needle, "omp's answer", answer, false)
 	}
-
 	return report
 }
 

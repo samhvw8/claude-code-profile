@@ -150,6 +150,17 @@ func TestOmpVerifyProfileChecksWhatOmpCarried(t *testing.T) {
 	if !report.Verified() {
 		t.Errorf("Verified() = false with harness-adapted AGENTS.md, want true (missing %v)", report.Missing)
 	}
+
+	// When a linked skill is listed in config.yml under skills.ignoredSkills,
+	// the probe does not report it as an unexpected unnamed item.
+	ompTestWrite(t, filepath.Join(OmpAgentDir(), "config.yml"), "skills:\n  ignoredSkills:\n    - validate\n")
+	report, err = OmpVerifyProfile(paths, p)
+	if err != nil {
+		t.Fatalf("OmpVerifyProfile() with ignoredSkills error: %v", err)
+	}
+	if len(report.Unnamed) != 0 {
+		t.Errorf("Unnamed with ignoredSkills = %v, want none", report.Unnamed)
+	}
 }
 
 func TestOmpVerifyProfileReportsAProbeFailure(t *testing.T) {

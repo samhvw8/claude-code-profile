@@ -45,4 +45,4 @@ agent directory when present, falling back to `<profile>/CLAUDE.md`) reached it.
 | Needs | omp with a configured model |
 | Costs | No model tokens, about 2 s; starts no session |
 | Side effects | Touches omp's own state, which is why it is opt-in |
-| Item names | Checked as information only — omp picks skill metadata through its own filters (`skillful`, `ignoredSkills`, `includeSkills`, custom dirs) and names agents through tool schemas, not the prompt |
+| Item names | Checked as information only (skills listed in `~/.omp/agent/config.yml` `skills.ignoredSkills` are skipped) — omp picks skill metadata through its own filters (`skillful`, `ignoredSkills`, `includeSkills`, custom dirs) and names agents through tool schemas, not the prompt |

@@ -41,7 +41,7 @@ configuration away ([anti-pattern](/anti-patterns/predicting-another-programs-lo
 |----------|--------------|--------------------------|
 | `skills/<name>` | `~/.omp/agent/skills/<name>` | no `SKILL.md`, no non-empty `description`, or `enabled: false` |
 | `commands/<name>.md` | `~/.omp/agent/commands/<name>.md` | not a `.md` file |
-| `agents/<name>.md` | `~/.omp/agent/agents/<name>.md` | no `name`, no `description`, or `model: inherit` (omp resolves no such model, so the agent fails to spawn) |
+| `agents/<name>.md` | `~/.omp/agent/agents/<name>.md` | no `name`, no `description`, or `model: inherit` without an entry in `~/.omp/agent/config.yml` `task.agentModelOverrides` |
 
 Values are tested, not key presence: an empty `description` is no description. Frontmatter
 parsing mirrors omp's permissiveness: line-based fallback for prose that breaks YAML, BOM and

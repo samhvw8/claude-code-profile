@@ -1199,11 +1199,55 @@ func ompLoadabilityOf(itemType config.HubItemType, path string) (ompLoadability,
 		}
 		if model, ok := fields["model"]; ok && ompIsText(model) &&
 			strings.EqualFold(strings.TrimSpace(ompText(model)), "inherit") {
-			return ompInert, "model: inherit (omp resolves no such model, so the agent fails to spawn)"
+			agentName := strings.TrimSpace(ompText(fields["name"]))
+			if !ompReadConfig().hasAgentModelOverride(agentName) {
+				return ompInert, "model: inherit (omp resolves no such model, so the agent fails to spawn)"
+			}
 		}
 	}
 
 	return ompLoads, ""
+}
+
+// ompConfig holds the subset of ~/.omp/agent/config.yml that affects which
+// linked items omp loads or spawns.
+type ompConfig struct {
+	Task struct {
+		AgentModelOverrides map[string]string `yaml:"agentModelOverrides"`
+	} `yaml:"task"`
+	Skills struct {
+		IgnoredSkills []string `yaml:"ignoredSkills"`
+	} `yaml:"skills"`
+}
+
+func ompReadConfig() ompConfig {
+	var cfg ompConfig
+	agentDir := OmpAgentDir()
+	if agentDir == "" {
+		return cfg
+	}
+	data, err := os.ReadFile(filepath.Join(agentDir, "config.yml"))
+	if err != nil {
+		return cfg
+	}
+	_ = yaml.Unmarshal(data, &cfg)
+	return cfg
+}
+
+func (c ompConfig) hasAgentModelOverride(name string) bool {
+	if name == "" || len(c.Task.AgentModelOverrides) == 0 {
+		return false
+	}
+	return strings.TrimSpace(c.Task.AgentModelOverrides[name]) != ""
+}
+
+func (c ompConfig) isIgnoredSkill(name string) bool {
+	for _, ignored := range c.Skills.IgnoredSkills {
+		if ignored == name {
+			return true
+		}
+	}
+	return false
 }
 
 // ompIsTrue reports a frontmatter flag omp treats as on: it normalizes flags to

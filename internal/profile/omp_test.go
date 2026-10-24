@@ -1626,3 +1626,20 @@ func TestOmpSyncRecognizesSymlinkedHubItems(t *testing.T) {
 		t.Error("linked agent missing from omp agent dir")
 	}
 }
+
+func TestOmpLoadabilityHonorsConfigAgentModelOverrides(t *testing.T) {
+	paths, agentDir := ompTestEnv(t)
+	agentPath := filepath.Join(paths.HubDir, "agents", "applier.md")
+	ompTestWrite(t, agentPath, "---\nname: applier\ndescription: Applies batches\nmodel: inherit\n---\n# Applier\n")
+
+	state, _ := ompLoadabilityOf(config.HubAgents, agentPath)
+	if state != ompInert {
+		t.Fatalf("ompLoadabilityOf() without config.yml override = %v, want ompInert", state)
+	}
+
+	ompTestWrite(t, filepath.Join(agentDir, "config.yml"), "task:\n  agentModelOverrides:\n    applier: \"@default\"\n")
+	state, reason := ompLoadabilityOf(config.HubAgents, agentPath)
+	if state != ompLoads {
+		t.Errorf("ompLoadabilityOf() with config.yml override = (%v, %q), want ompLoads", state, reason)
+	}
+}
