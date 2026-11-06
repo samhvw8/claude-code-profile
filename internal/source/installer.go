@@ -302,6 +302,28 @@ func (i *Installer) resolveItemPaths(sourceDir, item string) (srcPath, dstItem s
 		return
 	}
 
+	// Harness path as it shows in the clone: .claude/skills/name. installed
+	// holds the hub name (skills/name), and a hub name finds the root item
+	// before a harness one, so the path is accepted only when its hub name
+	// finds this same path again.
+	if len(parts) == 3 && slices.Contains(append(claudeDirs, harnessDirs...), parts[0]) {
+		plain := parts[1] + "/" + parts[2]
+		if !validItem(plain) {
+			err = fmt.Errorf("invalid item format: %s", item)
+			return
+		}
+		if srcPath, dstItem, err = i.resolveItemPaths(sourceDir, plain); err != nil {
+			return
+		}
+		want := filepath.Join(sourceDir, parts[0], parts[1])
+		if filepath.Dir(srcPath) != want {
+			rel, _ := filepath.Rel(sourceDir, srcPath)
+			err = fmt.Errorf("%s: installed items are found again by hub name, and %s resolves to %s; install %s to get that one",
+				item, plain, filepath.ToSlash(rel), plain)
+		}
+		return
+	}
+
 	err = fmt.Errorf("invalid item format: %s", item)
 	return
 }

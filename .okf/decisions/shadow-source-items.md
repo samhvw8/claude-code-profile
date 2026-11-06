@@ -4,7 +4,7 @@ title: "Source items are shadows, not copies"
 description: "A hub item installed from a source is a symlink into the source clone; ccp.lock pins each source's commit; --clone is the only way to get an editable copy."
 tags: [decision, sources, hub]
 decided: 2026-10-02
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T00:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-06T00:00:00Z }
 ---
 
 # Decision
@@ -46,6 +46,10 @@ history, so neither applies there.
   `git reset --hard` would otherwise discard edits made through a shadow. A local edit is any
   change to a tracked file, or an untracked file inside an installed item; an untracked file
   elsewhere (a `.DS_Store`) survives the reset and does not block.
+- `ccp source update` reports, on every run, each installed item it did not reach: a copy, a
+  foreign link, an item missing from the hub, or one gone upstream. A silent update left
+  pbakaus/impeccable at v3.9.1 for months as a hub copy while its clone moved to v4.8.0. A shadow
+  broken because upstream moved the item is relinked, since the link is ccp's own.
 - `ccp install` (sync) leaves a clone with local edits at its current commit, with a warning.
   It installs missing items one at a time and keeps a failed one in `installed` for the next sync.
 - `installed` holds hub names. A plugin item (`skills/<plugin>-<name>`) or a URL install is found

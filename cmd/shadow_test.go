@@ -209,3 +209,43 @@ func TestInstallCloneRejectedInSyncMode(t *testing.T) {
 		t.Error("expected an error for --clone without a package")
 	}
 }
+
+// Upstream moves an installed item under .claude/ (pbakaus/impeccable did):
+// source update relinks the broken shadow instead of leaving it broken.
+func TestSourceUpdate_RelinksItemMovedUpstream(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CCP_DIR", dir)
+	paths, err := config.ResolvePaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := filepath.Join(t.TempDir(), "upstream")
+	writeFile(t, filepath.Join(upstream, "skills", "s", "SKILL.md"), "# S")
+	testutil.Git(t, upstream, "init", "-q")
+	testutil.CommitAll(t, upstream, "initial")
+	sourceDir := paths.SourceDir("owner/repo")
+	os.MkdirAll(filepath.Dir(sourceDir), 0755)
+	testutil.Git(t, filepath.Dir(sourceDir), "clone", "-q", upstream, sourceDir)
+
+	registry := loadRegistry(t, paths)
+	registry.AddSource("owner/repo", source.Source{Provider: "git", URL: upstream, Path: sourceDir})
+	if _, err := source.NewInstaller(paths, registry).Install("owner/repo", []string{"skills/s"}, source.Shadow); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	os.MkdirAll(filepath.Join(upstream, ".claude"), 0755)
+	testutil.Git(t, upstream, "mv", "skills", ".claude/skills")
+	writeFile(t, filepath.Join(upstream, ".claude", "skills", "s", "SKILL.md"), "# S v2")
+	testutil.CommitAll(t, upstream, "move under .claude")
+
+	if err := runSourceUpdate(sourceUpdateCmd, []string{"owner/repo"}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(paths.HubItemPath(config.HubSkills, "s"), "SKILL.md"))
+	if err != nil || string(data) != "# S v2" {
+		t.Errorf("hub skill after update = %q, %v; want the moved v2", data, err)
+	}
+}

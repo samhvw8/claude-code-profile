@@ -3,7 +3,7 @@ type: Feature
 title: Source system
 description: Finding and installing hub items from skills.sh and GitHub, including the repository layouts ccp discovers.
 tags: [feature, sources, install]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T00:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-06T00:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md (removed 2026-09-14 by the OKF migration)"
@@ -45,7 +45,7 @@ The hub stores real content only for **local items** — anything that is not a 
 
 | Action | Effect on a shadow |
 |--------|--------------------|
-| `source update` | Item updates in place. Refused when the clone has local edits (a changed tracked file, or a new file inside an installed item), listing the files |
+| `source update` | Item updates in place. Refused when the clone has local edits (a changed tracked file, or a new file inside an installed item), listing the files. After every run (`FollowUpdate`): a shadow broken because upstream moved the item (`skills/x` to `.claude/skills/x`) is relinked to the new path; every other installed item the update does not reach (a copy, the user's own link, an item missing from the hub or gone upstream) is listed with the command that fixes it, plus a `WARN` total |
 | `install … --clone` | Real copy replaces the link, the item leaves `installed`, and its path in the clone is reset to HEAD. On a tracked copy or the user's own link: kept as is, untracked |
 | `hub update`, `hub outdated` | Refused / skipped: use `source update` |
 | `hub remove` | Removes the link only; the clone stays, and the next `ccp install` recreates it while `installed` lists it |
@@ -53,7 +53,7 @@ The hub stores real content only for **local items** — anything that is not a 
 
 The local-edit guard and the commit lock need a git source. An item that resolves outside
 `sources/` is refused. In `internal/source/shadow.go`: `InstallMode` (`Shadow`, `Clone`),
-`Installer.State`, `Reshadow`, `IsShadow`, `LocalEdits`, `SweepLeftovers`, `ValidCommit` and
+`Installer.State`, `Reshadow`, `FollowUpdate` (in `follow.go`), `IsShadow`, `LocalEdits`, `SweepLeftovers`, `ValidCommit` and
 `GitProvider.CheckoutCommit`.
 
 # Discovery layouts
@@ -68,6 +68,12 @@ The local-edit guard and the commit lock need a git source. An item that resolve
 | `.codex/skills/` | Codex project-level | 4 |
 | `.codex-plugin/plugin.json` | Codex plugin manifest | 5 |
 | `SKILL.md` at repo root | Bare skill repo (whole repo = one skill) | Last |
+
+An item can also be named by its path in the clone, with a harness directory in front
+(`.claude/skills/x`, `.agents/skills/x`, `.codex/agents/a.md`). `installed` keeps the hub name
+(`skills/x`), which is resolved again in the order above, so the harness path is accepted only
+when its hub name finds that same path. When a root `skills/x` hides `.claude/skills/x`, install
+is refused and names the path the hub name resolves to.
 
 A **bare skill repo** has `SKILL.md` at the root with no `skills/<name>/` wrapper. The item name
 comes from the frontmatter `name:` (else the source dir name), the whole repo installs as

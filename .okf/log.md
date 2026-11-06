@@ -1,5 +1,9 @@
 # Update Log
 
+## 2026-11-06
+* **Update**: [Source system](/features/source-system.md) and [shadow source items](/decisions/shadow-source-items.md): `source update` now relinks a shadow that upstream moved (`skills/x` to `.claude/skills/x`) and lists every installed item it does not reach (copies, foreign links, items missing from the hub or gone upstream), with a fix command for each. `install` accepts an item by its harness path in the clone (`.claude/skills/x`), refused when the hub name would resolve elsewhere. Reported by the voxtract session: pbakaus/impeccable stayed at v3.9.1 as a hub copy, and `.claude/skills/impeccable` was rejected as an invalid item format.
+* **Update**: [Bundles](/features/bundles.md): unlinking a bundle removes only member links that point into the bundle. It used to delete the profile's direct link of the same name too (the `impeccable` skill vanished from `~/.claude/skills` on `ccp unlink default bundles/impeccable`).
+
 ## 2026-10-24
 * **Update**: Zero-LLM cross-harness sync and verification in [global context](/features/omp/global-context.md), [linking](/features/omp/linking.md), [health and verification](/features/omp/health-and-verification.md), and `skills/ccp/SKILL.md`: `<profile>/CLAUDE.md`, `hub/rules/`, and `hub/skills/` serve as the single source of truth synced mechanically by `ccp omp sync`, while the `ccp` skill handles policy adaptation when onboarding new tools. Fixed `symlink.CreateRelative` and `resolveCcpLink` so leaf-symlinked hub items (such as `mise` `symlink-each` entries) stay inside `~/.ccp` instead of being disowned on the next `ccp omp sync`; removed the incompatible `-c` flag from `omp --mode rpc --no-session` in `ompGetStateFrames`; and taught `ompLoadabilityOf` and `ompCheckPrompt` to honor `~/.omp/agent/config.yml` (`task.agentModelOverrides` and `skills.ignoredSkills`) as well as a custom `AGENTS.md` when present.
 
