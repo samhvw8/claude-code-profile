@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-06
+* **Update**: Released v0.50.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: [Source system](/features/source-system.md) and [shadow source items](/decisions/shadow-source-items.md): `source update` now relinks a shadow that upstream moved (`skills/x` to `.claude/skills/x`) and lists every installed item it does not reach (copies, foreign links, items missing from the hub or gone upstream), with a fix command for each. `install` accepts an item by its harness path in the clone (`.claude/skills/x`), refused when the hub name would resolve elsewhere. Reported by the voxtract session: pbakaus/impeccable stayed at v3.9.1 as a hub copy, and `.claude/skills/impeccable` was rejected as an invalid item format.
 * **Update**: [Bundles](/features/bundles.md): unlinking a bundle removes only member links that point into the bundle. It used to delete the profile's direct link of the same name too (the `impeccable` skill vanished from `~/.claude/skills` on `ccp unlink default bundles/impeccable`).
 
