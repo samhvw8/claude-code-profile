@@ -185,3 +185,29 @@ func TestBundleDrift_MembersNotExtra(t *testing.T) {
 		t.Errorf("expected a missing bundle-member drift issue, got %+v", report.Issues)
 	}
 }
+
+// A profile can link an item directly under the same name as a bundle member
+// (the impeccable skill, linked as a skill and in the impeccable bundle).
+// Unlinking the bundle removes only the links that point into the bundle.
+func TestUnlinkHubBundle_KeepsDirectLinkOfSameName(t *testing.T) {
+	paths, mgr := setupBundleTest(t)
+	if err := mgr.LinkHubBundle("p", "impeccable"); err != nil {
+		t.Fatalf("LinkHubBundle: %v", err)
+	}
+	mustWrite(t, filepath.Join(paths.HubItemPath(config.HubSkills, "impeccable"), "SKILL.md"), "# direct")
+	direct := filepath.Join(paths.ProfileDir("p"), "skills", "impeccable")
+	os.Remove(direct)
+	if err := os.Symlink(paths.HubItemPath(config.HubSkills, "impeccable"), direct); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mgr.UnlinkHubBundle("p", "impeccable"); err != nil {
+		t.Fatalf("UnlinkHubBundle: %v", err)
+	}
+	if data, err := os.ReadFile(filepath.Join(direct, "SKILL.md")); err != nil || string(data) != "# direct" {
+		t.Errorf("direct link lost: %q, %v", data, err)
+	}
+	if _, err := os.Lstat(filepath.Join(paths.ProfileDir("p"), "agents", "impeccable.md")); !os.IsNotExist(err) {
+		t.Errorf("bundle member agent still linked (err=%v)", err)
+	}
+}

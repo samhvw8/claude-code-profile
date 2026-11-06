@@ -3,7 +3,7 @@ type: Feature
 title: Bundles
 description: Atomic, non-separable groups of hub items that are linked and removed as one unit.
 tags: [feature, hub, bundles]
-generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-06T00:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md (removed 2026-09-14 by the OKF migration)"
@@ -38,6 +38,7 @@ ccp unlink <profile> bundles/<name>
 | Composer | **Copies** selected hub items in; originals stay untouched |
 | Manifest | Records only the bundle name (`[hub] bundles = [...]`) |
 | Linking | Materializes per-member symlinks into the profile's leaf dirs and merges bundle hooks into `settings.json` |
+| Unlinking | Removes only member links that point into the bundle; a direct link of the same name (the profile links `skills/x` and a bundle holding `x`) stays |
 | Type system | Composite: excluded from `config.AllHubItemTypes()` so leaf loops (scan, drift, settings) never treat a bundle as a leaf |
 | omp | Members of linkable types resolve inside their bundle directory; a bundle copy of an item the profile also links directly is the same item |
 

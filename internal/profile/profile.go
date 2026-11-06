@@ -376,12 +376,18 @@ func (m *Manager) UnlinkHubBundle(profileName, bundleName string) error {
 	}
 
 	if bundle, err := hub.LoadBundle(m.paths.BundlesDir(), bundleName); err == nil {
+		bundleDir := m.paths.BundleDir(bundleName)
 		for _, member := range bundle.Members.AllComponents() {
 			linkName := member.Name
 			if member.Type == string(config.HubRules) {
 				linkName = filepath.Base(member.Name)
 			}
 			dst := filepath.Join(profile.Path, member.Type, linkName)
+			// The profile may link a hub item of the same name directly;
+			// that link is not the bundle's to remove.
+			if !symlink.PointsInto(dst, bundleDir) {
+				continue
+			}
 			if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
 				return err
 			}
