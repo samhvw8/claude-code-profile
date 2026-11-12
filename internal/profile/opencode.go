@@ -35,19 +35,20 @@ func OpencodeConfigDir() string {
 	return filepath.Join(home, ".config", "opencode")
 }
 
-// opencodeState records the files ccp wrote into opencode's config directory,
-// relative to it, with the hash of what was written.
-type opencodeState struct {
-	Files map[string]string `json:"files"`
-}
-
 func opencodeStatePath(paths *config.Paths) string {
 	return filepath.Join(paths.CcpDir, "state", "opencode.json")
 }
 
-func loadOpencodeState(paths *config.Paths) (*opencodeState, error) {
-	state := &opencodeState{Files: map[string]string{}}
-	data, err := os.ReadFile(opencodeStatePath(paths))
+// copyState records the files ccp wrote into another harness's directory
+// (opencode, agy), relative to it, with the hash of what was written. The
+// state file's existence is that harness's opt-in marker.
+type copyState struct {
+	Files map[string]string `json:"files"`
+}
+
+func loadCopyState(path string) (*copyState, error) {
+	state := &copyState{Files: map[string]string{}}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return state, nil
@@ -55,7 +56,7 @@ func loadOpencodeState(paths *config.Paths) (*opencodeState, error) {
 		return nil, err
 	}
 	if err := json.Unmarshal(data, state); err != nil {
-		return nil, fmt.Errorf("failed to parse %s: %w", opencodeStatePath(paths), err)
+		return nil, fmt.Errorf("failed to parse %s: %w", path, err)
 	}
 	if state.Files == nil {
 		state.Files = map[string]string{}
@@ -63,12 +64,81 @@ func loadOpencodeState(paths *config.Paths) (*opencodeState, error) {
 	return state, nil
 }
 
-func saveOpencodeState(paths *config.Paths, state *opencodeState) error {
+func saveCopyState(path string, state *copyState) error {
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return err
 	}
-	return writeFileAtomic(opencodeStatePath(paths), string(data)+"\n")
+	return writeFileAtomic(path, string(data)+"\n")
+}
+
+// copyReport is what syncCopies did, as paths relative to the harness's
+// directory.
+type copyReport struct {
+	Written  []string // created or updated
+	Removed  []string // ccp's files no longer wanted
+	Edited   []string // ccp's files changed by hand since: left alone
+	Occupied []string // a file ccp did not write sits where a copy would go
+}
+
+// syncCopies writes the desired converted copies into dir and removes ccp's
+// copies that are no longer desired. It only ever replaces or removes a file
+// that still holds exactly what ccp wrote; anything else is reported. frozen,
+// when set, names paths this pass must neither write nor remove (their
+// directory was refused); their state entries are kept for a later pass.
+func syncCopies(dir string, state *copyState, desired map[string][]byte, frozen func(rel string) bool) (copyReport, error) {
+	var r copyReport
+	isFrozen := func(rel string) bool { return frozen != nil && frozen(rel) }
+
+	for _, rel := range sortedKeys(desired) {
+		if isFrozen(rel) {
+			continue
+		}
+		content := desired[rel]
+		path := filepath.Join(dir, rel)
+		onDisk, err := os.ReadFile(path)
+		switch {
+		case os.IsNotExist(err):
+		case err != nil:
+			return r, err
+		case string(onDisk) == string(content):
+			state.Files[rel] = hashOf(content) // already right, possibly adopted
+			continue
+		case state.Files[rel] == "":
+			r.Occupied = append(r.Occupied, rel)
+			continue
+		case state.Files[rel] != hashOf(onDisk):
+			r.Edited = append(r.Edited, rel)
+			continue
+		}
+		if err := writeFileAtomic(path, string(content)); err != nil {
+			return r, err
+		}
+		state.Files[rel] = hashOf(content)
+		r.Written = append(r.Written, rel)
+	}
+
+	for _, rel := range sortedKeys(state.Files) {
+		if _, ok := desired[rel]; ok || isFrozen(rel) {
+			continue
+		}
+		path := filepath.Join(dir, rel)
+		onDisk, err := os.ReadFile(path)
+		switch {
+		case os.IsNotExist(err):
+		case err != nil:
+			return r, err
+		case hashOf(onDisk) != state.Files[rel]:
+			r.Edited = append(r.Edited, rel) // edited by hand: no longer ccp's to remove
+		default:
+			if err := os.Remove(path); err != nil {
+				return r, err
+			}
+			r.Removed = append(r.Removed, rel)
+		}
+		delete(state.Files, rel)
+	}
+	return r, nil
 }
 
 // OpencodeOptedIn reports whether ccp has synced to opencode before: the test
@@ -105,7 +175,7 @@ func OpencodeSync(paths *config.Paths, p *Profile) (OpencodeResult, error) {
 	if dir == "" {
 		return result, fmt.Errorf("cannot locate opencode's config directory")
 	}
-	state, err := loadOpencodeState(paths)
+	state, err := loadCopyState(opencodeStatePath(paths))
 	if err != nil {
 		return result, err
 	}
@@ -139,54 +209,14 @@ func OpencodeSync(paths *config.Paths, p *Profile) (OpencodeResult, error) {
 		}
 	}
 
-	for _, rel := range sortedKeys(desired) {
-		content := desired[rel]
-		path := filepath.Join(dir, rel)
-		onDisk, err := os.ReadFile(path)
-		switch {
-		case os.IsNotExist(err):
-		case err != nil:
-			return result, err
-		case string(onDisk) == string(content):
-			state.Files[rel] = hashOf(content) // already right, possibly adopted
-			continue
-		case state.Files[rel] == "":
-			result.Occupied = append(result.Occupied, rel)
-			continue
-		case state.Files[rel] != hashOf(onDisk):
-			result.Edited = append(result.Edited, rel)
-			continue
-		}
-		if err := writeFileAtomic(path, string(content)); err != nil {
-			return result, err
-		}
-		state.Files[rel] = hashOf(content)
-		result.Written = append(result.Written, rel)
-	}
-
-	for _, rel := range sortedKeys(state.Files) {
-		if _, ok := desired[rel]; ok {
-			continue
-		}
-		path := filepath.Join(dir, rel)
-		onDisk, err := os.ReadFile(path)
-		switch {
-		case os.IsNotExist(err):
-		case err != nil:
-			return result, err
-		case hashOf(onDisk) != state.Files[rel]:
-			result.Edited = append(result.Edited, rel) // edited by hand: no longer ccp's to remove
-		default:
-			if err := os.Remove(path); err != nil {
-				return result, err
-			}
-			result.Removed = append(result.Removed, rel)
-		}
-		delete(state.Files, rel)
+	copies, err := syncCopies(dir, state, desired, nil)
+	result.Written, result.Removed, result.Edited, result.Occupied = copies.Written, copies.Removed, copies.Edited, copies.Occupied
+	if err != nil {
+		return result, err
 	}
 
 	result.Hooks = append(result.Hooks, p.Manifest.Hub.Hooks...)
-	if err := saveOpencodeState(paths, state); err != nil {
+	if err := saveCopyState(opencodeStatePath(paths), state); err != nil {
 		return result, err
 	}
 
@@ -304,21 +334,31 @@ func opencodeModel(fm map[string]any) string {
 }
 
 func splitFrontmatter(data []byte) (map[string]any, string, error) {
-	text := strings.TrimPrefix(string(data), "\ufeff")
+	block, body, err := cutFrontmatter(data)
+	if err != nil {
+		return nil, "", err
+	}
 	fm := map[string]any{}
+	if err := yaml.Unmarshal([]byte(block), &fm); err != nil {
+		return nil, "", fmt.Errorf("frontmatter is not valid YAML: %w", err)
+	}
+	return fm, body, nil
+}
+
+// cutFrontmatter separates a markdown file's frontmatter block from its body.
+// A file without frontmatter yields an empty block and the whole text.
+func cutFrontmatter(data []byte) (block, body string, err error) {
+	text := strings.TrimPrefix(string(data), "\ufeff")
 	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
-		return fm, text, nil
+		return "", text, nil
 	}
 	rest := text[strings.Index(text, "\n")+1:]
 	end := frontmatterFence.FindStringIndex(rest)
 	if end == nil {
-		return nil, "", fmt.Errorf("unterminated frontmatter")
+		return "", "", fmt.Errorf("unterminated frontmatter")
 	}
-	if err := yaml.Unmarshal([]byte(rest[:end[0]]), &fm); err != nil {
-		return nil, "", fmt.Errorf("frontmatter is not valid YAML: %w", err)
-	}
-	body := strings.TrimPrefix(rest[end[1]:], "\r")
-	return fm, strings.TrimPrefix(body, "\n"), nil
+	body = strings.TrimPrefix(rest[end[1]:], "\r")
+	return rest[:end[0]], strings.TrimPrefix(body, "\n"), nil
 }
 
 func joinFrontmatter(fm any, body string) ([]byte, error) {
