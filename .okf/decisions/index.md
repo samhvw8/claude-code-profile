@@ -14,6 +14,10 @@ Settled choices with their rationale. Do not re-open one without a user request;
 * [Command surface: about 18 visible commands](command-surface.md) - Keep roughly 18 visible commands and hide power-user commands.
 * [Source items are shadows, not copies](shadow-source-items.md) - A hub item installed from a source is a symlink into the source clone; ccp.lock pins each source's commit; --clone is the only way to get an editable copy.
 
+# Other harnesses
+
+* [agy: converted copies, skill links, GEMINI.md](agy-copies-links-and-gemini-md.md) - Why ccp agy sync converts agents and rules, links skills and CLAUDE.md, writes the output style to GEMINI.md, and mirrors no hooks or commands.
+
 # omp integration (oldest first)
 
 * [Brainstorm outcome: link only what omp loads](omp-link-only-what-omp-loads.md) - The first omp design — a single loadability predicate gating links, additive follow, and the refused alternatives.

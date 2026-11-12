@@ -1,5 +1,8 @@
 # Update Log
 
+## 2026-11-12
+* **Creation**: [agy (Antigravity CLI) integration](/features/agy.md) — hidden `ccp agy sync` mirrors a profile into `~/.gemini/config`: `AGENTS.md` → `CLAUDE.md`, the output style in `GEMINI.md` (new `agy` carrier group), converted copies of rules (`trigger`/`globs`) and agents (agy tool names, `subagent`, flash/pro), and links for skills; refuses symlinked `rules/`/`agents/`/`skills/`; follows the active profile once used; `ccp reset` removes its links. Rationale: [agy decision](/decisions/agy-copies-links-and-gemini-md.md). Listed in the [command reference](/cli/command-reference.md) and [output styles](/features/output-styles.md). opencode's copy bookkeeping moved into a shared `syncCopies`.
+
 ## 2026-11-06
 * **Update**: Released v0.50.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: [Source system](/features/source-system.md) and [shadow source items](/decisions/shadow-source-items.md): `source update` now relinks a shadow that upstream moved (`skills/x` to `.claude/skills/x`) and lists every installed item it does not reach (copies, foreign links, items missing from the hub or gone upstream), with a fix command for each. `install` accepts an item by its harness path in the clone (`.claude/skills/x`), refused when the hub name would resolve elsewhere. Reported by the voxtract session: pbakaus/impeccable stayed at v3.9.1 as a hub copy, and `.claude/skills/impeccable` was rejected as an invalid item format.

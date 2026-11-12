@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command reference
 description: Every ccp command group with a one-line description and an example; hidden commands are marked.
 tags: [cli, reference, commands]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T00:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T12:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, CLI Command Reference (removed 2026-09-14 by the OKF migration)"
@@ -21,7 +21,7 @@ sources:
 
 Power-user commands are hidden from `--help` but still work ([decision](/decisions/command-surface.md)).
 Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune`, `hub protect`,
-`hub unprotect`, `hub rename`, `omp`, `opencode`, `pi`, `profile check`, `profile clone`, `profile diff`, `run`,
+`hub unprotect`, `hub rename`, `agy`, `omp`, `opencode`, `pi`, `profile check`, `profile clone`, `profile diff`, `run`,
 `session`, `usage`. Flags: [command flags](/cli/command-flags.md).
 
 # Core
@@ -131,6 +131,14 @@ Behavior: [omp integration](/features/omp/overview.md).
 | `ccp opencode sync [profile]` | Write converted copies of a profile's agents and commands, and its output style, into `~/.config/opencode` (default: active profile); opts in to following | `ccp opencode sync` |
 
 Behavior: [opencode integration](/features/opencode.md).
+
+# agy (hidden)
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp agy sync [profile]` | Link `AGENTS.md` and skills, write converted rules and agents and the output style (`GEMINI.md`) into `~/.gemini/config` (default: active profile); opts in to following | `ccp agy sync` |
+
+Behavior: [agy integration](/features/agy.md).
 
 # pi (hidden)
 
