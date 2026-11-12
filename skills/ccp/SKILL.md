@@ -133,6 +133,20 @@ After the first sync, `ccp use -g`, link/unlink and `ccp bootstrap` keep it
 current. ccp only replaces files it wrote; hooks are not mirrored (opencode
 uses plugins). `ccp opencode` is a hidden command.
 
+Antigravity CLI (agy) reads nothing from `~/.claude`, so ccp sets up
+`~/.gemini/config` from the profile: `AGENTS.md` links to `CLAUDE.md`, the
+output style goes to `GEMINI.md`, rules and agents become converted copies
+(agy triggers and tool names), and skills are linked:
+
+```bash
+ccp agy sync                 # Mirror the active profile into ~/.gemini/config
+```
+
+After the first sync, `ccp use -g`, link/unlink and `ccp bootstrap` keep it
+current. ccp only replaces files it wrote and never writes through a symlinked
+`rules/`, `agents/` or `skills/`; hooks and commands are not mirrored. `ccp agy`
+is a hidden command.
+
 ### Zero-LLM Sync + Skill Policy Adaptation
 
 Syncing across harnesses is zero-LLM by default, with this skill used only when

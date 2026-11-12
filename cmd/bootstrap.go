@@ -104,7 +104,7 @@ func runBootstrapPull() error {
 		}
 	}
 
-	// Step 4: opencode, only once the user has run 'ccp opencode sync' here
+	// Step 4: opencode, agy and pi, each only once the user has synced it here
 	if active, err := mgr.GetActive(); err == nil && active != nil {
 		followHarnesses(paths, active.Name)
 	}

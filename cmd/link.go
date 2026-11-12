@@ -24,9 +24,9 @@ With profile only: Interactive selection for specified profile
 With profile and path: Link specific item (path format: type/name)
 
 Output styles (output-styles/<name>.md) become selectable in Claude Code; the
-profile's outputStyle setting picks one. omp, pi and opencode get the selected
-style through 'ccp omp sync', 'ccp pi sync' and 'ccp opencode sync', and follow
-later changes from then on. A project's /output-style choice is not carried.
+profile's outputStyle setting picks one. omp, pi, opencode and agy get the
+selected style through 'ccp omp sync', 'ccp pi sync', 'ccp opencode sync' and
+'ccp agy sync', and follow later changes from then on. A project's /output-style choice is not carried.
 
 Examples:
   ccp link                                    # Interactive for active profile

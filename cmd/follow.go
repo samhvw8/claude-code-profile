@@ -28,6 +28,7 @@ func followHarnesses(paths *config.Paths, profileName string) {
 	}
 
 	followOpencode(paths, profileName)
+	followAgy(paths, profileName)
 
 	active, err := profile.NewManager(paths).GetActive()
 	if err != nil || active == nil || active.Name != profileName {

@@ -16,7 +16,7 @@ import (
 
 // Style carriers are the files ccp writes so harnesses without output styles
 // get the active style: omp's and pi's APPEND_SYSTEM.md, opencode's
-// output-style.md. One ledger in ~/.ccp/state records every carrier ccp wrote —
+// output-style.md, agy's GEMINI.md. One ledger in ~/.ccp/state records every carrier ccp wrote —
 // its absolute path and the hash of what was written — and is the only
 // evidence of ownership: a file is ccp's to rewrite or remove only while it
 // still holds exactly what ccp wrote there. A file edited by hand, or one ccp
@@ -25,13 +25,14 @@ import (
 // Carriers are grouped. A sync updates every recorded carrier of its group, not
 // only the one at today's path, so a carrier written while an environment
 // variable pointed elsewhere (PI_CODING_AGENT_DIR, XDG_CONFIG_HOME) is kept
-// current or removed instead of loading a stale style forever. pi and opencode
-// follow the active profile, so each is one group; omp's named profiles mirror
+// current or removed instead of loading a stale style forever. pi, opencode
+// and agy follow the active profile, so each is one group; omp's named profiles mirror
 // different ccp profiles on purpose, so every omp directory is its own group.
 
 const (
 	carrierGroupPi       = "pi"
 	carrierGroupOpencode = "opencode"
+	carrierGroupAgy      = "agy"
 	carrierGroupOmp      = "omp:" // + the agent directory
 )
 
@@ -42,7 +43,7 @@ type carrierRecord struct {
 
 type carrierLedger struct {
 	// Follow lists groups that follow the active profile automatically once
-	// synced by hand. omp and opencode have their own opt-in.
+	// synced by hand. omp, opencode and agy have their own opt-in.
 	Follow   []string                 `json:"follow,omitempty"`
 	Carriers map[string]carrierRecord `json:"carriers"`
 }

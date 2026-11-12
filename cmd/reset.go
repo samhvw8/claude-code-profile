@@ -71,7 +71,12 @@ func runReset(cmd *cobra.Command, args []string) error {
 	} else if len(ompManaged) > 0 {
 		fmt.Printf("  Will remove: %d ccp link(s) in %s\n", len(ompManaged), profile.OmpAgentDir())
 	}
-	// Output-style carriers in omp, pi and opencode are listed now, while the
+	// agy's skill and AGENTS.md links point into ~/.ccp too.
+	agyLinks := profile.AgyManagedLinks(paths)
+	if len(agyLinks) > 0 {
+		fmt.Printf("  Will remove: %d ccp link(s) in %s\n", len(agyLinks), profile.AgyConfigDir())
+	}
+	// Output-style carriers in omp, pi, opencode and agy are listed now, while the
 	// ledger that proves ccp wrote them still exists; left behind, nothing would
 	// keep them current.
 	styleCarriers, err := profile.OwnedStyleCarriers(paths, "")
@@ -114,6 +119,18 @@ func runReset(cmd *cobra.Command, args []string) error {
 		} else {
 			fmt.Printf("Removed %d ccp link(s) from %s\n", len(removed), profile.OmpAgentDir())
 		}
+	}
+
+	agyRemoved := 0
+	for _, link := range agyLinks {
+		if err := os.Remove(link); err != nil && !os.IsNotExist(err) {
+			fmt.Printf("Warning: could not remove %s: %v\n", link, err)
+			continue
+		}
+		agyRemoved++
+	}
+	if agyRemoved > 0 {
+		fmt.Printf("Removed %d ccp link(s) from %s\n", agyRemoved, profile.AgyConfigDir())
 	}
 
 	removed, kept := profile.RemoveStyleCarriers(styleCarriers)
