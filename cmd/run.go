@@ -59,7 +59,7 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("profile not found: %s", profileName)
 	}
 
-	configDir, err := activationDir(paths, profileName, ra.account, ra.relink)
+	configDir, err := activationDir(paths, profileName, ra.account, ra.accountSet, ra.relink)
 	if err != nil {
 		return err
 	}
@@ -75,9 +75,9 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 }
 
 type runArgs struct {
-	profile, account string
-	relink           bool
-	command          []string
+	profile, account   string
+	accountSet, relink bool
+	command            []string
 }
 
 // parseRunArgs reads "<profile> [--account <name>] [--relink] -- <command>".
@@ -101,8 +101,10 @@ func parseRunArgs(args []string) (runArgs, error) {
 			}
 			i++
 			ra.account = own[i]
+			ra.accountSet = true
 		case strings.HasPrefix(arg, "--account="):
 			ra.account = strings.TrimPrefix(arg, "--account=")
+			ra.accountSet = true
 		case strings.HasPrefix(arg, "-"):
 			return ra, fmt.Errorf("unknown flag before --: %s", arg)
 		case ra.profile == "":
@@ -118,6 +120,9 @@ func parseRunArgs(args []string) (runArgs, error) {
 	if len(ra.command) == 0 {
 		return ra, fmt.Errorf("command required after --")
 	}
+	if ra.accountSet && ra.account == "" {
+		return ra, profile.ValidateAccountName("")
+	}
 	if ra.relink && ra.account == "" {
 		return ra, fmt.Errorf("--relink needs --account")
 	}
@@ -126,8 +131,12 @@ func parseRunArgs(args []string) (runArgs, error) {
 
 // activationDir returns the CLAUDE_CONFIG_DIR for a profile, or for the
 // profile run under an account when one is given (see profile.LinkAccount).
-// Warnings go to stderr so shell output stays evaluable.
-func activationDir(paths *config.Paths, profileName, account string, relink bool) (string, error) {
+// Warnings go to stderr so shell output stays evaluable. accountSet means the
+// flag was given: an empty name then is an error, never the profile folder.
+func activationDir(paths *config.Paths, profileName, account string, accountSet, relink bool) (string, error) {
+	if accountSet && account == "" {
+		return "", profile.ValidateAccountName(account)
+	}
 	if account == "" {
 		if relink {
 			return "", fmt.Errorf("--relink needs --account")

@@ -357,3 +357,90 @@ func TestConfigDirProfile(t *testing.T) {
 		}
 	}
 }
+
+func TestLinkAccount_NeverLinksStateCopies(t *testing.T) {
+	paths := accountTestPaths(t, "p")
+	prof := paths.ProfileDir("p")
+	writeFile(t, filepath.Join(prof, "backups", ".claude.json.backup.1700000000"), `{"oauthAccount":{}}`)
+	writeFile(t, filepath.Join(prof, ".claude.json.backup"), "{}")
+	writeFile(t, filepath.Join(prof, ".claude.json.lock"), "")
+	writeFile(t, filepath.Join(prof, "settings.json"), "{}")
+
+	// An account linked by an older version: backups/ and a backup file are links.
+	dir := paths.AccountDir("p")
+	os.MkdirAll(dir, 0755)
+	os.Symlink(filepath.Join(prof, "backups"), filepath.Join(dir, "backups"))
+	os.Symlink(filepath.Join(prof, ".claude.json.backup"), filepath.Join(dir, ".claude.json.backup"))
+
+	if _, _, err := LinkAccount(paths, "p", "p", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"backups", ".claude.json.backup", ".claude.json.lock"} {
+		if _, err := os.Lstat(filepath.Join(dir, name)); err == nil {
+			t.Errorf("%s is linked into the account", name)
+		}
+	}
+	if _, err := os.Readlink(filepath.Join(dir, "settings.json")); err != nil {
+		t.Errorf("settings.json not linked: %v", err)
+	}
+
+	// The account's own backups (written by Claude) stay.
+	writeFile(t, filepath.Join(dir, "backups", "own"), "x")
+	if _, _, err := LinkAccount(paths, "p", "p", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "backups", "own")); err != nil {
+		t.Errorf("account's own backups/ removed: %v", err)
+	}
+}
+
+func TestLinkAccount_CorruptSeedLeavesNoFolder(t *testing.T) {
+	paths := accountTestPaths(t, "p")
+	writeFile(t, filepath.Join(paths.ProfileDir("p"), ".claude.json"), "{broken")
+	if _, _, err := LinkAccount(paths, "work1", "p", false); err == nil {
+		t.Fatal("corrupt state accepted")
+	}
+	if _, err := os.Stat(paths.AccountDir("work1")); err == nil {
+		t.Error("account folder created before the seed was checked")
+	}
+}
+
+func TestLinkAccount_MismatchLeavesNoChange(t *testing.T) {
+	paths := accountTestPaths(t, "a", "b")
+	if _, _, err := LinkAccount(paths, "w", "a", false); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(filepath.Join(paths.AccountDir("w"), AccountFile))
+	if _, _, err := LinkAccount(paths, "w", "b", false); err == nil {
+		t.Fatal("mismatch accepted")
+	}
+	if after, _ := os.ReadFile(filepath.Join(paths.AccountDir("w"), AccountFile)); string(after) != string(before) {
+		t.Error("binding changed by a refused link")
+	}
+}
+
+func TestConfigDirProfile_Normalizes(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	paths := &config.Paths{
+		CcpDir:          "ccp", // relative CCP_DIR
+		GlobalClaudeDir: filepath.Join(root, "home", ".claude"),
+		ProfilesDir:     filepath.Join("ccp", "profiles"),
+	}
+	os.MkdirAll(paths.ProfileDir("dev"), 0755)
+	if _, _, err := LinkAccount(paths, "work1", "dev", false); err != nil {
+		t.Fatal(err)
+	}
+	abs := filepath.Join(root, "ccp", "accounts", "work1")
+	for _, dir := range []string{abs, abs + "/", "ccp/accounts/work1", "./ccp/accounts/work1/"} {
+		if p, a := ConfigDirProfile(paths, dir); p != "dev" || a != "work1" {
+			t.Errorf("ConfigDirProfile(%q) = %q, %q; want dev, work1", dir, p, a)
+		}
+	}
+	if !SamePath(filepath.Join(root, "ccp", "profiles", "dev")+"/", paths.ProfileDir("dev")) {
+		t.Error("SamePath: trailing slash vs relative path")
+	}
+	if SamePath("/a/b", "/a/c") {
+		t.Error("SamePath: different paths")
+	}
+}

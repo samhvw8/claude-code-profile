@@ -66,13 +66,26 @@ func AccountProfile(accountDir string) (string, error) {
 // (profile is "" when the binding cannot be read); for any other folder it
 // returns the folder's base name and an empty account.
 func ConfigDirProfile(paths *config.Paths, dir string) (profileName, account string) {
-	clean := filepath.Clean(dir)
-	if filepath.Dir(clean) == filepath.Clean(paths.AccountsDir()) {
+	clean := absClean(dir)
+	if filepath.Dir(clean) == absClean(paths.AccountsDir()) {
 		account = filepath.Base(clean)
 		profileName, _ = AccountProfile(clean)
 		return profileName, account
 	}
 	return filepath.Base(clean), ""
+}
+
+// SamePath reports whether two paths name the same location once made
+// absolute and clean (a relative CCP_DIR, a trailing slash).
+func SamePath(a, b string) bool {
+	return absClean(a) == absClean(b)
+}
+
+func absClean(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return abs
+	}
+	return filepath.Clean(p)
 }
 
 // LinkAccount prepares the account folder for running profileName and returns
@@ -101,10 +114,9 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 	}
 	dir = filepath.Clean(dir)
 
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", nil, fmt.Errorf("failed to create account folder: %w", err)
-	}
-
+	// Every check runs before the first write, so a refusal or a corrupt
+	// state file leaves no folder behind.
+	writeBinding := false
 	bound, err := AccountProfile(dir)
 	switch {
 	case err == nil && bound == profileName:
@@ -114,6 +126,17 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 	case err != nil && !errors.Is(err, os.ErrNotExist) && !relink:
 		return "", nil, fmt.Errorf("%w; fix the file or rerun with --relink", err)
 	default:
+		writeBinding = true
+	}
+	seed, err := accountSeed(paths, dir, profileDir)
+	if err != nil {
+		return "", nil, err
+	}
+
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", nil, fmt.Errorf("failed to create account folder: %w", err)
+	}
+	if writeBinding {
 		data, err := toml.Marshal(accountBinding{Profile: profileName})
 		if err != nil {
 			return "", nil, err
@@ -122,9 +145,10 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 			return "", nil, fmt.Errorf("failed to record account binding: %w", err)
 		}
 	}
-
-	if err := seedAccountState(paths, dir, profileDir); err != nil {
-		return "", nil, err
+	if seed != nil {
+		if err := writeSeed(filepath.Join(dir, claudeStateFile), seed); err != nil {
+			return "", nil, err
+		}
 	}
 
 	if err := pruneAccountLinks(paths, dir, profileDir); err != nil {
@@ -166,21 +190,24 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 }
 
 // skipAccountEntry reports profile entries an account folder must own itself:
-// the login state, the binding, Claude's per-folder daemon files, and the
-// credentials file Claude uses where there is no Keychain.
+// the login state and its copies (.claude.json*, and backups/, where Claude
+// Code keeps .claude.json backups that carry oauthAccount), the binding,
+// Claude's per-folder daemon files, and the credentials file Claude uses
+// where there is no Keychain.
 func skipAccountEntry(name string) bool {
-	return name == claudeStateFile || name == AccountFile || name == claudeCredentialsFile ||
-		strings.HasPrefix(name, "daemon")
+	return strings.HasPrefix(name, claudeStateFile) || name == "backups" || name == AccountFile ||
+		name == claudeCredentialsFile || strings.HasPrefix(name, "daemon")
 }
 
-// seedAccountState writes the account's .claude.json once, from the state
-// Claude Code used for the profile, without the login. It never overwrites.
-func seedAccountState(paths *config.Paths, dir, profileDir string) error {
-	dst := filepath.Join(dir, claudeStateFile)
-	if _, err := os.Lstat(dst); err == nil {
-		return nil
+// accountSeed returns the account's first .claude.json: the state Claude
+// Code used for the profile, without the login. It returns nil when the
+// account already has one or there is nothing to seed from, and an error for a
+// state file that is not JSON. It writes nothing.
+func accountSeed(paths *config.Paths, dir, profileDir string) ([]byte, error) {
+	if _, err := os.Lstat(filepath.Join(dir, claudeStateFile)); err == nil {
+		return nil, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+		return nil, err
 	}
 
 	// A profile activated globally (~/.claude -> profile) keeps its state in
@@ -193,20 +220,25 @@ func seedAccountState(paths *config.Paths, dir, profileDir string) error {
 	}
 	data, err := os.ReadFile(src)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil // Claude Code creates it on first run
+		return nil, nil // Claude Code creates it on first run
 	}
 	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", src, err)
+		return nil, fmt.Errorf("failed to read %s: %w", src, err)
 	}
 	var state map[string]json.RawMessage
 	if err := json.Unmarshal(data, &state); err != nil {
-		return fmt.Errorf("cannot seed account state from %s: %w", src, err)
+		return nil, fmt.Errorf("cannot seed account state from %s: %w", src, err)
 	}
 	delete(state, "oauthAccount")
 	out, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return err
+		return nil, err
 	}
+	return append(out, '\n'), nil
+}
+
+// writeSeed creates the account's .claude.json (0600); it never overwrites.
+func writeSeed(dst string, data []byte) error {
 	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
@@ -214,7 +246,7 @@ func seedAccountState(paths *config.Paths, dir, profileDir string) error {
 		}
 		return fmt.Errorf("failed to seed %s: %w", dst, err)
 	}
-	if _, err := f.Write(append(out, '\n')); err != nil {
+	if _, err := f.Write(data); err != nil {
 		f.Close()
 		os.Remove(dst)
 		return fmt.Errorf("failed to seed %s: %w", dst, err)
@@ -222,8 +254,9 @@ func seedAccountState(paths *config.Paths, dir, profileDir string) error {
 	return f.Close()
 }
 
-// pruneAccountLinks removes broken links and links into another profile (left
-// from before a relink). Real files are never touched.
+// pruneAccountLinks removes broken links, links into another profile (left
+// from before a relink), and links to entries an account must own itself
+// (such as backups/, linked by older versions). Real files are never touched.
 func pruneAccountLinks(paths *config.Paths, dir, profileDir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -236,7 +269,9 @@ func pruneAccountLinks(paths *config.Paths, dir, profileDir string) error {
 		}
 		link := filepath.Join(dir, e.Name())
 		stale := false
-		if _, err := os.Stat(link); err != nil {
+		if skipAccountEntry(e.Name()) && e.Name() != AccountFile {
+			stale = true
+		} else if _, err := os.Stat(link); err != nil {
 			stale = true
 		} else if target, err := os.Readlink(link); err == nil && filepath.IsAbs(target) {
 			parent := filepath.Dir(target)

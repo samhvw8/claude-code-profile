@@ -66,7 +66,7 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 		if envAccount != "" {
 			return envName == p.Name
 		}
-		return envProfile != "" && envProfile == p.Path
+		return envProfile != "" && profile.SamePath(envProfile, p.Path)
 	}
 
 	// JSON output
