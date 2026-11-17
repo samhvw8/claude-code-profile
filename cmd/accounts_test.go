@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -190,5 +191,223 @@ func TestAccountResetLines(t *testing.T) {
 	linux := strings.Join(accountResetLines(paths, "linux"), "\n")
 	if !strings.Contains(linux, filepath.Join(dir, ".credentials.json")+" is deleted with the folder") {
 		t.Errorf("linux plan:\n%s", linux)
+	}
+}
+
+// captureStderr returns what fn writes to os.Stderr.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	done := make(chan string)
+	go func() {
+		data, _ := io.ReadAll(r)
+		done <- string(data)
+	}()
+	fn()
+	w.Close()
+	os.Stderr = orig
+	return <-done
+}
+
+func TestInit_SymlinkedClaudeKeepsMessages(t *testing.T) {
+	paths := accountCmdEnv(t, "a")
+	if err := os.Symlink(paths.ProfileDir("a"), paths.GlobalClaudeDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { initForce = false })
+	if err := runCcp(t, "init"); err == nil || !strings.Contains(err.Error(), "already a symlink") {
+		t.Errorf("init: %v", err)
+	}
+	if err := runCcp(t, "init", "--force"); err == nil || !strings.Contains(err.Error(), "run 'ccp reset' first") {
+		t.Errorf("init --force: %v", err)
+	}
+}
+
+func TestProfileDelete_RefusesGlobalProfileWhileEnvElsewhere(t *testing.T) {
+	paths := accountCmdEnv(t, "a", "b")
+	os.Symlink(paths.ProfileDir("a"), paths.GlobalClaudeDir)
+	t.Setenv("CLAUDE_CONFIG_DIR", paths.ProfileDir("b"))
+	t.Cleanup(func() { deleteForce = false })
+	if err := runCcp(t, "profile", "delete", "a", "--force"); err == nil || !strings.Contains(err.Error(), "cannot delete active profile") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+func TestProfileRename_SwapsGlobalWhileEnvElsewhere(t *testing.T) {
+	paths := accountCmdEnv(t, "a", "b")
+	os.Symlink(paths.ProfileDir("a"), paths.GlobalClaudeDir)
+	t.Setenv("CLAUDE_CONFIG_DIR", paths.ProfileDir("b"))
+	if err := runCcp(t, "profile", "rename", "a", "c"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := filepath.EvalSymlinks(paths.GlobalClaudeDir); err != nil || filepath.Base(got) != "c" {
+		t.Errorf("~/.claude -> %q (%v), want profile c", got, err)
+	}
+}
+
+func TestProfileRename_RejectsBadNewName(t *testing.T) {
+	paths := accountCmdEnv(t, "a")
+	for _, name := range []string{"../foo", "shared", "x/y", ".."} {
+		if err := runCcp(t, "profile", "rename", "a", name); err == nil {
+			t.Errorf("rename to %q accepted", name)
+		}
+	}
+	if _, err := os.Stat(paths.ProfileDir("a")); err != nil {
+		t.Errorf("profile moved: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(paths.CcpDir, "foo")); err == nil {
+		t.Error("profile moved out of profiles/")
+	}
+}
+
+func TestProfileDelete_RefusesUnreadableBinding(t *testing.T) {
+	for _, content := range []string{"profile = [", "profile = \"shared\"\n"} {
+		paths := accountCmdEnv(t, "a", "b")
+		os.MkdirAll(paths.AccountDir("broken"), 0755)
+		os.WriteFile(filepath.Join(paths.AccountDir("broken"), profile.AccountFile), []byte(content), 0644)
+		t.Cleanup(func() { deleteForce = false })
+		err := runCcp(t, "profile", "delete", "b", "--force")
+		if err == nil || !strings.Contains(err.Error(), "broken") {
+			t.Errorf("binding %q: err = %v", content, err)
+		}
+		if _, err := os.Stat(paths.ProfileDir("b")); err != nil {
+			t.Errorf("binding %q: profile deleted", content)
+		}
+	}
+}
+
+func TestProfileRename_WarnsAboutUnreadableBinding(t *testing.T) {
+	paths := accountCmdEnv(t, "a")
+	os.MkdirAll(paths.AccountDir("broken"), 0755)
+	os.WriteFile(filepath.Join(paths.AccountDir("broken"), profile.AccountFile), []byte("profile = ["), 0644)
+	var err error
+	out := captureStderr(t, func() { err = runCcp(t, "profile", "rename", "a", "b") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "account broken was not moved") {
+		t.Errorf("stderr:\n%s", out)
+	}
+}
+
+// accountWithoutSkills links account w to profile p while p has no skills/,
+// so a later change that creates skills/ is a new top-level entry.
+func accountWithoutSkills(t *testing.T, paths *config.Paths, p string) string {
+	t.Helper()
+	os.RemoveAll(filepath.Join(paths.ProfileDir(p), "skills"))
+	dir, _, err := profile.LinkAccount(paths, "w", p, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "skills")); err == nil {
+		t.Fatal("setup: account already has skills")
+	}
+	return dir
+}
+
+func hubSkill(t *testing.T, paths *config.Paths, name string) {
+	t.Helper()
+	dir := filepath.Join(paths.HubItemDir(config.HubSkills), name)
+	os.MkdirAll(dir, 0755)
+	os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: "+name+"\ndescription: d\n---\n"), 0644)
+}
+
+func TestInstallLink_RelinksAccountsOfNonActiveProfile(t *testing.T) {
+	paths := accountCmdEnv(t, "a", "b")
+	os.Symlink(paths.ProfileDir("a"), paths.GlobalClaudeDir) // a is active, b is not
+	hubSkill(t, paths, "s")
+	dir := accountWithoutSkills(t, paths, "b")
+	if err := linkInstalled(paths, "b", []string{"skills/s"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "skills", "s")); err != nil {
+		t.Errorf("account of non-active profile b does not see skills/s: %v", err)
+	}
+}
+
+func TestBootstrap_RelinksAccounts(t *testing.T) {
+	paths := accountCmdEnv(t, "a", "b")
+	os.Symlink(paths.ProfileDir("a"), paths.GlobalClaudeDir)
+	hubSkill(t, paths, "s")
+	if err := profile.NewManager(paths).LinkHubItem("b", config.HubSkills, "s"); err != nil {
+		t.Fatal(err)
+	}
+	dir := accountWithoutSkills(t, paths, "b") // drift: b lost skills/
+	t.Cleanup(func() { fixForce = false })
+	if err := runCcp(t, "bootstrap"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(paths.ProfileDir("b"), "skills", "s")); err != nil {
+		t.Fatalf("setup: bootstrap did not fix b: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "skills", "s")); err != nil {
+		t.Errorf("account of b does not see the fixed skills/: %v", err)
+	}
+}
+
+func TestActiveProfileLabel(t *testing.T) {
+	paths := accountCmdEnv(t, "a")
+	if got := activeProfileLabel(paths); got != "none" {
+		t.Errorf("no link: %q", got)
+	}
+	os.Symlink(paths.ProfileDir("gone"), paths.GlobalClaudeDir)
+	if got := activeProfileLabel(paths); got != "gone (missing)" {
+		t.Errorf("dangling link: %q", got)
+	}
+}
+
+func TestReset_FromAccountAndSymlinkedSessions(t *testing.T) {
+	for _, mode := range []string{"account", "symlinked CLAUDE_CONFIG_DIR"} {
+		t.Run(mode, func(t *testing.T) {
+			paths := accountCmdEnv(t, "a", "b")
+			os.WriteFile(filepath.Join(paths.ProfileDir("a"), "CLAUDE.md"), []byte("A"), 0644)
+			os.WriteFile(filepath.Join(paths.ProfileDir("b"), "CLAUDE.md"), []byte("B"), 0644)
+			os.Symlink(paths.ProfileDir("a"), paths.GlobalClaudeDir)
+			switch mode {
+			case "account":
+				dir, _, err := profile.LinkAccount(paths, "w", "a", false)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("CLAUDE_CONFIG_DIR", dir)
+			default:
+				link := filepath.Join(filepath.Dir(paths.GlobalClaudeDir), "project-claude")
+				os.Symlink(paths.ProfileDir("b"), link)
+				t.Setenv("CLAUDE_CONFIG_DIR", link)
+			}
+			t.Cleanup(func() { resetForce = false })
+			if err := runCcp(t, "reset", "--force"); err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Lstat(paths.GlobalClaudeDir)
+			if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				t.Fatalf("~/.claude not restored as a folder: %v %v", info, err)
+			}
+			if data, _ := os.ReadFile(filepath.Join(paths.GlobalClaudeDir, "CLAUDE.md")); string(data) != "A" {
+				t.Errorf("~/.claude restored from the wrong profile: %q", data)
+			}
+		})
+	}
+}
+
+func TestHarnessProfile_AccountSessionOnOtherProfile(t *testing.T) {
+	paths := accountCmdEnv(t, "a", "b")
+	os.Symlink(paths.ProfileDir("a"), paths.GlobalClaudeDir)
+	dir, _, err := profile.LinkAccount(paths, "w", "b", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	inSession := must(config.ResolvePaths())
+	if p := harnessProfile(inSession, "b"); p != nil {
+		t.Errorf("harnesses would follow the account's profile b")
+	}
+	if p := harnessProfile(inSession, "a"); p == nil || p.Name != "a" {
+		t.Errorf("harnesses do not follow the global profile a: %v", p)
 	}
 }

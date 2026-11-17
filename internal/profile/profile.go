@@ -233,6 +233,10 @@ func (m *Manager) Exists(name string) bool {
 
 // LinkHubItem adds a hub item to a profile
 func (m *Manager) LinkHubItem(profileName string, itemType config.HubItemType, itemName string) error {
+	return m.thenRefreshAccounts(profileName, m.linkHubItem(profileName, itemType, itemName))
+}
+
+func (m *Manager) linkHubItem(profileName string, itemType config.HubItemType, itemName string) error {
 	profile, err := m.Get(profileName)
 	if err != nil {
 		return err
@@ -275,6 +279,10 @@ func (m *Manager) LinkHubItem(profileName string, itemType config.HubItemType, i
 
 // UnlinkHubItem removes a hub item from a profile
 func (m *Manager) UnlinkHubItem(profileName string, itemType config.HubItemType, itemName string) error {
+	return m.thenRefreshAccounts(profileName, m.unlinkHubItem(profileName, itemType, itemName))
+}
+
+func (m *Manager) unlinkHubItem(profileName string, itemType config.HubItemType, itemName string) error {
 	profile, err := m.Get(profileName)
 	if err != nil {
 		return err
@@ -321,6 +329,10 @@ func (m *Manager) syncHooksFor(profile *Profile, itemType config.HubItemType) er
 // Only the bundle name is recorded in the manifest, so a bundle is atomic:
 // its members cannot be linked or unlinked individually.
 func (m *Manager) LinkHubBundle(profileName, bundleName string) error {
+	return m.thenRefreshAccounts(profileName, m.linkHubBundle(profileName, bundleName))
+}
+
+func (m *Manager) linkHubBundle(profileName, bundleName string) error {
 	profile, err := m.Get(profileName)
 	if err != nil {
 		return err
@@ -367,6 +379,10 @@ func (m *Manager) LinkHubBundle(profileName, bundleName string) error {
 // manifest entry is removed and any orphaned member symlinks are left for
 // drift detection to report.
 func (m *Manager) UnlinkHubBundle(profileName, bundleName string) error {
+	return m.thenRefreshAccounts(profileName, m.unlinkHubBundle(profileName, bundleName))
+}
+
+func (m *Manager) unlinkHubBundle(profileName, bundleName string) error {
 	profile, err := m.Get(profileName)
 	if err != nil {
 		return err
@@ -474,3 +490,12 @@ func copyFile(src, dst string) error {
 	return err
 }
 
+
+// thenRefreshAccounts relinks the accounts bound to profileName after a
+// successful change to its folder, and passes err through.
+func (m *Manager) thenRefreshAccounts(profileName string, err error) error {
+	if err == nil {
+		RefreshAccounts(m.paths, profileName)
+	}
+	return err
+}

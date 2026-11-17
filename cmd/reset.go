@@ -38,10 +38,16 @@ func init() {
 }
 
 func runReset(cmd *cobra.Command, args []string) error {
-	paths, err := config.ResolvePaths()
+	resolved, err := config.ResolvePaths()
 	if err != nil {
 		return err
 	}
+	// Reset restores ~/.claude itself. Inside an account or project session
+	// CLAUDE_CONFIG_DIR names another folder: a real one (never a symlink to
+	// restore) or a symlinked one whose target is not what ~/.claude uses.
+	global := *resolved
+	global.ClaudeDir = resolved.GlobalClaudeDir
+	paths := &global
 
 	// Check if ccp is initialized
 	if !paths.IsInitialized() {

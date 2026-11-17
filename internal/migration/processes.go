@@ -28,10 +28,17 @@ type ProcessLister interface {
 
 var jsRuntime = regexp.MustCompile(`^(node|nodejs|bun|deno)[0-9.]*$`)
 
-// isClaudeArgv reports whether a command line is Claude Code: a native
-// "claude" binary (mise's .../claude/<ver>/claude included), or a JS runtime
-// running the npm package (node /usr/local/bin/claude, node .../@anthropic-ai/claude-code/cli.js).
-func isClaudeArgv(argv []string) bool {
+// isClaudeProcess reports whether a process is Claude Code: a native "claude"
+// binary (mise's .../claude/<ver>/claude included), a native install started
+// through its resolved path (exec path under .../claude/versions/ or
+// .../installs/claude/, such as ~/.local/share/claude/versions/2.1.77), or a
+// JS runtime running the npm package anywhere in its arguments (node
+// /usr/local/bin/claude, node --flag .../@anthropic-ai/claude-code/cli.js).
+// execPath may be "" when unknown.
+func isClaudeProcess(execPath string, argv []string) bool {
+	if strings.Contains(execPath, "/claude/versions/") || strings.Contains(execPath, "/installs/claude/") {
+		return true
+	}
 	if len(argv) == 0 {
 		return false
 	}
@@ -41,7 +48,7 @@ func isClaudeArgv(argv []string) bool {
 	if !jsRuntime.MatchString(filepath.Base(argv[0])) {
 		return false
 	}
-	for _, a := range argv[1:min(len(argv), 3)] {
+	for _, a := range argv[1:] {
 		if filepath.Base(a) == "claude" || strings.Contains(a, "@anthropic-ai/claude-code") {
 			return true
 		}
@@ -95,9 +102,10 @@ func (l sysctlLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 		if errors.Is(err, errProcessGone) {
 			continue
 		}
+		var exec string
 		var argv, env []string
 		if err == nil {
-			argv, env, err = parseProcargs2(buf)
+			exec, argv, env, err = parseProcargs2(buf)
 		}
 		if err != nil {
 			// Unreadable (another user's process, or a malformed buffer): a
@@ -107,7 +115,7 @@ func (l sysctlLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 			}
 			continue
 		}
-		if isClaudeArgv(argv) {
+		if isClaudeProcess(exec, argv) {
 			out = append(out, ClaudeProcess{PID: e.pid, ConfigDir: configDirOf(env), EnvKnown: true})
 		}
 	}
@@ -117,16 +125,17 @@ func (l sysctlLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 // parseProcargs2 decodes a kern.procargs2 buffer: int32 argc, the exec path
 // and NUL padding, argc NUL-terminated arguments, then NUL-terminated
 // environment strings up to an empty one or the end.
-func parseProcargs2(buf []byte) (argv, env []string, err error) {
+func parseProcargs2(buf []byte) (execPath string, argv, env []string, err error) {
 	if len(buf) < 4 {
-		return nil, nil, fmt.Errorf("procargs2: short buffer")
+		return "", nil, nil, fmt.Errorf("procargs2: short buffer")
 	}
 	argc := int(binary.NativeEndian.Uint32(buf[:4]))
 	rest := buf[4:]
 	i := bytes.IndexByte(rest, 0)
 	if i < 0 {
-		return nil, nil, fmt.Errorf("procargs2: no exec path")
+		return "", nil, nil, fmt.Errorf("procargs2: no exec path")
 	}
+	execPath = string(rest[:i])
 	rest = rest[i:]
 	for len(rest) > 0 && rest[0] == 0 {
 		rest = rest[1:]
@@ -148,7 +157,7 @@ func parseProcargs2(buf []byte) (argv, env []string, err error) {
 	for range argc {
 		s, ok := next()
 		if !ok {
-			return nil, nil, fmt.Errorf("procargs2: %d of %d arguments", len(argv), argc)
+			return "", nil, nil, fmt.Errorf("procargs2: %d of %d arguments", len(argv), argc)
 		}
 		argv = append(argv, s)
 	}
@@ -159,7 +168,7 @@ func parseProcargs2(buf []byte) (argv, env []string, err error) {
 		}
 		env = append(env, s)
 	}
-	return argv, env, nil
+	return execPath, argv, env, nil
 }
 
 // procLister lists processes from /proc (Linux).
@@ -193,7 +202,8 @@ func (l procLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 		if len(cmdline) == 0 {
 			continue // kernel thread or zombie
 		}
-		if !isClaudeArgv(strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")) {
+		exe, _ := os.Readlink(filepath.Join(dir, "exe")) // unreadable for other users' processes
+		if !isClaudeProcess(exe, strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")) {
 			continue
 		}
 		environ, err := os.ReadFile(filepath.Join(dir, "environ"))

@@ -26,6 +26,9 @@ type fakeStore struct {
 	items      map[string]fakeCred
 	ops        []string
 	corruptSet bool   // Set stores different bytes (verify must fail)
+	vanish     string // this key disappears after vanishGets reads (a race)
+	vanishGets int
+	gets       map[string]int
 	failDelete string // Delete of this key fails
 }
 
@@ -33,6 +36,13 @@ func newFakeStore() *fakeStore { return &fakeStore{items: map[string]fakeCred{}}
 
 func (s *fakeStore) Get(key string) ([]byte, string, bool, error) {
 	s.ops = append(s.ops, "get "+key)
+	if s.gets == nil {
+		s.gets = map[string]int{}
+	}
+	s.gets[key]++
+	if key == s.vanish && s.gets[key] > s.vanishGets {
+		delete(s.items, key)
+	}
 	c, ok := s.items[key]
 	return c.secret, c.acct, ok, nil
 }
@@ -663,15 +673,15 @@ func TestIsClaudeArgv(t *testing.T) {
 		{[]string{"/opt/homebrew/bin/node22", "/opt/lib/node_modules/@anthropic-ai/claude-code/cli.js", "-p"}, true},
 		{[]string{"bun", "--smol", "/x/claude"}, true},
 		{[]string{"deno", "run", "npm:@anthropic-ai/claude-code"}, true},
-		{[]string{"node", "a", "b", "/usr/local/bin/claude"}, false}, // only argv[1..2]
+		{[]string{"node", "--max-old-space-size=4096", "--no-warnings", "/usr/local/bin/claude"}, true}, // any argument after the runtime
 		{[]string{"node", "server.js"}, false},
 		{[]string{"/bin/zsh", "-lic", "claude"}, false},
 		{[]string{"claude-helper"}, false},
 		{nil, false},
 	}
 	for _, tt := range tests {
-		if got := isClaudeArgv(tt.argv); got != tt.want {
-			t.Errorf("isClaudeArgv(%q) = %v, want %v", tt.argv, got, tt.want)
+		if got := isClaudeProcess("", tt.argv); got != tt.want {
+			t.Errorf("isClaudeProcess(%q) = %v, want %v", tt.argv, got, tt.want)
 		}
 	}
 }
@@ -690,7 +700,10 @@ func procargs2(exec string, argv, env []string) []byte {
 func TestParseProcargs2(t *testing.T) {
 	buf := procargs2("/Users/u/My Apps/claude", []string{"/Users/u/My Apps/claude", "--add-dir", "a b"},
 		[]string{"HOME=/Users/u", "CLAUDE_CONFIG_DIR=/Users/u/My Profiles/p HOME=fake", "TERM=xterm"})
-	argv, env, err := parseProcargs2(buf)
+	exec, argv, env, err := parseProcargs2(buf)
+	if exec != "/Users/u/My Apps/claude" {
+		t.Errorf("exec = %q", exec)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -701,11 +714,11 @@ func TestParseProcargs2(t *testing.T) {
 		t.Errorf("CLAUDE_CONFIG_DIR = %q", got)
 	}
 	for _, bad := range [][]byte{nil, {1, 0, 0}, binary.NativeEndian.AppendUint32(nil, 3)} {
-		if _, _, err := parseProcargs2(bad); err == nil {
+		if _, _, _, err := parseProcargs2(bad); err == nil {
 			t.Errorf("parseProcargs2(%v) accepted a malformed buffer", bad)
 		}
 	}
-	if _, _, err := parseProcargs2(procargs2("/x", []string{"a"}, nil)[:10]); err == nil {
+	if _, _, _, err := parseProcargs2(procargs2("/x", []string{"a"}, nil)[:10]); err == nil {
 		t.Error("truncated arguments accepted")
 	}
 }
@@ -920,5 +933,208 @@ func TestGuardClaudeDir(t *testing.T) {
 	paths.ClaudeDir = filepath.Join(root, "home", ".claude")
 	if err := GuardClaudeDir(paths); err != nil {
 		t.Errorf("~/.claude refused: %v", err)
+	}
+}
+
+func TestAccountMigrator_SourceVanishesBeforeResume(t *testing.T) {
+	e := newMigrateEnv(t, "p")
+	src := e.envService("p")
+	e.store.items[src] = fakeCred{secret: []byte("tok")}
+	e.store.items[e.accountService("p")] = fakeCred{secret: []byte("tok")}
+	e.store.vanish, e.store.vanishGets = src, 1
+	r := only(t, must(e.migrator().Migrate(false)))
+	if r.Status != AccountSkipped || !strings.Contains(r.Reason, "only copy") {
+		t.Errorf("result %+v", r)
+	}
+	if len(e.store.mutations()) != 0 {
+		t.Errorf("store changed: %v", e.store.mutations())
+	}
+}
+
+func TestAccountMigrator_RefusesSessionThroughSymlinkedAccountPath(t *testing.T) {
+	e := newMigrateEnv(t, "p")
+	e.store.items[e.envService("p")] = fakeCred{secret: []byte("s")}
+	dir, _, err := profile.LinkAccount(e.paths, "p", "p", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(e.home, "work-account")
+	if err := os.Symlink(dir, alias); err != nil {
+		t.Fatal(err)
+	}
+	r := only(t, must(e.migrator(ClaudeProcess{PID: 41, ConfigDir: alias, EnvKnown: true}).Migrate(false)))
+	if r.Status != AccountRefused || !strings.Contains(r.Reason, "41") {
+		t.Errorf("result %+v", r)
+	}
+}
+
+func TestAccountMigrator_ResumeRollbackClearsOauth(t *testing.T) {
+	e := newMigrateEnv(t, "p")
+	src := e.envService("p")
+	e.store.items[src] = fakeCred{secret: []byte("tok"), acct: "sam"}
+	e.store.items[e.accountService("p")] = fakeCred{secret: []byte("tok"), acct: "sam"}
+	e.store.failDelete = src
+	writeJSONFixture(t, filepath.Join(e.paths.ProfileDir("p"), ".claude.json"), map[string]any{"oauthAccount": map[string]any{"e": "x"}}, 0600)
+	// The interrupted run had already carried oauthAccount into the account.
+	if _, _, err := profile.LinkAccount(e.paths, "p", "p", false); err != nil {
+		t.Fatal(err)
+	}
+	acctState := filepath.Join(e.paths.AccountDir("p"), ".claude.json")
+	writeJSONFixture(t, acctState, map[string]any{"oauthAccount": map[string]any{"e": "x"}, "k": 1}, 0600)
+
+	r := only(t, must(e.migrator().Migrate(false)))
+	if r.Status != AccountFailed {
+		t.Fatalf("result %+v", r)
+	}
+	if _, ok := e.store.items[e.accountService("p")]; ok {
+		t.Error("target credential kept")
+	}
+	got := readJSONMap(t, acctState)
+	if _, ok := got["oauthAccount"]; ok {
+		t.Errorf("account keeps oauthAccount without a credential: %v", got)
+	}
+	if got["k"] != float64(1) {
+		t.Errorf("other state lost: %v", got)
+	}
+	if rec, _ := profile.AccountMigratedFrom(e.paths.AccountDir("p")); rec != "" {
+		t.Errorf("recorded source %q kept after rollback", rec)
+	}
+}
+
+func TestAccountMigrator_RefusesNonEmptyConfigJSON(t *testing.T) {
+	for _, global := range []bool{true, false} {
+		t.Run(fmt.Sprintf("global=%v", global), func(t *testing.T) {
+			e := newMigrateEnv(t, "p")
+			cfg := filepath.Join(e.paths.ProfileDir("p"), ".config.json")
+			if global {
+				e.makeGlobal(t, "p")
+				e.store.items[keychainService] = fakeCred{secret: []byte("s")}
+				cfg = filepath.Join(e.home, ".config.json")
+			} else {
+				e.store.items[e.envService("p")] = fakeCred{secret: []byte("s")}
+			}
+			os.WriteFile(cfg, []byte(` { } `), 0600)
+			if r := only(t, must(e.migrator().Migrate(true))); r.Status != AccountWouldMove {
+				t.Errorf("empty .config.json: %+v", r)
+			}
+			os.WriteFile(cfg, []byte(`{"oauthAccount":{}}`), 0600)
+			r := only(t, must(e.migrator().Migrate(false)))
+			if r.Status != AccountRefused || !strings.Contains(r.Reason, cfg) {
+				t.Errorf("result %+v", r)
+			}
+			if len(e.store.mutations()) != 0 {
+				t.Errorf("store changed: %v", e.store.mutations())
+			}
+		})
+	}
+}
+
+func TestAccountMigrator_DryRunReportsCorruptBinding(t *testing.T) {
+	e := newMigrateEnv(t, "p")
+	e.store.items[e.envService("p")] = fakeCred{secret: []byte("s")}
+	os.MkdirAll(e.paths.AccountDir("p"), 0755)
+	os.WriteFile(filepath.Join(e.paths.AccountDir("p"), profile.AccountFile), []byte("profile = ["), 0644)
+	dry := only(t, must(e.migrator().Migrate(true)))
+	real := only(t, must(e.migrator().Migrate(false)))
+	if dry.Status != AccountFailed || dry.Status != real.Status || dry.Reason != real.Reason {
+		t.Errorf("dry %+v\nreal %+v", dry, real)
+	}
+	if len(e.store.mutations()) != 0 {
+		t.Errorf("store changed: %v", e.store.mutations())
+	}
+}
+
+func TestAccountMigrator_GlobalAndEnvLoginsTwoRuns(t *testing.T) {
+	for _, same := range []bool{false, true} {
+		t.Run(fmt.Sprintf("same secret=%v", same), func(t *testing.T) {
+			e := newMigrateEnv(t, "default", "busy")
+			e.makeGlobal(t, "default")
+			envLogin := "env-token"
+			if same {
+				envLogin = "global-token"
+			}
+			e.store.items[keychainService] = fakeCred{secret: []byte("global-token"), acct: "sam"}
+			e.store.items[e.envService("default")] = fakeCred{secret: []byte(envLogin), acct: "sam"}
+			e.store.items[e.envService("busy")] = fakeCred{secret: []byte("b"), acct: "sam"}
+			busyProc := ClaudeProcess{PID: 77, ConfigDir: e.paths.ProfileDir("busy"), EnvKnown: true}
+
+			// Run 1: default moves its global login, busy is refused.
+			byName := func(rs []AccountMigrationResult) map[string]AccountMigrationResult {
+				out := map[string]AccountMigrationResult{}
+				for _, r := range rs {
+					out[r.Profile] = r
+				}
+				return out
+			}
+			run1 := byName(must(e.migrator(busyProc).Migrate(false)))
+			if r := run1["default"]; r.Status != AccountMoved || !r.Global || len(r.Warnings) == 0 {
+				t.Fatalf("run 1 default: %+v", r)
+			}
+			if run1["busy"].Status != AccountRefused {
+				t.Fatalf("run 1 busy: %+v", run1["busy"])
+			}
+			if rec, _ := profile.AccountMigratedFrom(e.paths.AccountDir("default")); rec != keychainService {
+				t.Fatalf("recorded source %q", rec)
+			}
+
+			// Run 2: default is done; its env login stays where it is.
+			run2 := byName(must(e.migrator().Migrate(false)))
+			r := run2["default"]
+			if r.Status != AccountSkipped || r.Reason != "already migrated" {
+				t.Errorf("run 2 default: %+v", r)
+			}
+			if !strings.Contains(strings.Join(r.Warnings, "\n"), e.envService("default")) {
+				t.Errorf("run 2 does not say the env login is left: %v", r.Warnings)
+			}
+			if c, ok := e.store.items[e.envService("default")]; !ok || string(c.secret) != envLogin {
+				t.Errorf("env login touched: %+v %v", c, ok)
+			}
+			if run2["busy"].Status != AccountMoved {
+				t.Errorf("run 2 busy: %+v", run2["busy"])
+			}
+		})
+	}
+}
+
+func TestAccountMigrator_FinishesRecordedMove(t *testing.T) {
+	// Crash after the record, before the source delete: only the recorded
+	// login is finished.
+	e := newMigrateEnv(t, "default")
+	e.makeGlobal(t, "default")
+	e.store.items[keychainService] = fakeCred{secret: []byte("tok"), acct: "sam"}
+	e.store.items[e.envService("default")] = fakeCred{secret: []byte("tok"), acct: "sam"}
+	e.store.items[e.accountService("default")] = fakeCred{secret: []byte("tok"), acct: "sam"}
+	if _, _, err := profile.LinkAccount(e.paths, "default", "default", false); err != nil {
+		t.Fatal(err)
+	}
+	profile.SetAccountMigratedFrom(e.paths.AccountDir("default"), keychainService)
+
+	r := only(t, must(e.migrator().Migrate(false)))
+	if r.Status != AccountMoved || !strings.Contains(r.Reason, "interrupted") {
+		t.Fatalf("result %+v", r)
+	}
+	if want := []string{"delete " + keychainService}; !slices.Equal(e.store.mutations(), want) {
+		t.Errorf("mutations = %v, want %v", e.store.mutations(), want)
+	}
+}
+
+func TestIsClaudeProcess_NativeInstallPath(t *testing.T) {
+	for exec, want := range map[string]bool{
+		"/Users/u/.local/share/claude/versions/2.1.77":         true,
+		"/Users/u/.local/share/mise/installs/claude/2.1.326/x": true,
+		"/usr/bin/zsh": false,
+	} {
+		if got := isClaudeProcess(exec, []string{"2.1.77", "--resume"}); got != want {
+			t.Errorf("isClaudeProcess(%q) = %v, want %v", exec, got, want)
+		}
+	}
+	l := sysctlLister{
+		procs: func() ([]procEntry, error) { return []procEntry{{9, "2.1.77"}}, nil },
+		procargs: func(int) ([]byte, error) {
+			return procargs2("/u/.local/share/claude/versions/2.1.77", []string{"2.1.77"}, nil), nil
+		},
+	}
+	if got, _ := l.ClaudeProcesses(); len(got) != 1 {
+		t.Errorf("native install by version path not found: %+v", got)
 	}
 }

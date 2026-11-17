@@ -577,3 +577,84 @@ func TestInsideCcp(t *testing.T) {
 		}
 	}
 }
+
+func TestLinkAccount_WarnsAboutConfigJSON(t *testing.T) {
+	paths := accountTestPaths(t, "p")
+	writeFile(t, filepath.Join(paths.ProfileDir("p"), ".claude.json"), `{"n":1}`)
+	writeFile(t, filepath.Join(paths.ProfileDir("p"), ".config.json"), `{"oauthAccount":{"e":"x"}}`)
+	dir, warnings, err := LinkAccount(paths, "w", "p", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(warnings, "\n"), ".config.json") {
+		t.Errorf("warnings = %v", warnings)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, ".claude.json"))
+	if strings.Contains(string(data), "oauthAccount") || !strings.Contains(string(data), "\"n\"") {
+		t.Errorf("seed = %s (must come from .claude.json only)", data)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, ".config.json")); err == nil {
+		t.Error(".config.json linked")
+	}
+}
+
+func TestInsideCcp_SymlinkedProfilesDir(t *testing.T) {
+	root := t.TempDir()
+	dotfiles := filepath.Join(root, "dotfiles", "profiles")
+	os.MkdirAll(filepath.Join(dotfiles, "p"), 0755)
+	ccp := filepath.Join(root, "ccp")
+	os.MkdirAll(ccp, 0755)
+	if err := os.Symlink(dotfiles, filepath.Join(ccp, "profiles")); err != nil {
+		t.Fatal(err)
+	}
+	paths := &config.Paths{CcpDir: ccp, ProfilesDir: filepath.Join(ccp, "profiles")}
+	for _, dir := range []string{filepath.Join(ccp, "profiles", "p"), filepath.Join(dotfiles, "p")} {
+		if !InsideCcp(paths, dir) {
+			t.Errorf("InsideCcp(%q) = false, want true", dir)
+		}
+	}
+	if InsideCcp(paths, filepath.Join(root, "dotfiles", "other")) {
+		t.Error("a folder beside the linked profiles counted as inside")
+	}
+}
+
+func TestAccountProfile_RejectsInvalidBoundNames(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"shared", "../hub", "a/b", ".."} {
+		os.WriteFile(filepath.Join(dir, AccountFile), []byte("profile = \""+name+"\"\n"), 0644)
+		if got, err := AccountProfile(dir); err == nil {
+			t.Errorf("AccountProfile accepted %q (got %q)", name, got)
+		}
+	}
+	paths := accountTestPaths(t, "p")
+	os.MkdirAll(paths.AccountDir("bad"), 0755)
+	os.WriteFile(filepath.Join(paths.AccountDir("bad"), AccountFile), []byte("profile = \"shared\"\n"), 0644)
+	accounts, _ := ListAccounts(paths)
+	if len(accounts) != 1 || accounts[0].Err == nil {
+		t.Errorf("ListAccounts = %+v, want the bad binding as an error", accounts)
+	}
+}
+
+func TestSetAccountMigratedFrom(t *testing.T) {
+	paths := accountTestPaths(t, "p")
+	dir, _, err := LinkAccount(paths, "w", "p", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := SetAccountMigratedFrom(dir, "Claude Code-credentials"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := AccountMigratedFrom(dir); got != "Claude Code-credentials" {
+		t.Errorf("recorded %q", got)
+	}
+	if got, _ := AccountProfile(dir); got != "p" {
+		t.Errorf("binding lost: %q", got)
+	}
+	// A relink to the same profile keeps the record.
+	if _, _, err := LinkAccount(paths, "w", "p", false); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := AccountMigratedFrom(dir); got != "Claude Code-credentials" {
+		t.Errorf("record lost on relink: %q", got)
+	}
+}

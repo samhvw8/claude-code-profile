@@ -284,6 +284,7 @@ func copyHubItemToProfiles(paths *config.Paths, itemType config.HubItemType, ite
 			return fmt.Errorf("failed to load manifest for profile %s: %w", profileName, err)
 		}
 		manifest.RemoveHubItem(itemType, itemName)
+		profile.RefreshAccounts(paths, profileName)
 		if err := manifest.Save(manifestPath); err != nil {
 			return fmt.Errorf("failed to save manifest for profile %s: %w", profileName, err)
 		}

@@ -57,9 +57,16 @@ func runProfileDelete(cmd *cobra.Command, args []string) error {
 
 	// Check if this is the active profile: the ~/.claude symlink, or this
 	// shell's CLAUDE_CONFIG_DIR (the profile folder or one of its accounts).
-	active, _ := mgr.GetCurrent()
-	if active != nil && active.Name == profileName {
-		return fmt.Errorf("cannot delete active profile '%s'\n\nSwitch to another profile first: ccp use <other-profile>", profileName)
+	// Both count: ~/.claude may point at the profile while CLAUDE_CONFIG_DIR
+	// names another, and deleting it would leave ~/.claude dangling.
+	globalPaths := *paths
+	globalPaths.ClaudeDir = paths.GlobalClaudeDir
+	globalActive, _ := profile.NewManager(&globalPaths).GetActive()
+	current, _ := mgr.GetCurrent()
+	for _, active := range []*profile.Profile{globalActive, current} {
+		if active != nil && active.Name == profileName {
+			return fmt.Errorf("cannot delete active profile '%s'\n\nSwitch to another profile first: ccp use <other-profile>", profileName)
+		}
 	}
 	if err := refuseBoundAccounts(paths, profileName); err != nil {
 		return err
@@ -104,6 +111,22 @@ func runProfileDelete(cmd *cobra.Command, args []string) error {
 // refuseBoundAccounts stops a delete that would leave accounts linked to a
 // missing profile: each one must be relinked to another profile first.
 func refuseBoundAccounts(paths *config.Paths, profileName string) error {
+	// An account whose binding cannot be read may be linked to this profile
+	// (and may be this shell's CLAUDE_CONFIG_DIR): unknown counts as bound.
+	all, err := profile.ListAccounts(paths)
+	if err != nil {
+		return fmt.Errorf("failed to list accounts: %w", err)
+	}
+	var unreadable []string
+	for _, a := range all {
+		if a.Err != nil {
+			unreadable = append(unreadable, fmt.Sprintf("  %s: %v", a.Name, a.Err))
+		}
+	}
+	if len(unreadable) > 0 {
+		return fmt.Errorf("cannot delete profile '%s': the binding of these accounts cannot be read, so they may be linked to it\n%s\n\nFix each %s, or relink it: ccp env <profile> --account <name> --relink",
+			profileName, strings.Join(unreadable, "\n"), profile.AccountFile)
+	}
 	accounts, err := profile.AccountsBoundTo(paths, profileName)
 	if err != nil {
 		return fmt.Errorf("failed to list accounts: %w", err)
