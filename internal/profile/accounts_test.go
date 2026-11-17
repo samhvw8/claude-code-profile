@@ -444,3 +444,136 @@ func TestConfigDirProfile_Normalizes(t *testing.T) {
 		t.Error("SamePath: different paths")
 	}
 }
+
+func TestLinkAccount_NeverLinksPerFolderState(t *testing.T) {
+	paths := accountTestPaths(t, "p")
+	prof := paths.ProfileDir("p")
+	own := []string{".config.json", ".storage-write.lock", ".storage-write", "history.lock", "jobs"}
+	for _, name := range own {
+		writeFile(t, filepath.Join(prof, name), "{}")
+	}
+	writeFile(t, filepath.Join(prof, "settings.json"), "{}")
+	dir := paths.AccountDir("p")
+	os.MkdirAll(dir, 0755)
+	for _, name := range own { // linked by an older version
+		os.Symlink(filepath.Join(prof, name), filepath.Join(dir, name))
+	}
+
+	if _, _, err := LinkAccount(paths, "p", "p", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range own {
+		if _, err := os.Lstat(filepath.Join(dir, name)); err == nil {
+			t.Errorf("%s is linked into the account", name)
+		}
+	}
+	if _, err := os.Readlink(filepath.Join(dir, "settings.json")); err != nil {
+		t.Errorf("settings.json not linked: %v", err)
+	}
+}
+
+func TestLinkAccount_RejectsBadProfileNames(t *testing.T) {
+	paths := accountTestPaths(t, "p", "shared")
+	for _, name := range []string{"", "shared", ".", "..", "a/b", "../p", "p/"} {
+		if _, _, err := LinkAccount(paths, "w", name, false); err == nil {
+			t.Errorf("LinkAccount accepted profile %q", name)
+		}
+	}
+	if _, err := os.Stat(paths.AccountsDir()); err == nil {
+		t.Error("a rejected name created the accounts folder")
+	}
+}
+
+func TestLinkAccount_NullState(t *testing.T) {
+	paths := accountTestPaths(t, "p")
+	writeFile(t, filepath.Join(paths.ProfileDir("p"), ".claude.json"), "null")
+	dir, _, err := LinkAccount(paths, "w", "p", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, ".claude.json")); strings.TrimSpace(string(data)) != "{}" {
+		t.Errorf("seed from null = %q, want {}", data)
+	}
+}
+
+func TestLinkAccount_ReplacesLinkedLoginFiles(t *testing.T) {
+	paths := accountTestPaths(t, "p")
+	writeFile(t, filepath.Join(paths.ProfileDir("p"), ".claude.json"), `{"oauthAccount":{"e":"x"},"n":2}`)
+	other := filepath.Join(paths.CcpDir, "elsewhere")
+	writeFile(t, filepath.Join(other, ".claude.json"), `{"oauthAccount":{"e":"other"}}`)
+	writeFile(t, filepath.Join(other, ".credentials.json"), "tok")
+	dir := paths.AccountDir("w")
+	os.MkdirAll(dir, 0755)
+	os.Symlink(filepath.Join(other, ".claude.json"), filepath.Join(dir, ".claude.json"))
+	os.Symlink(filepath.Join(other, ".credentials.json"), filepath.Join(dir, ".credentials.json"))
+
+	_, warnings, err := LinkAccount(paths, "w", "p", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 2 {
+		t.Errorf("warnings = %v, want one per removed link", warnings)
+	}
+	info, err := os.Lstat(filepath.Join(dir, ".claude.json"))
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0600 {
+		t.Fatalf(".claude.json: %v %v", info, err)
+	}
+	var got map[string]any
+	data, _ := os.ReadFile(filepath.Join(dir, ".claude.json"))
+	json.Unmarshal(data, &got)
+	if got["n"] != float64(2) || got["oauthAccount"] != nil {
+		t.Errorf("seed = %s", data)
+	}
+	if _, err := os.Lstat(filepath.Join(dir, ".credentials.json")); err == nil {
+		t.Error(".credentials.json link kept")
+	}
+	if data, _ := os.ReadFile(filepath.Join(other, ".claude.json")); !strings.Contains(string(data), "other") {
+		t.Error("the link target was changed")
+	}
+	if leftovers, _ := filepath.Glob(filepath.Join(dir, ".claude.json.ccp-seed-*")); len(leftovers) != 0 {
+		t.Errorf("seed temp files left: %v", leftovers)
+	}
+}
+
+func TestGetCurrent(t *testing.T) {
+	paths := accountTestPaths(t, "a", "b")
+	for _, p := range []string{"a", "b"} {
+		writeFile(t, filepath.Join(paths.ProfileDir(p), "profile.toml"), "version = 3\nname = \""+p+"\"\n")
+	}
+	dir, _, err := LinkAccount(paths, "w", "b", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct{ claudeDir, want string }{
+		{paths.ProfileDir("a"), "a"},
+		{dir + "/", "b"},
+		{"/somewhere/else", ""},
+	}
+	for _, tt := range tests {
+		p2 := *paths
+		p2.ClaudeDir = tt.claudeDir
+		got, _ := NewManager(&p2).GetCurrent()
+		name := ""
+		if got != nil {
+			name = got.Name
+		}
+		if name != tt.want {
+			t.Errorf("GetCurrent with ClaudeDir %q = %q, want %q", tt.claudeDir, name, tt.want)
+		}
+	}
+}
+
+func TestInsideCcp(t *testing.T) {
+	paths := accountTestPaths(t, "p")
+	for dir, want := range map[string]bool{
+		paths.CcpDir:                  true,
+		paths.ProfileDir("p"):         true,
+		paths.AccountDir("w") + "/":   true,
+		paths.GlobalClaudeDir:         false,
+		paths.CcpDir + "-sibling/foo": false,
+	} {
+		if got := InsideCcp(paths, dir); got != want {
+			t.Errorf("InsideCcp(%q) = %v, want %v", dir, got, want)
+		}
+	}
+}

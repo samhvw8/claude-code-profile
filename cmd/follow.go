@@ -17,6 +17,16 @@ import (
 // profile switches ('ccp use -g', bootstrap) on their own. Failures are
 // warnings: the change itself already happened.
 func followHarnesses(paths *config.Paths, profileName string) {
+	// Accounts linked to the profile see its new top-level entries now, not
+	// only when 'ccp run/session/env --account' runs again.
+	warnings, err := profile.RelinkAccounts(paths, profileName, "")
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not relink accounts of '%s': %v\n", profileName, err)
+	}
+
 	// A corrupt output-style ledger is repaired before anything follows, so the
 	// loss is reported once, here, rather than as a warning per harness.
 	notes, err := profile.RepairStyleLedger(paths)
@@ -30,7 +40,7 @@ func followHarnesses(paths *config.Paths, profileName string) {
 	followOpencode(paths, profileName)
 	followAgy(paths, profileName)
 
-	active, err := profile.NewManager(paths).GetActive()
+	active, err := profile.NewManager(paths).GetCurrent()
 	if err != nil || active == nil || active.Name != profileName {
 		return
 	}
@@ -68,7 +78,7 @@ func followActive(*cobra.Command, []string) {
 	if err != nil || !paths.IsInitialized() {
 		return
 	}
-	if active, err := profile.NewManager(paths).GetActive(); err == nil && active != nil {
+	if active, err := profile.NewManager(paths).GetCurrent(); err == nil && active != nil {
 		followHarnesses(paths, active.Name)
 	}
 }

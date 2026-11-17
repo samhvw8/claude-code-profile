@@ -157,8 +157,8 @@ func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() 
 	if err != nil {
 		return r, fmt.Errorf("cannot list Claude Code processes: %w", err)
 	}
-	if pids := m.usingSource(procs, name, src); len(pids) > 0 {
-		return done(AccountRefused, fmt.Sprintf("Claude Code is running on this login (PID %s); close those sessions and rerun", strings.Join(pids, ", ")))
+	if pids := m.usingSource(procs, name, src, dir); len(pids) > 0 {
+		return done(AccountRefused, fmt.Sprintf("Claude Code is running on this login or account (PID %s); close those sessions and rerun", strings.Join(pids, ", ")))
 	}
 
 	plan := fmt.Sprintf("%s -> %s", m.describe(src.key), m.describe(target))
@@ -262,9 +262,10 @@ func (m *AccountMigrator) isGlobal(profileDir string) bool {
 }
 
 // usingSource returns the PIDs of Claude Code processes that use the source
-// login's folder. A process whose environment cannot be read counts as using
+// login's folder or the target account folder (a session there, even one
+// sitting at /login, would write its own login under the move). A process whose environment cannot be read counts as using
 // it: refusing is safer than moving a login under a running session.
-func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *loginSource) []string {
+func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *loginSource, accountDir string) []string {
 	profileDir, _ := filepath.Abs(m.paths.ProfileDir(name))
 	profileDir = filepath.Clean(profileDir)
 	realProfile, _ := filepath.EvalSymlinks(profileDir)
@@ -285,6 +286,9 @@ func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *l
 			match = p.ConfigDir == "" || filepath.Clean(p.ConfigDir) == filepath.Clean(m.paths.GlobalClaudeDir) || resolvesToProfile(p.ConfigDir)
 		default:
 			match = p.ConfigDir != "" && resolvesToProfile(p.ConfigDir)
+		}
+		if p.EnvKnown && p.ConfigDir != "" && profile.SamePath(p.ConfigDir, accountDir) {
+			match = true
 		}
 		if match {
 			pids = append(pids, fmt.Sprint(p.PID))
@@ -400,6 +404,9 @@ func setJSONKey(path, key string, value json.RawMessage, newMode os.FileMode) er
 	case err == nil:
 		if err := json.Unmarshal(data, &obj); err != nil {
 			return fmt.Errorf("%s is not a JSON object: %w", path, err)
+		}
+		if obj == nil { // a top-level null
+			obj = map[string]json.RawMessage{}
 		}
 		if info, err := os.Stat(path); err == nil && newMode == 0 {
 			mode = info.Mode().Perm()

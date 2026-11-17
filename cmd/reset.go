@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -86,6 +87,9 @@ func runReset(cmd *cobra.Command, args []string) error {
 	for _, c := range styleCarriers {
 		fmt.Printf("  Will remove: %s (output style ccp generated)\n", c.Path)
 	}
+	for _, line := range accountResetLines(paths, runtime.GOOS) {
+		fmt.Println(line)
+	}
 	fmt.Println()
 
 	if !resetForce {
@@ -147,4 +151,30 @@ func runReset(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Your Claude Code configuration has been restored to %s\n", paths.ClaudeDir)
 
 	return nil
+}
+
+// accountResetLines lists the account folders a reset deletes with ~/.ccp and
+// what happens to each login, which ccp does not move back.
+func accountResetLines(paths *config.Paths, goos string) []string {
+	accounts, err := profile.ListAccounts(paths)
+	if err != nil {
+		return []string{fmt.Sprintf("  Warning: cannot list accounts: %v", err)}
+	}
+	if len(accounts) == 0 {
+		return nil
+	}
+	lines := []string{fmt.Sprintf("  Will remove: %d account folder(s) in %s", len(accounts), paths.AccountsDir())}
+	for _, a := range accounts {
+		bound := a.Profile
+		if a.Err != nil {
+			bound = "unknown profile"
+		}
+		fate := "is left orphaned"
+		if goos != "darwin" {
+			fate = "is deleted with the folder"
+		}
+		lines = append(lines, fmt.Sprintf("    %s (%s): login %s %s", a.Name, bound, migration.LoginLocation(goos, a.Dir), fate))
+	}
+	lines = append(lines, "  Warning: account logins are not moved back to ~/.claude; log in again after the reset")
+	return lines
 }

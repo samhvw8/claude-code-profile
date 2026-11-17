@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 )
@@ -34,6 +35,15 @@ func KeychainServiceFor(dir string, global bool) string {
 		return keychainService
 	}
 	return keychainService + "-" + ConfigDirHash(dir)
+}
+
+// LoginLocation names where Claude Code keeps the login of a non-default
+// config folder on goos, for messages.
+func LoginLocation(goos, dir string) string {
+	if goos == "darwin" {
+		return fmt.Sprintf("Keychain item %q", KeychainServiceFor(dir, false))
+	}
+	return filepath.Join(dir, ".credentials.json")
 }
 
 // CredentialStore reads and writes one login secret by key: a Keychain
@@ -71,20 +81,47 @@ const keychainNotFound = 44
 // securityBin is run by absolute path: the login token passes through it.
 const securityBin = "/usr/bin/security"
 
+// maxSecurityLine is the longest command line sent to "security -i" on stdin;
+// its line buffer is 4096 bytes.
+const maxSecurityLine = 4000
+
 // maxKeychainDeletes caps the delete loop; security deletes one match per run.
 const maxKeychainDeletes = 10
 
 // KeychainStore is the macOS login Keychain through the security CLI. The
 // secret never appears in argv: writes go through "security -i" on stdin.
 type KeychainStore struct {
-	run commandRunner
+	run  commandRunner
+	user string // the account Claude Code writes its items under
 }
 
 // NewKeychainStore returns a store backed by /usr/bin/security.
-func NewKeychainStore() *KeychainStore { return &KeychainStore{run: execRunner} }
+func NewKeychainStore() *KeychainStore { return &KeychainStore{run: execRunner, user: currentUser()} }
 
+// currentUser is the login name Claude Code uses as the Keychain account.
+func currentUser() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+	return os.Getenv("USER")
+}
+
+// Get reads the item of service the way Claude Code does: the one under the
+// current user first, then, only if there is none, the first item of service
+// under any account (reported in acct).
 func (k *KeychainStore) Get(service string) ([]byte, string, bool, error) {
-	out, errOut, code, err := k.run("", securityBin, "find-generic-password", "-g", "-s", service)
+	if k.user != "" {
+		secret, acct, found, err := k.find(service, "-a", k.user)
+		if err != nil || found {
+			return secret, acct, found, err
+		}
+	}
+	return k.find(service)
+}
+
+func (k *KeychainStore) find(service string, extra ...string) ([]byte, string, bool, error) {
+	args := append([]string{"find-generic-password", "-g"}, extra...)
+	out, errOut, code, err := k.run("", securityBin, append(args, "-s", service)...)
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -140,8 +177,21 @@ func (k *KeychainStore) Set(service, acct string, secret []byte) error {
 			return fmt.Errorf("refusing Keychain value with quotes or newlines: %q", s)
 		}
 	}
-	line := fmt.Sprintf("add-generic-password -U -a \"%s\" -s \"%s\" -X %s\n", acct, service, hex.EncodeToString(secret))
-	out, errOut, code, err := k.run(line, securityBin, "-i")
+	hexSecret := hex.EncodeToString(secret)
+	line := fmt.Sprintf("add-generic-password -U -a \"%s\" -s \"%s\" -X %s\n", acct, service, hexSecret)
+	// security -i reads each command line into a 4096-byte buffer, so a longer
+	// line would be cut. Like Claude Code (which switches at 4032 bytes), a
+	// line that does not fit goes through argv instead: the hex is then
+	// visible to ps for the moment security runs, the trade-off Claude Code
+	// itself makes for large logins.
+	var out, errOut string
+	var code int
+	var err error
+	if len(line) > maxSecurityLine {
+		out, errOut, code, err = k.run("", securityBin, "add-generic-password", "-U", "-a", acct, "-s", service, "-X", hexSecret)
+	} else {
+		out, errOut, code, err = k.run(line, securityBin, "-i")
+	}
 	if err != nil {
 		return err
 	}

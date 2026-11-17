@@ -423,6 +423,21 @@ func (m *Manager) GetActive() (*Profile, error) {
 	return m.Get(profileName)
 }
 
+// GetCurrent returns the profile this shell's Claude Code uses: the target of
+// a symlinked config folder (~/.claude), or the profile a CLAUDE_CONFIG_DIR
+// folder belongs to — a profile folder or an account folder (its bound
+// profile). Guards that protect a profile in use call this, not GetActive,
+// which sees only symlinks.
+func (m *Manager) GetCurrent() (*Profile, error) {
+	if p, err := m.GetActive(); err != nil || p != nil {
+		return p, err
+	}
+	if name, ok := CcpConfigDirProfile(m.paths, m.paths.ClaudeDir); ok {
+		return m.Get(name)
+	}
+	return nil, nil
+}
+
 // SetActive sets the active profile by updating the symlink
 func (m *Manager) SetActive(name string) error {
 	profileDir := m.paths.ProfileDir(name)

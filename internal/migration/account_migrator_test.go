@@ -2,6 +2,7 @@ package migration
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -802,5 +803,122 @@ func TestAccountMigrator_CorruptSourceStateLeavesNothing(t *testing.T) {
 				t.Errorf("store changed: %v", e.store.mutations())
 			}
 		})
+	}
+}
+
+func TestKeychainStore_LongLoginGoesThroughArgv(t *testing.T) {
+	var calls [][]string
+	var stdins []string
+	k := &KeychainStore{run: func(stdin, name string, args ...string) (string, string, int, error) {
+		calls = append(calls, append([]string{name}, args...))
+		stdins = append(stdins, stdin)
+		return "", "", 0, nil
+	}}
+	short := []byte(strings.Repeat("a", 1900)) // 3800 hex: the line fits
+	long := []byte(strings.Repeat("a", 2000))  // 4000 hex: the line does not
+	if err := k.Set("svc", "sam", short); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(calls[0], []string{"/usr/bin/security", "-i"}) || !strings.Contains(stdins[0], hex.EncodeToString(short)) {
+		t.Errorf("short login: argv %v", calls[0])
+	}
+	if err := k.Set("svc", "sam", long); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"/usr/bin/security", "add-generic-password", "-U", "-a", "sam", "-s", "svc", "-X", hex.EncodeToString(long)}
+	if !slices.Equal(calls[1], want) || stdins[1] != "" {
+		t.Errorf("long login: argv %v stdin %q", calls[1][:8], stdins[1])
+	}
+}
+
+func TestKeychainStore_GetPrefersCurrentUser(t *testing.T) {
+	var calls [][]string
+	run := func(_, name string, args ...string) (string, string, int, error) {
+		calls = append(calls, args)
+		i := slices.Index(args, "-a")
+		switch {
+		case i >= 0 && args[i+1] == "sam":
+			return "    \"acct\"<blob>=\"sam\"\n", "password: \"mine\"\n", 0, nil
+		case i >= 0:
+			return "", "could not be found", 44, nil
+		}
+		return "    \"acct\"<blob>=\"other\"\n", "password: \"theirs\"\n", 0, nil
+	}
+	secret, acct, _, err := (&KeychainStore{run: run, user: "sam"}).Get("svc")
+	if err != nil || string(secret) != "mine" || acct != "sam" || len(calls) != 1 {
+		t.Errorf("own item: %q %q %v after %v", secret, acct, err, calls)
+	}
+	calls = nil
+	secret, acct, _, err = (&KeychainStore{run: run, user: "nobody"}).Get("svc")
+	if err != nil || string(secret) != "theirs" || acct != "other" {
+		t.Errorf("fallback: %q %q %v", secret, acct, err)
+	}
+	if len(calls) != 2 || !slices.Contains(calls[0], "nobody") || slices.Contains(calls[1], "-a") {
+		t.Errorf("calls = %v, want -a nobody then -s alone", calls)
+	}
+}
+
+func TestAccountMigrator_RefusesSessionInAccount(t *testing.T) {
+	e := newMigrateEnv(t, "p")
+	e.store.items[e.envService("p")] = fakeCred{secret: []byte("s")}
+	proc := ClaudeProcess{PID: 31, ConfigDir: e.paths.AccountDir("p") + "/", EnvKnown: true}
+	r := only(t, must(e.migrator(proc).Migrate(false)))
+	if r.Status != AccountRefused || !strings.Contains(r.Reason, "31") {
+		t.Errorf("result %+v", r)
+	}
+	if len(e.store.mutations()) != 0 {
+		t.Errorf("store changed: %v", e.store.mutations())
+	}
+}
+
+func TestSetJSONKey_NullFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".claude.json")
+	os.WriteFile(path, []byte("null"), 0644)
+	if err := setJSONKey(path, "oauthAccount", nil, 0); err != nil {
+		t.Fatalf("remove from null: %v", err)
+	}
+	if err := setJSONKey(path, "oauthAccount", json.RawMessage(`{"e":"x"}`), 0600); err != nil {
+		t.Fatalf("set on null: %v", err)
+	}
+	if got := readJSONMap(t, path); got["oauthAccount"] == nil {
+		t.Errorf("got %v", got)
+	}
+	if _, has, err := readJSONKey(path, "missing"); err != nil || has {
+		t.Errorf("readJSONKey: %v %v", has, err)
+	}
+}
+
+func TestAccountMigrator_NullStateFiles(t *testing.T) {
+	e := newMigrateEnv(t, "default")
+	e.makeGlobal(t, "default")
+	e.store.items[keychainService] = fakeCred{secret: []byte("s"), acct: "sam"}
+	os.WriteFile(e.globalState(), []byte("null"), 0600)
+	r := only(t, must(e.migrator().Migrate(false)))
+	if r.Status != AccountMoved {
+		t.Errorf("result %+v", r)
+	}
+}
+
+func TestGuardClaudeDir(t *testing.T) {
+	root := t.TempDir()
+	ccp := filepath.Join(root, "ccp")
+	acct := filepath.Join(ccp, "accounts", "w")
+	os.MkdirAll(acct, 0755)
+	os.WriteFile(filepath.Join(acct, "keep"), []byte("x"), 0644)
+	paths := &config.Paths{CcpDir: ccp, ClaudeDir: acct, HubDir: filepath.Join(ccp, "hub"), ProfilesDir: filepath.Join(ccp, "profiles")}
+
+	if err := GuardClaudeDir(paths); err == nil || !strings.Contains(err.Error(), "unset CLAUDE_CONFIG_DIR") {
+		t.Errorf("account folder: %v", err)
+	}
+	m := NewMigrator(paths)
+	if err := m.Execute(&MigrationPlan{}, false); err == nil {
+		t.Error("Execute ran on a folder inside ~/.ccp")
+	}
+	if _, err := os.Stat(filepath.Join(acct, "keep")); err != nil {
+		t.Errorf("account folder touched: %v", err)
+	}
+	paths.ClaudeDir = filepath.Join(root, "home", ".claude")
+	if err := GuardClaudeDir(paths); err != nil {
+		t.Errorf("~/.claude refused: %v", err)
 	}
 }

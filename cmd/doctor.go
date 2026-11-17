@@ -70,31 +70,26 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Check 2: Is ~/.claude a symlink?
 	fmt.Print("Checking ~/.claude symlink... ")
-	if !paths.ClaudeDirIsSymlink() {
+	if target, problems := checkGlobalSymlink(paths); len(problems) > 0 {
 		fmt.Println("FAIL")
-		fmt.Println("  → ~/.claude is not a symlink")
-		fmt.Println("  → Run 'ccp init --force' to reinitialize")
+		for _, p := range problems {
+			fmt.Printf("  → %s\n", p)
+		}
 		issues++
 	} else {
-		target, err := os.Readlink(paths.ClaudeDir)
-		if err != nil {
-			fmt.Println("FAIL")
-			fmt.Printf("  → Cannot read symlink: %v\n", err)
-			issues++
-		} else {
-			// Resolve relative symlink targets against the symlink's parent dir
-			resolvedTarget := target
-			if !filepath.IsAbs(resolvedTarget) {
-				resolvedTarget = filepath.Join(filepath.Dir(paths.ClaudeDir), resolvedTarget)
-			}
-			if _, err := os.Stat(resolvedTarget); os.IsNotExist(err) {
-				fmt.Println("FAIL")
-				fmt.Printf("  → Symlink target does not exist: %s\n", target)
-				issues++
-			} else {
-				fmt.Printf("OK → %s\n", filepath.Base(target))
-			}
+		fmt.Printf("OK → %s\n", filepath.Base(target))
+	}
+
+	// Check 2b: accounts linked to a missing profile or with broken links
+	if accountProblems := checkAccounts(paths); len(accountProblems) > 0 {
+		fmt.Print("Checking accounts... ")
+		fmt.Println("FAIL")
+		for _, p := range accountProblems {
+			fmt.Printf("  → %s\n", p)
 		}
+		issues += len(accountProblems)
+	} else if accounts, _ := profile.ListAccounts(paths); len(accounts) > 0 {
+		fmt.Printf("Checking accounts... OK (%d)\n", len(accounts))
 	}
 
 	// Check 3: Hub structure
@@ -524,4 +519,67 @@ func checkSourceItems(paths *config.Paths, fix bool) (issues, fixed int) {
 		fmt.Println("    run 'ccp install' to recreate them")
 	}
 	return issues, fixed
+}
+
+// checkGlobalSymlink checks ~/.claude (always the global path: inside an
+// account or a CLAUDE_CONFIG_DIR session the config folder is a real one) and
+// returns its target, or what is wrong with it.
+func checkGlobalSymlink(paths *config.Paths) (target string, problems []string) {
+	global := *paths
+	global.ClaudeDir = paths.GlobalClaudeDir
+	if !global.ClaudeDirIsSymlink() {
+		return "", []string{"~/.claude is not a symlink", "Run 'ccp init --force' to reinitialize"}
+	}
+	target, err := os.Readlink(global.ClaudeDir)
+	if err != nil {
+		return "", []string{fmt.Sprintf("Cannot read symlink: %v", err)}
+	}
+	// Resolve relative symlink targets against the symlink's parent dir
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(global.ClaudeDir), resolved)
+	}
+	if _, err := os.Stat(resolved); os.IsNotExist(err) {
+		return target, []string{fmt.Sprintf("Symlink target does not exist: %s", target)}
+	}
+	return target, nil
+}
+
+// checkAccounts reports accounts whose binding is unreadable, whose profile is
+// gone, or that hold broken links.
+func checkAccounts(paths *config.Paths) []string {
+	accounts, err := profile.ListAccounts(paths)
+	if err != nil {
+		return []string{fmt.Sprintf("cannot list accounts: %v", err)}
+	}
+	mgr := profile.NewManager(paths)
+	var problems []string
+	for _, a := range accounts {
+		switch {
+		case a.Err != nil:
+			problems = append(problems, fmt.Sprintf("account %s: %v; run 'ccp env <profile> --account %s --relink'", a.Name, a.Err, a.Name))
+			continue
+		case !mgr.Exists(a.Profile):
+			problems = append(problems, fmt.Sprintf("account %s is linked to missing profile '%s'; run 'ccp env <profile> --account %s --relink'", a.Name, a.Profile, a.Name))
+			continue
+		}
+		entries, err := os.ReadDir(a.Dir)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("account %s: %v", a.Name, err))
+			continue
+		}
+		var broken []string
+		for _, e := range entries {
+			if e.Type()&os.ModeSymlink == 0 {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(a.Dir, e.Name())); err != nil {
+				broken = append(broken, e.Name())
+			}
+		}
+		if len(broken) > 0 {
+			problems = append(problems, fmt.Sprintf("account %s has %d broken link(s) (%s); run 'ccp env %s --account %s' to relink", a.Name, len(broken), strings.Join(broken, ", "), a.Profile, a.Name))
+		}
+	}
+	return problems
 }

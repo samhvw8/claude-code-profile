@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -54,10 +55,14 @@ func runProfileDelete(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("profile not found: %s", profileName)
 	}
 
-	// Check if this is the active profile
-	active, _ := mgr.GetActive()
+	// Check if this is the active profile: the ~/.claude symlink, or this
+	// shell's CLAUDE_CONFIG_DIR (the profile folder or one of its accounts).
+	active, _ := mgr.GetCurrent()
 	if active != nil && active.Name == profileName {
 		return fmt.Errorf("cannot delete active profile '%s'\n\nSwitch to another profile first: ccp use <other-profile>", profileName)
+	}
+	if err := refuseBoundAccounts(paths, profileName); err != nil {
+		return err
 	}
 
 	// Check if this is the only profile
@@ -94,4 +99,22 @@ func runProfileDelete(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Deleted profile: %s\n", profileName)
 	return nil
+}
+
+// refuseBoundAccounts stops a delete that would leave accounts linked to a
+// missing profile: each one must be relinked to another profile first.
+func refuseBoundAccounts(paths *config.Paths, profileName string) error {
+	accounts, err := profile.AccountsBoundTo(paths, profileName)
+	if err != nil {
+		return fmt.Errorf("failed to list accounts: %w", err)
+	}
+	if len(accounts) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "cannot delete profile '%s': %d account(s) are linked to it\n\nRelink each one to another profile first (close its Claude sessions):\n", profileName, len(accounts))
+	for _, a := range accounts {
+		fmt.Fprintf(&b, "  ccp env <other-profile> --account %s --relink\n", a.Name)
+	}
+	return errors.New(strings.TrimRight(b.String(), "\n"))
 }
