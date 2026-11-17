@@ -37,11 +37,12 @@ func KeychainServiceFor(dir string, global bool) string {
 }
 
 // CredentialStore reads and writes one login secret by key: a Keychain
-// service on macOS, a file path elsewhere.
+// service on macOS, a file path elsewhere. Delete removes the login of acct
+// and returns a warning when another login under the same key remains.
 type CredentialStore interface {
 	Get(key string) (secret []byte, acct string, found bool, err error)
 	Set(key, acct string, secret []byte) error
-	Delete(key string) error
+	Delete(key, acct string) (warning string, err error)
 }
 
 // commandRunner runs a program with stdin and returns its stdout, stderr and
@@ -67,6 +68,12 @@ func execRunner(stdin, name string, args ...string) (string, string, int, error)
 // keychainNotFound is the exit code of security(1) for a missing item.
 const keychainNotFound = 44
 
+// securityBin is run by absolute path: the login token passes through it.
+const securityBin = "/usr/bin/security"
+
+// maxKeychainDeletes caps the delete loop; security deletes one match per run.
+const maxKeychainDeletes = 10
+
 // KeychainStore is the macOS login Keychain through the security CLI. The
 // secret never appears in argv: writes go through "security -i" on stdin.
 type KeychainStore struct {
@@ -77,7 +84,7 @@ type KeychainStore struct {
 func NewKeychainStore() *KeychainStore { return &KeychainStore{run: execRunner} }
 
 func (k *KeychainStore) Get(service string) ([]byte, string, bool, error) {
-	out, errOut, code, err := k.run("", "security", "find-generic-password", "-g", "-s", service)
+	out, errOut, code, err := k.run("", securityBin, "find-generic-password", "-g", "-s", service)
 	if err != nil {
 		return nil, "", false, err
 	}
@@ -118,13 +125,13 @@ func parseKeychainValue(v string) (string, error) {
 		h, _, _ := strings.Cut(v[2:], " ")
 		b, err := hex.DecodeString(h)
 		if err != nil {
-			return "", fmt.Errorf("bad hex value: %w", err)
+			return "", fmt.Errorf("bad hex value (%d bytes)", len(v)) // never echo the value
 		}
 		return string(b), nil
 	case len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"':
 		return v[1 : len(v)-1], nil
 	}
-	return "", fmt.Errorf("unrecognized value %q", v)
+	return "", fmt.Errorf("unrecognized value (%d bytes)", len(v)) // never echo the value
 }
 
 func (k *KeychainStore) Set(service, acct string, secret []byte) error {
@@ -134,26 +141,45 @@ func (k *KeychainStore) Set(service, acct string, secret []byte) error {
 		}
 	}
 	line := fmt.Sprintf("add-generic-password -U -a \"%s\" -s \"%s\" -X %s\n", acct, service, hex.EncodeToString(secret))
-	out, errOut, code, err := k.run(line, "security", "-i")
+	out, errOut, code, err := k.run(line, securityBin, "-i")
 	if err != nil {
 		return err
 	}
 	// security -i exits 0 even when a command fails; it reports "returned N".
+	// Only that line is quoted back: the rest could echo the hex secret.
 	if code != 0 || strings.Contains(out+errOut, "returned") {
-		return fmt.Errorf("security add-generic-password -s %q failed: %s", service, strings.TrimSpace(out+errOut))
+		status := fmt.Sprintf("exit %d", code)
+		for l := range strings.SplitSeq(out+errOut, "\n") {
+			if _, n, ok := strings.Cut(l, "returned "); ok {
+				status = "returned " + strings.TrimSpace(n)
+			}
+		}
+		return fmt.Errorf("security add-generic-password -s %q failed: %s", service, status)
 	}
 	return nil
 }
 
-func (k *KeychainStore) Delete(service string) error {
-	_, errOut, code, err := k.run("", "security", "delete-generic-password", "-s", service)
-	if err != nil {
-		return err
+// Delete removes every item of service and acct (security deletes one match
+// per run), then reports an item of the same service under another account,
+// which it leaves alone.
+func (k *KeychainStore) Delete(service, acct string) (string, error) {
+	for range maxKeychainDeletes {
+		_, errOut, code, err := k.run("", securityBin, "delete-generic-password", "-s", service, "-a", acct)
+		if err != nil {
+			return "", err
+		}
+		if code == keychainNotFound {
+			_, other, found, err := k.Get(service)
+			if err != nil || !found {
+				return "", err
+			}
+			return fmt.Sprintf("Keychain still holds %q for account %q; left as is", service, other), nil
+		}
+		if code != 0 {
+			return "", fmt.Errorf("security delete-generic-password -s %q -a %q: exit %d: %s", service, acct, code, strings.TrimSpace(errOut))
+		}
 	}
-	if code != 0 && code != keychainNotFound {
-		return fmt.Errorf("security delete-generic-password -s %q: exit %d: %s", service, code, strings.TrimSpace(errOut))
-	}
-	return nil
+	return "", fmt.Errorf("Keychain %q for account %q still present after %d deletes", service, acct, maxKeychainDeletes)
 }
 
 // FileStore keeps a login in a file (Claude Code's .credentials.json); the
@@ -175,11 +201,11 @@ func (FileStore) Set(path, _ string, secret []byte) error {
 	return writeFileAtomic(path, secret, 0600)
 }
 
-func (FileStore) Delete(path string) error {
+func (FileStore) Delete(path, _ string) (string, error) {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		return "", err
 	}
-	return nil
+	return "", nil
 }
 
 // writeFileAtomic writes data through a temp file and rename, so a crash

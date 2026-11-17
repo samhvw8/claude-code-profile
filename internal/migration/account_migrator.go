@@ -31,7 +31,7 @@ func NewAccountMigrator(paths *config.Paths) (*AccountMigrator, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		m.store = NewKeychainStore()
-		m.procs = psLister{run: execRunner}
+		m.procs = newSysctlLister()
 	case "linux":
 		m.store = FileStore{}
 		m.procs = procLister{root: "/proc"}
@@ -78,86 +78,114 @@ func (m *AccountMigrator) Migrate(dryRun bool) ([]AccountMigrationResult, error)
 		return nil, err
 	}
 	var procs []ClaudeProcess
+	var procsErr error
 	listed := false
-	var results []AccountMigrationResult
-	for _, p := range profiles {
-		r := AccountMigrationResult{Profile: p.Name}
-		src, warn, err := m.findSource(p.Name)
-		r.Warnings = append(r.Warnings, warn...)
-		if err != nil {
-			r.Status, r.Reason = AccountFailed, err.Error()
-			results = append(results, r)
-			continue
-		}
-		if src == nil {
-			r.Status, r.Reason = AccountSkipped, "no login"
-			results = append(results, r)
-			continue
-		}
-		r.Global = src.global
-		if err := profile.ValidateAccountName(p.Name); err != nil {
-			r.Status, r.Reason = AccountSkipped, err.Error()
-			results = append(results, r)
-			continue
-		}
-		dir, err := filepath.Abs(m.paths.AccountDir(p.Name))
-		if err != nil {
-			return nil, err
-		}
-		dir = filepath.Clean(dir)
-		if bound, err := profile.AccountProfile(dir); err == nil && bound != p.Name {
-			r.Status, r.Reason = AccountRefused, fmt.Sprintf("account %q is linked to profile %q", p.Name, bound)
-			results = append(results, r)
-			continue
-		}
-		target := m.credentialKey(dir, false)
-		if _, _, found, err := m.store.Get(target); err != nil {
-			r.Status, r.Reason = AccountFailed, err.Error()
-			results = append(results, r)
-			continue
-		} else if found {
-			r.Status, r.Reason = AccountSkipped, "already migrated"
-			results = append(results, r)
-			continue
-		}
+	listProcs := func() ([]ClaudeProcess, error) {
 		if !listed {
-			if procs, err = m.procs.ClaudeProcesses(); err != nil {
-				return nil, fmt.Errorf("cannot list Claude Code processes: %w", err)
-			}
+			procs, procsErr = m.procs.ClaudeProcesses()
 			listed = true
 		}
-		if pids := m.usingSource(procs, p.Name, src); len(pids) > 0 {
-			r.Status = AccountRefused
-			r.Reason = fmt.Sprintf("Claude Code is running on this login (PID %s); close those sessions and rerun", strings.Join(pids, ", "))
-			results = append(results, r)
-			continue
-		}
-		if dryRun {
-			r.Status = AccountWouldMove
-			r.Reason = fmt.Sprintf("%s -> %s", m.describe(src.key), m.describe(target))
-			results = append(results, r)
-			continue
-		}
-		linked, warnings, err := profile.LinkAccount(m.paths, p.Name, p.Name, false)
-		r.Warnings = append(r.Warnings, warnings...)
-		if err == nil && linked != dir {
-			err = fmt.Errorf("account folder %s, expected %s", linked, dir)
-		}
+		return procs, procsErr
+	}
+	var results []AccountMigrationResult
+	for _, p := range profiles {
+		r, err := m.migrateOne(p.Name, dryRun, listProcs)
 		if err != nil {
-			r.Status, r.Reason = AccountFailed, err.Error()
-			results = append(results, r)
-			continue
-		}
-		moveWarn, err := m.move(src, target, dir)
-		r.Warnings = append(r.Warnings, moveWarn...)
-		if err != nil {
-			r.Status, r.Reason = AccountFailed, err.Error()
-		} else {
-			r.Status, r.Reason = AccountMoved, fmt.Sprintf("%s -> %s", m.describe(src.key), m.describe(target))
+			return nil, err
 		}
 		results = append(results, r)
 	}
 	return results, nil
+}
+
+// migrateOne moves one profile's login. Every check runs before the first
+// write, so a skipped or refused profile is left exactly as it was.
+func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() ([]ClaudeProcess, error)) (AccountMigrationResult, error) {
+	r := AccountMigrationResult{Profile: name}
+	done := func(status, reason string) (AccountMigrationResult, error) {
+		r.Status, r.Reason = status, reason
+		return r, nil
+	}
+	if err := profile.ValidateAccountName(name); err != nil {
+		return done(AccountSkipped, err.Error())
+	}
+	dir, err := filepath.Abs(m.paths.AccountDir(name))
+	if err != nil {
+		return r, err
+	}
+	dir = filepath.Clean(dir)
+	target := m.credentialKey(dir, false)
+	targetSecret, _, targetFound, err := m.store.Get(target)
+	if err != nil {
+		return done(AccountFailed, err.Error())
+	}
+
+	src, warn, err := m.findSource(name)
+	r.Warnings = append(r.Warnings, warn...)
+	if err != nil {
+		return done(AccountFailed, err.Error())
+	}
+	if src == nil {
+		if targetFound {
+			return done(AccountSkipped, "already migrated")
+		}
+		return done(AccountSkipped, "no login")
+	}
+	r.Global = src.global
+
+	// A target already holding the same secret is a move that stopped
+	// between writing the target and deleting the source: finish it.
+	resume := false
+	if targetFound {
+		srcSecret, _, _, err := m.store.Get(src.key)
+		if err != nil {
+			return done(AccountFailed, err.Error())
+		}
+		if !bytes.Equal(srcSecret, targetSecret) {
+			return done(AccountRefused, fmt.Sprintf("both %s and %s hold a login; remove one by hand", m.describe(src.key), m.describe(target)))
+		}
+		resume = true
+	}
+
+	if bound, err := profile.AccountProfile(dir); err == nil && bound != name {
+		return done(AccountRefused, fmt.Sprintf("account %q is linked to profile %q", name, bound))
+	}
+	if _, _, err := readJSONKey(src.stateFile, "oauthAccount"); err != nil {
+		return done(AccountFailed, err.Error())
+	}
+	procs, err := listProcs()
+	if err != nil {
+		return r, fmt.Errorf("cannot list Claude Code processes: %w", err)
+	}
+	if pids := m.usingSource(procs, name, src); len(pids) > 0 {
+		return done(AccountRefused, fmt.Sprintf("Claude Code is running on this login (PID %s); close those sessions and rerun", strings.Join(pids, ", ")))
+	}
+
+	plan := fmt.Sprintf("%s -> %s", m.describe(src.key), m.describe(target))
+	if resume {
+		plan += " (finished an interrupted move)"
+	}
+	if dryRun {
+		if resume {
+			plan = fmt.Sprintf("%s -> %s (finish an interrupted move)", m.describe(src.key), m.describe(target))
+		}
+		return done(AccountWouldMove, plan)
+	}
+
+	linked, warnings, err := profile.LinkAccount(m.paths, name, name, false)
+	r.Warnings = append(r.Warnings, warnings...)
+	if err == nil && linked != dir {
+		err = fmt.Errorf("account folder %s, expected %s", linked, dir)
+	}
+	if err != nil {
+		return done(AccountFailed, err.Error())
+	}
+	moveWarn, err := m.move(src, target, dir, resume)
+	r.Warnings = append(r.Warnings, moveWarn...)
+	if err != nil {
+		return done(AccountFailed, err.Error())
+	}
+	return done(AccountMoved, plan)
 }
 
 // credentialKey is where Claude Code keeps the login for a config folder.
@@ -268,7 +296,7 @@ func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *l
 // move copies the login to target, verifies it, carries oauthAccount into the
 // account's .claude.json, and only then deletes the source. A failure before
 // the source is deleted rolls the target back.
-func (m *AccountMigrator) move(src *loginSource, target, dir string) (warnings []string, err error) {
+func (m *AccountMigrator) move(src *loginSource, target, dir string, resume bool) (warnings []string, err error) {
 	secret, acct, found, err := m.store.Get(src.key)
 	if err != nil {
 		return nil, err
@@ -282,7 +310,7 @@ func (m *AccountMigrator) move(src *loginSource, target, dir string) (warnings [
 	stateChanged := false
 	rollback := func(cause error) error {
 		var errs []error
-		if err := m.store.Delete(target); err != nil {
+		if _, err := m.store.Delete(target, acct); err != nil {
 			errs = append(errs, fmt.Errorf("could not remove %s: %w", m.describe(target), err))
 		}
 		if stateChanged {
@@ -302,8 +330,10 @@ func (m *AccountMigrator) move(src *loginSource, target, dir string) (warnings [
 		return fmt.Errorf("%w (rolled back; the login is unchanged)", cause)
 	}
 
-	if err := m.store.Set(target, acct, secret); err != nil {
-		return nil, rollback(fmt.Errorf("writing %s: %w", m.describe(target), err))
+	if !resume {
+		if err := m.store.Set(target, acct, secret); err != nil {
+			return nil, rollback(fmt.Errorf("writing %s: %w", m.describe(target), err))
+		}
 	}
 	got, _, found, err := m.store.Get(target)
 	if err != nil || !found || !bytes.Equal(got, secret) {
@@ -326,8 +356,12 @@ func (m *AccountMigrator) move(src *loginSource, target, dir string) (warnings [
 		warnings = append(warnings, fmt.Sprintf("no oauthAccount in %s; Claude Code fills it in on first run", src.stateFile))
 	}
 
-	if err := m.store.Delete(src.key); err != nil {
+	warn, err := m.store.Delete(src.key, acct)
+	if err != nil {
 		return nil, rollback(fmt.Errorf("removing %s: %w", m.describe(src.key), err))
+	}
+	if warn != "" {
+		warnings = append(warnings, warn)
 	}
 	if hasOauth {
 		if err := setJSONKey(src.stateFile, "oauthAccount", nil, 0); err != nil {
