@@ -46,8 +46,10 @@ func runRoot(cmd *cobra.Command, args []string) {
 }
 
 func Execute() {
+	// Cobra would print the error too; print it once, here.
+	rootCmd.SilenceErrors = true
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }
