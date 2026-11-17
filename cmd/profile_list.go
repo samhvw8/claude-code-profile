@@ -56,8 +56,18 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 		activeName = active.Name
 	}
 
-	// Also check CLAUDE_CONFIG_DIR
+	// Also check CLAUDE_CONFIG_DIR; an account folder counts as its profile
 	envProfile := os.Getenv("CLAUDE_CONFIG_DIR")
+	envName, envAccount := "", ""
+	if envProfile != "" {
+		envName, envAccount = profile.ConfigDirProfile(paths, envProfile)
+	}
+	activeEnv := func(p *profile.Profile) bool {
+		if envAccount != "" {
+			return envName == p.Name
+		}
+		return envProfile != "" && envProfile == p.Path
+	}
 
 	// JSON output
 	if profileListJSON {
@@ -67,6 +77,7 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 			Path        string `json:"path"`
 			Active      bool   `json:"active"`
 			ActiveEnv   bool   `json:"active_env,omitempty"`
+			Account     string `json:"account,omitempty"`
 		}
 
 		var output []profileJSON
@@ -77,8 +88,9 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 				Path:        p.Path,
 				Active:      p.Name == activeName,
 			}
-			if envProfile != "" && envProfile == p.Path {
+			if activeEnv(p) {
 				pj.ActiveEnv = true
+				pj.Account = envAccount
 			}
 			output = append(output, pj)
 		}
@@ -96,11 +108,15 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 		if p.Name == activeName {
 			status = "active (symlink)"
 		}
-		if envProfile != "" && envProfile == p.Path {
+		if activeEnv(p) {
 			if status != "" {
 				status += ", "
 			}
-			status += "active (env)"
+			if envAccount != "" {
+				status += "active (env, account " + envAccount + ")"
+			} else {
+				status += "active (env)"
+			}
 		}
 
 		desc := p.Manifest.Description

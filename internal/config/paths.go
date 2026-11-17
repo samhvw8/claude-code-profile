@@ -145,6 +145,18 @@ func (p *Paths) ProfileDir(name string) string {
 	return filepath.Join(p.ProfilesDir, name)
 }
 
+// AccountsDir returns the directory holding account folders (~/.ccp/accounts).
+// An account folder is a CLAUDE_CONFIG_DIR of its own that links a profile's
+// entries, so one profile can run under several Claude logins.
+func (p *Paths) AccountsDir() string {
+	return filepath.Join(p.CcpDir, "accounts")
+}
+
+// AccountDir returns the folder for a specific account
+func (p *Paths) AccountDir(name string) string {
+	return filepath.Join(p.AccountsDir(), name)
+}
+
 // HubItemDir returns the directory for a specific hub item type
 func (p *Paths) HubItemDir(itemType HubItemType) string {
 	return filepath.Join(p.HubDir, string(itemType))

@@ -30,6 +30,16 @@ func TestResolvePaths(t *testing.T) {
 	}
 }
 
+func TestPathsAccountDir(t *testing.T) {
+	paths := &Paths{CcpDir: "/home/user/.ccp"}
+	if got, want := paths.AccountsDir(), "/home/user/.ccp/accounts"; got != want {
+		t.Errorf("AccountsDir() = %q, want %q", got, want)
+	}
+	if got, want := paths.AccountDir("work1"), "/home/user/.ccp/accounts/work1"; got != want {
+		t.Errorf("AccountDir() = %q, want %q", got, want)
+	}
+}
+
 func TestPathsProfileDir(t *testing.T) {
 	paths := &Paths{
 		CcpDir:      "/home/user/.ccp",

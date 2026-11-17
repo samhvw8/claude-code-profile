@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
 
 var whichPathFlag bool
@@ -42,8 +43,15 @@ func runWhich(cmd *cobra.Command, args []string) error {
 		if whichPathFlag {
 			fmt.Println(envDir)
 		} else {
-			profileName := filepath.Base(envDir)
-			fmt.Printf("%s (from CLAUDE_CONFIG_DIR)\n", profileName)
+			profileName, account := profile.ConfigDirProfile(paths, envDir)
+			switch {
+			case account == "":
+				fmt.Printf("%s (from CLAUDE_CONFIG_DIR)\n", profileName)
+			case profileName == "":
+				fmt.Printf("unknown (account %s, not linked to a profile, from CLAUDE_CONFIG_DIR)\n", account)
+			default:
+				fmt.Printf("%s (account %s, from CLAUDE_CONFIG_DIR)\n", profileName, account)
+			}
 		}
 		return nil
 	}

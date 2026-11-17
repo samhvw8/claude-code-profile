@@ -12,7 +12,9 @@ import (
 )
 
 var (
-	envFormat string
+	envFormat  string
+	envAccount string
+	envRelink  bool
 )
 
 var envCmd = &cobra.Command{
@@ -26,16 +28,21 @@ Supported formats:
   direnv  - Update .envrc with export CLAUDE_CONFIG_DIR
   shell   - Print shell export command (default)
 
+With --account, CLAUDE_CONFIG_DIR is the account folder ~/.ccp/accounts/<name>,
+which keeps its own Claude login and links everything else to the profile.
+
 Examples:
   ccp env dev                    # Print shell export
   ccp env dev --format=mise      # Update mise.toml
-  ccp env dev --format=direnv    # Update .envrc`,
+  ccp env dev --format=direnv    # Update .envrc
+  ccp env default --account work1 --format=mise`,
 	Args: cobra.ExactArgs(1),
 	RunE: runEnv,
 }
 
 func init() {
 	envCmd.Flags().StringVarP(&envFormat, "format", "f", "shell", "Output format: shell, mise, direnv")
+	addAccountFlags(envCmd, &envAccount, &envRelink)
 	rootCmd.AddCommand(envCmd)
 }
 
@@ -61,7 +68,16 @@ func runEnv(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("profile not found: %s", profileName)
 	}
 
-	profilePath := paths.ProfileDir(profileName)
+	switch envFormat {
+	case "shell", "mise", "direnv":
+	default:
+		return fmt.Errorf("unknown format: %s (valid: shell, mise, direnv)", envFormat)
+	}
+
+	profilePath, err := activationDir(paths, profileName, envAccount, envRelink)
+	if err != nil {
+		return err
+	}
 
 	switch envFormat {
 	case "shell":
