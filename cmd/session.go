@@ -57,7 +57,7 @@ func runSession(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("profile not found: %s", profileName)
 	}
 
-	configDir, err := activationDir(paths, profileName, sessionAccount, sessionRelink)
+	configDir, err := activationDir(paths, profileName, sessionAccount, cmd.Flags().Changed("account"), sessionRelink)
 	if err != nil {
 		return err
 	}

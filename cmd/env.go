@@ -74,7 +74,7 @@ func runEnv(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unknown format: %s (valid: shell, mise, direnv)", envFormat)
 	}
 
-	profilePath, err := activationDir(paths, profileName, envAccount, envRelink)
+	profilePath, err := activationDir(paths, profileName, envAccount, cmd.Flags().Changed("account"), envRelink)
 	if err != nil {
 		return err
 	}
