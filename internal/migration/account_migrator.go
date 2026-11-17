@@ -120,35 +120,88 @@ func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() 
 		return done(AccountFailed, err.Error())
 	}
 
-	src, warn, err := m.findSource(name)
-	r.Warnings = append(r.Warnings, warn...)
+	// The binding is checked first, so a dry run reports what the real run
+	// would: LinkAccount refuses an unreadable or foreign binding.
+	recorded := ""
+	switch bound, err := profile.AccountProfile(dir); {
+	case err == nil && bound != name:
+		return done(AccountRefused, fmt.Sprintf("account %q is linked to profile %q", name, bound))
+	case err == nil:
+		recorded, _ = profile.AccountMigratedFrom(dir)
+	case !errors.Is(err, os.ErrNotExist):
+		return done(AccountFailed, fmt.Sprintf("%v; fix the file or relink it with 'ccp env %s --account %s --relink'", err, name, name))
+	}
+
+	logins, err := m.logins(name)
 	if err != nil {
 		return done(AccountFailed, err.Error())
 	}
-	if src == nil {
-		if targetFound {
+	leave := func(src *loginSource) {
+		for _, l := range logins {
+			if l != src {
+				r.Warnings = append(r.Warnings, fmt.Sprintf("profile %q also has the login %s; it is left untouched", name, m.describe(l.key)))
+			}
+		}
+	}
+
+	var src *loginSource
+	resume := false
+	switch {
+	case targetFound && recorded != "":
+		// Only the login an earlier run moved may be finished; any other is a
+		// different login (one the user kept, or logged into since).
+		for _, l := range logins {
+			if l.key == recorded {
+				src = l
+			}
+		}
+		leave(src)
+		if src == nil {
 			return done(AccountSkipped, "already migrated")
 		}
-		return done(AccountSkipped, "no login")
-	}
-	r.Global = src.global
-
-	// A target already holding the same secret is a move that stopped
-	// between writing the target and deleting the source: finish it.
-	resume := false
-	if targetFound {
-		srcSecret, _, _, err := m.store.Get(src.key)
+		srcSecret, _, found, err := m.store.Get(src.key)
 		if err != nil {
 			return done(AccountFailed, err.Error())
+		}
+		if !found || !bytes.Equal(srcSecret, targetSecret) {
+			if found {
+				r.Warnings = append(r.Warnings, fmt.Sprintf("%s now holds a different login; it is left untouched", m.describe(src.key)))
+			}
+			return done(AccountSkipped, "already migrated")
+		}
+		resume = true
+	case targetFound:
+		// A target holding the same secret as the source is a move that stopped
+		// between writing the target and recording it: finish it.
+		if len(logins) == 0 {
+			return done(AccountSkipped, "already migrated")
+		}
+		src = logins[0]
+		leave(src)
+		srcSecret, _, found, err := m.store.Get(src.key)
+		if err != nil {
+			return done(AccountFailed, err.Error())
+		}
+		if !found {
+			return done(AccountSkipped, "already migrated (the source login is gone; the account holds the only copy)")
 		}
 		if !bytes.Equal(srcSecret, targetSecret) {
 			return done(AccountRefused, fmt.Sprintf("both %s and %s hold a login; remove one by hand", m.describe(src.key), m.describe(target)))
 		}
 		resume = true
+	default:
+		if len(logins) == 0 {
+			return done(AccountSkipped, "no login")
+		}
+		src = logins[0]
+		leave(src)
 	}
+	r.Global = src.global
 
-	if bound, err := profile.AccountProfile(dir); err == nil && bound != name {
-		return done(AccountRefused, fmt.Sprintf("account %q is linked to profile %q", name, bound))
+	// Claude Code 2.1 reads a non-empty .config.json instead of .claude.json;
+	// moving oauthAccount between .claude.json files would miss it.
+	if cfg := filepath.Join(filepath.Dir(src.stateFile), ".config.json"); profile.NonEmptyConfigJSON(cfg) {
+		return done(AccountRefused, fmt.Sprintf("%s holds Claude Code state that Claude reads instead of %s, which ccp does not handle; merge it into %s or remove it, then rerun", cfg, src.stateFile, src.stateFile))
 	}
 	if _, _, err := readJSONKey(src.stateFile, "oauthAccount"); err != nil {
 		return done(AccountFailed, err.Error())
@@ -162,14 +215,14 @@ func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() 
 	}
 
 	plan := fmt.Sprintf("%s -> %s", m.describe(src.key), m.describe(target))
-	if resume {
-		plan += " (finished an interrupted move)"
-	}
 	if dryRun {
 		if resume {
-			plan = fmt.Sprintf("%s -> %s (finish an interrupted move)", m.describe(src.key), m.describe(target))
+			plan += " (finish an interrupted move)"
 		}
 		return done(AccountWouldMove, plan)
+	}
+	if resume {
+		plan += " (finished an interrupted move)"
 	}
 
 	linked, warnings, err := profile.LinkAccount(m.paths, name, name, false)
@@ -206,50 +259,46 @@ func (m *AccountMigrator) describe(key string) string {
 	return key
 }
 
-// findSource picks the profile's login: the default ~/.claude one when
-// ~/.claude resolves to the profile, else the one keyed by the profile path.
-// When both exist the default one wins and the other is left untouched.
-func (m *AccountMigrator) findSource(name string) (*loginSource, []string, error) {
+// logins lists the profile's logins that exist: the default ~/.claude one
+// (when ~/.claude resolves to the profile) first, then the one keyed by the
+// profile path. The first is the one a fresh move takes.
+func (m *AccountMigrator) logins(name string) ([]*loginSource, error) {
 	profileDir, err := filepath.Abs(m.paths.ProfileDir(name))
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	profileDir = filepath.Clean(profileDir)
-	env := &loginSource{
-		key:       m.credentialKey(profileDir, false),
-		stateFile: filepath.Join(profileDir, ".claude.json"),
-	}
-	var global *loginSource
-	if m.isGlobal(profileDir) {
-		global = &loginSource{
+	var out []*loginSource
+	global := m.isGlobal(profileDir)
+	if global {
+		l := &loginSource{
 			key:       m.credentialKey(profileDir, true),
 			stateFile: filepath.Join(filepath.Dir(m.paths.GlobalClaudeDir), ".claude.json"),
 			global:    true,
 		}
-	}
-
-	var globalFound bool
-	if global != nil {
-		if _, _, globalFound, err = m.store.Get(global.key); err != nil {
-			return nil, nil, err
+		_, _, found, err := m.store.Get(l.key)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			out = append(out, l)
 		}
 	}
 	// Off macOS both keys name the same file when ~/.claude is the profile.
-	envFound := false
-	if global == nil || m.goos == "darwin" {
-		if _, _, envFound, err = m.store.Get(env.key); err != nil {
-			return nil, nil, err
+	if !global || m.goos == "darwin" {
+		l := &loginSource{
+			key:       m.credentialKey(profileDir, false),
+			stateFile: filepath.Join(profileDir, ".claude.json"),
+		}
+		_, _, found, err := m.store.Get(l.key)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			out = append(out, l)
 		}
 	}
-	switch {
-	case globalFound && envFound:
-		return global, []string{fmt.Sprintf("profile %q also has a CLAUDE_CONFIG_DIR login (%s); it is left untouched", name, m.describe(env.key))}, nil
-	case globalFound:
-		return global, nil, nil
-	case envFound:
-		return env, nil, nil
-	}
-	return nil, nil, nil
+	return out, nil
 }
 
 func (m *AccountMigrator) isGlobal(profileDir string) bool {
@@ -266,16 +315,8 @@ func (m *AccountMigrator) isGlobal(profileDir string) bool {
 // sitting at /login, would write its own login under the move). A process whose environment cannot be read counts as using
 // it: refusing is safer than moving a login under a running session.
 func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *loginSource, accountDir string) []string {
-	profileDir, _ := filepath.Abs(m.paths.ProfileDir(name))
-	profileDir = filepath.Clean(profileDir)
-	realProfile, _ := filepath.EvalSymlinks(profileDir)
-	resolvesToProfile := func(dir string) bool {
-		if filepath.Clean(dir) == profileDir {
-			return true
-		}
-		real, err := filepath.EvalSymlinks(dir)
-		return err == nil && realProfile != "" && real == realProfile
-	}
+	profileDir := m.paths.ProfileDir(name)
+	resolvesToProfile := func(dir string) bool { return sameDir(dir, profileDir) }
 	var pids []string
 	for _, p := range procs {
 		match := false
@@ -283,11 +324,11 @@ func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *l
 		case !p.EnvKnown:
 			match = true
 		case src.global:
-			match = p.ConfigDir == "" || filepath.Clean(p.ConfigDir) == filepath.Clean(m.paths.GlobalClaudeDir) || resolvesToProfile(p.ConfigDir)
+			match = p.ConfigDir == "" || sameDir(p.ConfigDir, m.paths.GlobalClaudeDir) || resolvesToProfile(p.ConfigDir)
 		default:
 			match = p.ConfigDir != "" && resolvesToProfile(p.ConfigDir)
 		}
-		if p.EnvKnown && p.ConfigDir != "" && profile.SamePath(p.ConfigDir, accountDir) {
+		if p.EnvKnown && p.ConfigDir != "" && sameDir(p.ConfigDir, accountDir) {
 			match = true
 		}
 		if match {
@@ -295,6 +336,17 @@ func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *l
 		}
 	}
 	return pids
+}
+
+// sameDir reports whether two folder paths are the same: equal once absolute
+// and clean, or resolving to the same folder through symlinks.
+func sameDir(a, b string) bool {
+	if profile.SamePath(a, b) {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 // move copies the login to target, verifies it, carries oauthAccount into the
@@ -311,11 +363,16 @@ func (m *AccountMigrator) move(src *loginSource, target, dir string, resume bool
 
 	targetState := filepath.Join(dir, ".claude.json")
 	prevState, prevErr := os.ReadFile(targetState)
-	stateChanged := false
+	stateChanged, recorded := false, false
 	rollback := func(cause error) error {
 		var errs []error
 		if _, err := m.store.Delete(target, acct); err != nil {
 			errs = append(errs, fmt.Errorf("could not remove %s: %w", m.describe(target), err))
+		}
+		if recorded {
+			if err := profile.SetAccountMigratedFrom(dir, ""); err != nil {
+				errs = append(errs, fmt.Errorf("could not clear the recorded source: %w", err))
+			}
 		}
 		if stateChanged {
 			var err error
@@ -326,6 +383,13 @@ func (m *AccountMigrator) move(src *loginSource, target, dir string, resume bool
 			}
 			if err != nil {
 				errs = append(errs, fmt.Errorf("could not restore %s: %w", targetState, err))
+			}
+		}
+		// A resumed move found oauthAccount already in the account (written by
+		// the interrupted run); with the credential gone it must go too.
+		if resume {
+			if err := setJSONKey(targetState, "oauthAccount", nil, 0); err != nil {
+				errs = append(errs, fmt.Errorf("could not clear oauthAccount in %s: %w", targetState, err))
 			}
 		}
 		if len(errs) > 0 {
@@ -360,6 +424,12 @@ func (m *AccountMigrator) move(src *loginSource, target, dir string, resume bool
 		warnings = append(warnings, fmt.Sprintf("no oauthAccount in %s; Claude Code fills it in on first run", src.stateFile))
 	}
 
+	// Recorded before the source goes, so a crash after the delete still
+	// tells the next run which login was moved (and which to leave alone).
+	if err := profile.SetAccountMigratedFrom(dir, src.key); err != nil {
+		return nil, rollback(fmt.Errorf("recording the moved login: %w", err))
+	}
+	recorded = true
 	warn, err := m.store.Delete(src.key, acct)
 	if err != nil {
 		return nil, rollback(fmt.Errorf("removing %s: %w", m.describe(src.key), err))

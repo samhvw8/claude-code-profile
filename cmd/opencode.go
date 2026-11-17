@@ -115,8 +115,8 @@ func followOpencode(paths *config.Paths, profileName string) {
 	if !profile.OpencodeOptedIn(paths) {
 		return
 	}
-	active, err := profile.NewManager(paths).GetActive()
-	if err != nil || active == nil || active.Name != profileName {
+	active := harnessProfile(paths, profileName)
+	if active == nil {
 		return
 	}
 	result, _, err := profile.OpencodeFollowProfile(paths, active)

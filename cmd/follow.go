@@ -40,8 +40,8 @@ func followHarnesses(paths *config.Paths, profileName string) {
 	followOpencode(paths, profileName)
 	followAgy(paths, profileName)
 
-	active, err := profile.NewManager(paths).GetCurrent()
-	if err != nil || active == nil || active.Name != profileName {
+	active := harnessProfile(paths, profileName)
+	if active == nil {
 		return
 	}
 	for _, h := range []struct {
@@ -78,7 +78,7 @@ func followActive(*cobra.Command, []string) {
 	if err != nil || !paths.IsInitialized() {
 		return
 	}
-	if active, err := profile.NewManager(paths).GetCurrent(); err == nil && active != nil {
+	if active := globalActive(paths); active != nil {
 		followHarnesses(paths, active.Name)
 	}
 }
@@ -86,9 +86,35 @@ func followActive(*cobra.Command, []string) {
 // warnInactiveCarrier says, for a manual sync of a profile that is not the
 // active one, that the global style carrier will not keep its style.
 func warnInactiveCarrier(paths *config.Paths, p *profile.Profile) {
-	active, err := profile.NewManager(paths).GetActive()
-	if err == nil && active != nil && active.Name != p.Name {
+	active := globalActive(paths)
+	if active != nil && active.Name != p.Name {
 		fmt.Printf("  note: output-style carriers follow the active profile ('%s'); its next change replaces '%s''s style\n",
 			active.Name, p.Name)
 	}
+}
+
+// globalActive is the profile ~/.claude points at. The global harnesses (pi,
+// omp, opencode, agy) mirror that one only, whatever CLAUDE_CONFIG_DIR says:
+// a command run from an account or project session must not push its profile
+// into every other harness session.
+func globalActive(paths *config.Paths) *profile.Profile {
+	global := *paths
+	global.ClaudeDir = paths.GlobalClaudeDir
+	if !global.ClaudeDirIsSymlink() {
+		return nil
+	}
+	active, err := profile.NewManager(&global).GetActive()
+	if err != nil {
+		return nil
+	}
+	return active
+}
+
+// harnessProfile returns the profile the global harnesses should follow after
+// profileName changed: the ~/.claude profile when it is profileName, else nil.
+func harnessProfile(paths *config.Paths, profileName string) *profile.Profile {
+	if active := globalActive(paths); active != nil && active.Name == profileName {
+		return active
+	}
+	return nil
 }

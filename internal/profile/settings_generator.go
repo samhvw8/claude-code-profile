@@ -213,6 +213,17 @@ func SettingsChanged(paths *config.Paths, profileDir string, manifest *Manifest)
 // discarded. With force, or when there are none, the whole file is regenerated.
 // Hooks ccp did not create survive either way.
 func ApplySettings(paths *config.Paths, profileDir string, manifest *Manifest, force bool) ([]string, error) {
+	uncaptured, err := applySettings(paths, profileDir, manifest, force)
+	if err == nil {
+		// A first settings.json is a new entry the profile's accounts must see.
+		if name, ok := CcpConfigDirProfile(paths, profileDir); ok {
+			RefreshAccounts(paths, name)
+		}
+	}
+	return uncaptured, err
+}
+
+func applySettings(paths *config.Paths, profileDir string, manifest *Manifest, force bool) ([]string, error) {
 	if !force {
 		uncaptured, err := UncapturedSettings(paths, profileDir, manifest)
 		if err != nil {

@@ -114,7 +114,15 @@ func (m *Migrator) Plan() (*MigrationPlan, error) {
 // GuardClaudeDir refuses a migration source inside ~/.ccp: with
 // CLAUDE_CONFIG_DIR naming a profile or account folder, the migration would
 // move that folder's entries and then delete it.
+//
+// Only a real folder is refused: a symlinked ~/.claude (the normal state once
+// ccp is initialized) points into ~/.ccp by design and keeps init's own
+// "already a symlink" handling.
 func GuardClaudeDir(paths *config.Paths) error {
+	info, err := os.Lstat(paths.ClaudeDir)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return nil
+	}
 	if profile.InsideCcp(paths, paths.ClaudeDir) {
 		return fmt.Errorf("the Claude config folder %s is inside %s (a ccp profile or account, from CLAUDE_CONFIG_DIR); unset CLAUDE_CONFIG_DIR and rerun", paths.ClaudeDir, paths.CcpDir)
 	}

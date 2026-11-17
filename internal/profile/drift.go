@@ -304,8 +304,17 @@ func (d *Detector) detectBundleDrift(profile *Profile) ([]DriftItem, error) {
 	return issues, nil
 }
 
-// Fix reconciles a profile to match its manifest
+// Fix reconciles a profile to match its manifest, then relinks the accounts
+// bound to it so they see entries the fix created.
 func (d *Detector) Fix(profile *Profile, report *DriftReport, opts FixOptions) (*FixResult, error) {
+	result, err := d.fix(profile, report, opts)
+	if err == nil && !opts.DryRun {
+		RefreshAccounts(d.paths, profile.Name)
+	}
+	return result, err
+}
+
+func (d *Detector) fix(profile *Profile, report *DriftReport, opts FixOptions) (*FixResult, error) {
 	result := &FixResult{}
 
 	// Separate hub_missing issues from others

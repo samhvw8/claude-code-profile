@@ -35,6 +35,11 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 	if oldName == newName {
 		return fmt.Errorf("old and new names are the same")
 	}
+	// The new name becomes a folder under profiles/ and an account binding:
+	// "../foo" would move the profile out of ~/.ccp.
+	if err := profile.ValidateProfileName(newName); err != nil {
+		return err
+	}
 
 	paths, err := config.ResolvePaths()
 	if err != nil {
@@ -107,6 +112,16 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 	if isActive {
 		if err := symMgr.Swap(paths.GlobalClaudeDir, newPath); err != nil {
 			return fmt.Errorf("profile renamed but failed to update active symlink: %w", err)
+		}
+	}
+
+	// Accounts whose binding cannot be read may belong to the old name; they
+	// cannot be moved, so say which.
+	if all, err := profile.ListAccounts(paths); err == nil {
+		for _, a := range all {
+			if a.Err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: account %s was not moved: %v; if it belongs to '%s', run 'ccp env %s --account %s --relink'\n", a.Name, a.Err, oldName, newName, a.Name)
+			}
 		}
 	}
 

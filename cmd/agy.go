@@ -116,8 +116,8 @@ func followAgy(paths *config.Paths, profileName string) {
 	if !profile.AgyOptedIn(paths) {
 		return
 	}
-	active, err := profile.NewManager(paths).GetActive()
-	if err != nil || active == nil || active.Name != profileName {
+	active := harnessProfile(paths, profileName)
+	if active == nil {
 		return
 	}
 	result, _, err := profile.AgyFollowProfile(paths, active)

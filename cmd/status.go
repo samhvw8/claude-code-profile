@@ -58,10 +58,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	// Active profile
 	// The global ~/.claude symlink, whatever CLAUDE_CONFIG_DIR says.
-	activeProfile := "none"
-	if target, _ := checkGlobalSymlink(paths); target != "" {
-		activeProfile = filepath.Base(target)
-	}
+	activeProfile := activeProfileLabel(paths)
 
 	// Gather data for JSON output
 	scanner := hub.NewScanner()
@@ -271,4 +268,17 @@ func checkHealth(paths *config.Paths) []string {
 	}
 
 	return issues
+}
+
+// activeProfileLabel names the profile ~/.claude points at, marking one whose
+// folder is gone.
+func activeProfileLabel(paths *config.Paths) string {
+	target, problems := checkGlobalSymlink(paths)
+	switch {
+	case target == "":
+		return "none"
+	case len(problems) > 0:
+		return filepath.Base(target) + " (missing)"
+	}
+	return filepath.Base(target)
 }

@@ -53,22 +53,69 @@ func ValidateAccountName(name string) error {
 
 type accountBinding struct {
 	Profile string `toml:"profile"`
+	// MigratedFrom is the login 'ccp migrate --accounts' moved into this
+	// account (a Keychain service or a credentials file). Only that login may
+	// be finished on a later run; any other is left alone.
+	MigratedFrom string `toml:"migrated_from,omitempty"`
 }
 
-// AccountProfile returns the profile an account folder is linked to.
-func AccountProfile(accountDir string) (string, error) {
-	data, err := os.ReadFile(filepath.Join(accountDir, AccountFile))
-	if err != nil {
-		return "", err
-	}
+func readBinding(accountDir string) (accountBinding, error) {
 	var b accountBinding
+	path := filepath.Join(accountDir, AccountFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return b, err
+	}
 	if err := toml.Unmarshal(data, &b); err != nil {
-		return "", fmt.Errorf("invalid %s: %w", filepath.Join(accountDir, AccountFile), err)
+		return b, fmt.Errorf("invalid %s: %w", path, err)
 	}
 	if b.Profile == "" {
-		return "", fmt.Errorf("%s names no profile", filepath.Join(accountDir, AccountFile))
+		return b, fmt.Errorf("%s names no profile", path)
 	}
-	return b.Profile, nil
+	if err := validateBoundProfile(b.Profile); err != nil {
+		return b, fmt.Errorf("%s: %w", path, err)
+	}
+	return b, nil
+}
+
+// AccountProfile returns the profile an account folder is linked to. A
+// binding naming something that cannot be a profile ("shared", "../hub") is
+// an error, like an unreadable one.
+func AccountProfile(accountDir string) (string, error) {
+	b, err := readBinding(accountDir)
+	return b.Profile, err
+}
+
+// AccountMigratedFrom returns the login recorded as moved into the account,
+// or "" when none was.
+func AccountMigratedFrom(accountDir string) (string, error) {
+	b, err := readBinding(accountDir)
+	return b.MigratedFrom, err
+}
+
+// SetAccountMigratedFrom records (or, with "", clears) the login moved into
+// the account, keeping its binding.
+func SetAccountMigratedFrom(accountDir, key string) error {
+	b, err := readBinding(accountDir)
+	if err != nil {
+		return err
+	}
+	b.MigratedFrom = key
+	data, err := toml.Marshal(b)
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(accountDir, AccountFile+".tmp")
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(accountDir, AccountFile))
+}
+
+// ValidateProfileName rejects a name that cannot be a profile folder: empty,
+// the shared data folder, or anything but a single path segment.
+func ValidateProfileName(name string) error {
+	return validateBoundProfile(name)
 }
 
 // ConfigDirProfile names the profile a CLAUDE_CONFIG_DIR value activates.
@@ -122,8 +169,23 @@ func InsideCcp(paths *config.Paths, dir string) bool {
 			p = parent
 		}
 	}
-	ccp, d := resolve(paths.CcpDir), resolve(dir)
-	return d == ccp || strings.HasPrefix(d, ccp+string(filepath.Separator))
+	// Lexical or resolved: a real ~/.ccp whose profiles/ or accounts/ is a link
+	// into a dotfiles repo still holds those folders, though their resolved
+	// path is elsewhere.
+	under := func(d, root string) bool {
+		return d == root || strings.HasPrefix(d, root+string(filepath.Separator))
+	}
+	for _, d := range []string{absClean(dir), resolve(dir)} {
+		for _, root := range []string{
+			absClean(paths.CcpDir), resolve(paths.CcpDir),
+			resolve(paths.ProfilesDir), resolve(paths.AccountsDir()),
+		} {
+			if under(d, root) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Account is one folder under ~/.ccp/accounts.
@@ -168,6 +230,18 @@ func AccountsBoundTo(paths *config.Paths, profileName string) ([]Account, error)
 		}
 	}
 	return out, nil
+}
+
+// RefreshAccounts relinks the accounts bound to profileName after a command
+// changed the profile's folder, whichever profile that is (not only the
+// active one): an account used through mise, direnv or a shell export never
+// reruns --account. Entries an account holds as real files are reported by
+// the commands that run per account (run/session/env) and by follow, so only
+// failures are printed here.
+func RefreshAccounts(paths *config.Paths, profileName string) {
+	if _, err := RelinkAccounts(paths, profileName, ""); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not relink accounts of '%s': %v\n", profileName, err)
+	}
 }
 
 // RelinkAccounts brings every account linked to profileName up to date with
@@ -249,9 +323,12 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 	default:
 		writeBinding = true
 	}
-	seed, err := accountSeed(paths, dir, profileDir)
+	seed, seedWarning, err := accountSeed(paths, dir, profileDir)
 	if err != nil {
 		return "", nil, err
+	}
+	if seedWarning != "" {
+		warnings = append(warnings, seedWarning)
 	}
 
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -342,12 +419,12 @@ func skipAccountEntry(name string) bool {
 // Code used for the profile, without the login. It returns nil when the
 // account already has one or there is nothing to seed from, and an error for a
 // state file that is not JSON. It writes nothing.
-func accountSeed(paths *config.Paths, dir, profileDir string) ([]byte, error) {
+func accountSeed(paths *config.Paths, dir, profileDir string) ([]byte, string, error) {
 	// A link in its place is removed before seeding, so it does not count.
 	if info, err := os.Lstat(filepath.Join(dir, claudeStateFile)); err == nil && info.Mode()&os.ModeSymlink == 0 {
-		return nil, nil
+		return nil, "", nil
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
+		return nil, "", err
 	}
 
 	// A profile activated globally (~/.claude -> profile) keeps its state in
@@ -358,16 +435,22 @@ func accountSeed(paths *config.Paths, dir, profileDir string) ([]byte, error) {
 			src = filepath.Join(filepath.Dir(paths.GlobalClaudeDir), claudeStateFile)
 		}
 	}
+	// Claude Code 2.1 prefers a non-empty .config.json next to .claude.json;
+	// ccp does not read it, so the account starts without that state.
+	warning := ""
+	if cfg := filepath.Join(filepath.Dir(src), ".config.json"); NonEmptyConfigJSON(cfg) {
+		warning = fmt.Sprintf("%s holds Claude Code state that ccp does not copy; the account is seeded from %s only", cfg, src)
+	}
 	data, err := os.ReadFile(src)
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil // Claude Code creates it on first run
+		return nil, warning, nil // Claude Code creates it on first run
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", src, err)
+		return nil, "", fmt.Errorf("failed to read %s: %w", src, err)
 	}
 	var state map[string]json.RawMessage
 	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("cannot seed account state from %s: %w", src, err)
+		return nil, "", fmt.Errorf("cannot seed account state from %s: %w", src, err)
 	}
 	if state == nil { // a top-level null
 		state = map[string]json.RawMessage{}
@@ -375,9 +458,23 @@ func accountSeed(paths *config.Paths, dir, profileDir string) ([]byte, error) {
 	delete(state, "oauthAccount")
 	out, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return append(out, '\n'), nil
+	return append(out, '\n'), warning, nil
+}
+
+// NonEmptyConfigJSON reports whether path is a .config.json Claude Code would
+// read instead of .claude.json: present and not just {}, null or blank.
+func NonEmptyConfigJSON(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	switch strings.Join(strings.Fields(string(data)), "") {
+	case "", "{}", "null":
+		return false
+	}
+	return true
 }
 
 // writeSeed creates the account's .claude.json (0600) atomically: the data is
