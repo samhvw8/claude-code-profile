@@ -1,0 +1,209 @@
+package migration
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+// Claude Code keeps its OAuth token per config folder. On macOS it is a
+// Keychain generic password whose service is "Claude Code-credentials" for
+// the default folder (~/.claude) and "Claude Code-credentials-<8 hex>" for a
+// CLAUDE_CONFIG_DIR, the hex being the start of sha256 of that path string.
+// Elsewhere it is <config dir>/.credentials.json.
+
+const keychainService = "Claude Code-credentials"
+
+// ConfigDirHash returns the first 8 hex digits of sha256(dir), the suffix
+// Claude Code appends to its Keychain service for a CLAUDE_CONFIG_DIR.
+func ConfigDirHash(dir string) string {
+	sum := sha256.Sum256([]byte(dir))
+	return hex.EncodeToString(sum[:])[:8]
+}
+
+// KeychainServiceFor returns the Keychain service Claude Code uses for a
+// config folder; global selects the default ~/.claude login.
+func KeychainServiceFor(dir string, global bool) string {
+	if global {
+		return keychainService
+	}
+	return keychainService + "-" + ConfigDirHash(dir)
+}
+
+// CredentialStore reads and writes one login secret by key: a Keychain
+// service on macOS, a file path elsewhere.
+type CredentialStore interface {
+	Get(key string) (secret []byte, acct string, found bool, err error)
+	Set(key, acct string, secret []byte) error
+	Delete(key string) error
+}
+
+// commandRunner runs a program with stdin and returns its stdout, stderr and
+// exit code; err is set only when the program could not run.
+type commandRunner func(stdin, name string, args ...string) (stdout, stderr string, code int, err error)
+
+func execRunner(stdin, name string, args ...string) (string, string, int, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Stdin = strings.NewReader(stdin)
+	var out, errOut bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return out.String(), errOut.String(), exitErr.ExitCode(), nil
+	}
+	if err != nil {
+		return "", "", -1, err
+	}
+	return out.String(), errOut.String(), 0, nil
+}
+
+// keychainNotFound is the exit code of security(1) for a missing item.
+const keychainNotFound = 44
+
+// KeychainStore is the macOS login Keychain through the security CLI. The
+// secret never appears in argv: writes go through "security -i" on stdin.
+type KeychainStore struct {
+	run commandRunner
+}
+
+// NewKeychainStore returns a store backed by /usr/bin/security.
+func NewKeychainStore() *KeychainStore { return &KeychainStore{run: execRunner} }
+
+func (k *KeychainStore) Get(service string) ([]byte, string, bool, error) {
+	out, errOut, code, err := k.run("", "security", "find-generic-password", "-g", "-s", service)
+	if err != nil {
+		return nil, "", false, err
+	}
+	if code == keychainNotFound {
+		return nil, "", false, nil
+	}
+	if code != 0 {
+		return nil, "", false, fmt.Errorf("security find-generic-password -s %q: exit %d: %s", service, code, strings.TrimSpace(errOut))
+	}
+	var acct string
+	for line := range strings.SplitSeq(out, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), `"acct"<blob>=`); ok {
+			if acct, err = parseKeychainValue(v); err != nil {
+				return nil, "", false, fmt.Errorf("account of %q: %w", service, err)
+			}
+		}
+	}
+	for line := range strings.SplitSeq(errOut, "\n") {
+		if v, ok := strings.CutPrefix(line, "password: "); ok {
+			s, err := parseKeychainValue(v)
+			if err != nil {
+				return nil, "", false, fmt.Errorf("password of %q: %w", service, err)
+			}
+			return []byte(s), acct, true, nil
+		}
+	}
+	return nil, "", false, fmt.Errorf("security printed no password for %q", service)
+}
+
+// parseKeychainValue decodes a value as security -g prints it: "text",
+// 0x<HEX>  "text" for non-printable data, or <NULL>.
+func parseKeychainValue(v string) (string, error) {
+	v = strings.TrimRight(v, "\r")
+	switch {
+	case v == "<NULL>" || v == "":
+		return "", nil
+	case strings.HasPrefix(v, "0x"):
+		h, _, _ := strings.Cut(v[2:], " ")
+		b, err := hex.DecodeString(h)
+		if err != nil {
+			return "", fmt.Errorf("bad hex value: %w", err)
+		}
+		return string(b), nil
+	case len(v) >= 2 && v[0] == '"' && v[len(v)-1] == '"':
+		return v[1 : len(v)-1], nil
+	}
+	return "", fmt.Errorf("unrecognized value %q", v)
+}
+
+func (k *KeychainStore) Set(service, acct string, secret []byte) error {
+	for _, s := range []string{service, acct} {
+		if strings.ContainsAny(s, "\"\\\n\r") {
+			return fmt.Errorf("refusing Keychain value with quotes or newlines: %q", s)
+		}
+	}
+	line := fmt.Sprintf("add-generic-password -U -a \"%s\" -s \"%s\" -X %s\n", acct, service, hex.EncodeToString(secret))
+	out, errOut, code, err := k.run(line, "security", "-i")
+	if err != nil {
+		return err
+	}
+	// security -i exits 0 even when a command fails; it reports "returned N".
+	if code != 0 || strings.Contains(out+errOut, "returned") {
+		return fmt.Errorf("security add-generic-password -s %q failed: %s", service, strings.TrimSpace(out+errOut))
+	}
+	return nil
+}
+
+func (k *KeychainStore) Delete(service string) error {
+	_, errOut, code, err := k.run("", "security", "delete-generic-password", "-s", service)
+	if err != nil {
+		return err
+	}
+	if code != 0 && code != keychainNotFound {
+		return fmt.Errorf("security delete-generic-password -s %q: exit %d: %s", service, code, strings.TrimSpace(errOut))
+	}
+	return nil
+}
+
+// FileStore keeps a login in a file (Claude Code's .credentials.json); the
+// key is the file path.
+type FileStore struct{}
+
+func (FileStore) Get(path string) ([]byte, string, bool, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, "", false, nil
+	}
+	if err != nil {
+		return nil, "", false, err
+	}
+	return data, "", true, nil
+}
+
+func (FileStore) Set(path, _ string, secret []byte) error {
+	return writeFileAtomic(path, secret, 0600)
+}
+
+func (FileStore) Delete(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// writeFileAtomic writes data through a temp file and rename, so a crash
+// leaves either the old file or the new one. A symlinked path is written at
+// its target, keeping the link.
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		path = real
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".ccp-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
