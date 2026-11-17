@@ -30,13 +30,13 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 |---------|-------------|---------|
 | `ccp init` | Migrate an existing `~/.claude` to hub + default profile | `ccp init` |
 | `ccp migrate` | Run migrations from older ccp versions; `--accounts` (opt-in) moves each profile's Claude login into the account of the same name | `ccp migrate --accounts --dry-run` |
-| `ccp reset` | Undo ccp and restore `~/.claude` | `ccp reset` |
+| `ccp reset` | Undo ccp and restore `~/.claude`; the plan lists account folders and their orphaned logins | `ccp reset` |
 | `ccp use <name>` | Set the project profile (auto-detects mise.toml/.envrc) | `ccp use dev` |
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
 | `ccp which [--path]` | Show the active profile (and account), or its directory | `ccp which --path` |
 | `ccp status` | Status and health | `ccp status` |
-| `ccp doctor` | Diagnose, and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
+| `ccp doctor` | Diagnose (including accounts with a missing profile or broken links), and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
 | `ccp env <profile>` | Configure a project env for a profile, optionally under an account (hidden) | `ccp env default --account work1 --format=mise` |
 | `ccp config init` | Write a default `ccp.toml` | `ccp config init` |
@@ -51,8 +51,8 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp profile list` | List profiles | `ccp profile list` |
 | `ccp profile check <name>` | Validate against the manifest (hidden) | `ccp profile check quickfix` |
 | `ccp profile fix [name]` | Reconcile to the manifest | `ccp profile fix quickfix --dry-run` |
-| `ccp profile delete <name>` | Delete | `ccp profile delete quickfix` |
-| `ccp profile rename <old> <new>` | Rename | `ccp profile rename dev development` |
+| `ccp profile delete <name>` | Delete; refused while an account is linked to it | `ccp profile delete quickfix` |
+| `ccp profile rename <old> <new>` | Rename; linked accounts move with it | `ccp profile rename dev development` |
 | `ccp profile clone <src> <new>` | Clone (hidden) | `ccp profile clone default dev` |
 | `ccp profile diff <a> [b]` | Compare two profiles (hidden) | `ccp profile diff dev prod` |
 | `ccp profile sync [name]` | Regenerate symlinks and settings.json | `ccp profile sync --all` |
