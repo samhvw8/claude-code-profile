@@ -1,5 +1,8 @@
 # Update Log
 
+## 2026-11-17
+* **Creation**: [Accounts are an option of Activation](/decisions/accounts-as-activation-option.md) — `--account <name>` (and `--relink`) on the hidden `ccp run`, `ccp session` and `ccp env` run a profile through `~/.ccp/accounts/<name>/`, a folder with its own `.claude.json` (seeded once without `oauthAccount`) and absolute links to every other profile entry, so one profile can use several Claude logins. Supersedes [API keys are per-profile](/decisions/api-keys-per-profile.md), now deprecated. `ccp which` and `ccp profile list` map an account folder to its profile. Updated [activation](/architecture/activation.md), the [~/.ccp tree](/architecture/directory-layout.md), [core concepts](/product/core-concepts.md), the [command reference](/cli/command-reference.md), [command flags](/cli/command-flags.md) and `skills/ccp/SKILL.md`.
+
 ## 2026-11-12
 * **Update**: Released v0.51.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Creation**: [agy (Antigravity CLI) integration](/features/agy.md) — hidden `ccp agy sync` mirrors a profile into `~/.gemini/config`: `AGENTS.md` → `CLAUDE.md`, the output style in `GEMINI.md` (new `agy` carrier group), converted copies of rules (`trigger`/`globs`) and agents (agy tool names, `subagent`, flash/pro), and links for skills; refuses symlinked `rules/`/`agents/`/`skills/`; follows the active profile once used; `ccp reset` removes its links. Rationale: [agy decision](/decisions/agy-copies-links-and-gemini-md.md). Listed in the [command reference](/cli/command-reference.md) and [output styles](/features/output-styles.md). opencode's copy bookkeeping moved into a shared `syncCopies`.

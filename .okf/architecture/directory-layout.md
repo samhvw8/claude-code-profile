@@ -3,7 +3,7 @@ type: Filesystem Layout
 title: The ~/.ccp directory layout
 description: What lives under ~/.ccp — hub, store, sources, profiles, shared data — and how each class of data is shared.
 tags: [architecture, filesystem, hub, profiles]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T08:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T10:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md (removed 2026-09-14 by the OKF migration)"
@@ -45,6 +45,10 @@ sources:
 │       │   ├── cache → store/plugins/cache
 │       │   └── installed_plugins.json   # Per profile
 │       └── tasks/ todos/ … → shared/
+├── accounts/<name>/            # Account folder: a CLAUDE_CONFIG_DIR with its own login (--account)
+│   ├── .ccp-account.toml       # profile = "<linked profile>"
+│   ├── .claude.json            # Own state and oauthAccount; seeded once, never overwritten
+│   └── <entry> → profiles/<profile>/<entry>   # Absolute symlinks to every other profile entry
 ├── state/settings/<profile>.json  # What ccp last wrote to each settings.json; machine-local
 └── ccp.toml                    # Config + installed sources
 
@@ -61,6 +65,7 @@ Symlinks are relative so a profile tree survives being synced to another machine
 | Plugin cache (marketplaces, cache) | Human config | `~/.ccp/store/plugins/` | Shared via symlinks |
 | Runtime data (tasks, todos, history) | Runtime | `~/.ccp/profiles/shared/` | Always shared ([decision](/decisions/data-sharing-always-shared.md)) |
 | Plugin state (`installed_plugins.json`) | Runtime | Profile `plugins/` | Isolated |
+| Claude login state (`.claude.json`) of an account | Runtime | `~/.ccp/accounts/<name>/` | Per account ([decision](/decisions/accounts-as-activation-option.md)) |
 
 Related: [profile manifest](/reference/profile-manifest.md), [hooks format](/reference/hooks-format.md),
 [activation](/architecture/activation.md).

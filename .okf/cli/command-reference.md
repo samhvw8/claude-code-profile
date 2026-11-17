@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command reference
 description: Every ccp command group with a one-line description and an example; hidden commands are marked.
 tags: [cli, reference, commands]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T10:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, CLI Command Reference (removed 2026-09-14 by the OKF migration)"
@@ -34,11 +34,11 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp use <name>` | Set the project profile (auto-detects mise.toml/.envrc) | `ccp use dev` |
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
-| `ccp which [--path]` | Show the active profile, or its directory | `ccp which --path` |
+| `ccp which [--path]` | Show the active profile (and account), or its directory | `ccp which --path` |
 | `ccp status` | Status and health | `ccp status` |
 | `ccp doctor` | Diagnose, and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
-| `ccp env <profile>` | Configure a project env for a profile (hidden) | `ccp env dev --format=mise` |
+| `ccp env <profile>` | Configure a project env for a profile, optionally under an account (hidden) | `ccp env default --account work1 --format=mise` |
 | `ccp config init` | Write a default `ccp.toml` | `ccp config init` |
 | `ccp config shell` | Print shell aliases for Claude integration | `ccp config shell >> ~/.zshrc` |
 | `ccp bootstrap [--push]` | New-machine setup: sync sources, fix profiles; `--push` adds to chezmoi ([details](/features/bootstrap.md)) | `ccp bootstrap` |
@@ -108,8 +108,8 @@ Workflow and discovery layouts: [source system](/features/source-system.md).
 | `ccp link [profile] [path]` | Link a hub item (interactive without args) | `ccp link quickfix skills/vue-dev` |
 | `ccp unlink <profile> <path>` | Unlink a hub item | `ccp unlink quickfix skills/vue-dev` |
 | `ccp auto [--path]` | Profile from `.ccp.yaml` (hidden) | `ccp auto --path` |
-| `ccp session <profile>` | Shell with the profile active (hidden) | `ccp session dev` |
-| `ccp run <profile> -- <cmd>` | Run a command with the profile (hidden) | `ccp run minimal -- claude "fix bug"` |
+| `ccp session <profile>` | Shell with the profile active, optionally under an account (hidden) | `ccp session default --account work2` |
+| `ccp run <profile> [--account <name>] -- <cmd>` | Run a command with the profile, optionally under an account (hidden) | `ccp run default --account work1 -- claude` |
 
 # omp (hidden)
 

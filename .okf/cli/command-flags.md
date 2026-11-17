@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command flags
 description: Flags for ccp commands that take more than a positional argument.
 tags: [cli, reference, flags]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T03:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T10:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, Command Flags (removed 2026-09-14 by the OKF migration)"
@@ -28,8 +28,10 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 | `reset` | `--force` | Skip confirmation |
 | `use` | `-g, --global` | Update the global `~/.claude` symlink (default: project env) |
 | `use` | `--show` | Show the current profile |
-| `which` | `--path` | Print only the profile directory |
+| `which` | `--path` | Print only the profile directory (the account folder when an account is active) |
 | `env` | `--format=shell\|mise\|direnv` | Print an export (default), or update `mise.toml` / `.envrc` |
+| `run`, `session`, `env` | `--account <name>` | Use the account folder `~/.ccp/accounts/<name>` (own Claude login, links to the profile) as `CLAUDE_CONFIG_DIR` ([activation](/architecture/activation.md)). For `run`, put it before `--` |
+| `run`, `session`, `env` | `--relink` | With `--account`: link an account that is linked to another profile. Close its Claude sessions first |
 | `auto` | `--path` | Print the profile path instead of its name |
 
 # Profiles

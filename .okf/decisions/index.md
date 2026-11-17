@@ -4,8 +4,9 @@ Settled choices with their rationale. Do not re-open one without a user request;
 
 # Architecture and product
 
+* [Accounts are an option of Activation](accounts-as-activation-option.md) - 2026-11-17: One profile runs under several Claude logins through account folders chosen with --account; supersedes the per-profile API key decision.
 * [v0.28 simplification: flat profiles](v0-28-simplification.md) - Profiles are flat — no engine/context composition layers; the hub is the sharing mechanism.
-* [API keys are per-profile](api-keys-per-profile.md) - API keys live in each profile; there is no shared account or credentials layer.
+* [API keys are per-profile](api-keys-per-profile.md) - Deprecated, superseded by accounts as an Activation option. API keys live in each profile; there is no shared account or credentials layer.
 * [Complete settings templates, not fragments](complete-settings-templates.md) - A settings template is a whole settings.json; hooks are overlaid from hub hooks.
 * [A machine-local snapshot tells settings edits from input changes](settings-snapshot.md) - ccp records what it last wrote to settings.json under ~/.ccp/state, so regeneration keeps edits but applies template and fragment changes.
 * [All data directories are always shared](data-sharing-always-shared.md) - Runtime data directories are always symlinked to profiles/shared, with no per-type configuration.

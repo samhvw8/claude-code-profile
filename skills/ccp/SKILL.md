@@ -38,7 +38,7 @@ After install, initialize: `ccp init`
 | **Profile** | Named config referencing hub items via symlinks |
 | **Source** | External repo providing installable items |
 | **Settings Template** | Complete settings.json stored in hub |
-| **Activation** | How a profile becomes active (global symlink or env var) |
+| **Activation** | How a profile becomes active (global symlink or env var), optionally under an account |
 
 ## Common Workflows
 
@@ -223,6 +223,23 @@ first.
 | Global | `ccp use dev -g` | ~/.claude symlink → profile dir |
 | Project | `ccp use dev` | Updates mise.toml/envrc |
 | Inline | env var | `CLAUDE_CONFIG_DIR=~/.ccp/profiles/dev claude` |
+| Account | `--account <name>` | One profile, several Claude logins (see below) |
+
+### Several Claude accounts on one profile
+
+Claude Code keeps one login per config folder, so a login cannot be copied between
+profiles. `--account <name>` runs a profile through `~/.ccp/accounts/<name>/`: its own
+`.claude.json` (login), and symlinks to everything else in the profile.
+
+```bash
+ccp run default --account work1 -- claude        # start Claude as work1 (first run: /login)
+eval "$(ccp env default --account work1)"        # export CLAUDE_CONFIG_DIR in this shell
+ccp env default --account work1 --format=mise    # pin it in a project's mise.toml
+ccp session default --account work2              # a shell as work2
+```
+
+An account is linked to one profile. To move it to another, close its Claude sessions and
+add `--relink`. `ccp which` shows `default (account work1, from CLAUDE_CONFIG_DIR)`.
 
 ## Tips
 
