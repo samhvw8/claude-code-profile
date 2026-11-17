@@ -57,12 +57,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Active profile
+	// The global ~/.claude symlink, whatever CLAUDE_CONFIG_DIR says.
 	activeProfile := "none"
-	if paths.ClaudeDirIsSymlink() {
-		target, err := os.Readlink(paths.ClaudeDir)
-		if err == nil {
-			activeProfile = filepath.Base(target)
-		}
+	if target, _ := checkGlobalSymlink(paths); target != "" {
+		activeProfile = filepath.Base(target)
 	}
 
 	// Gather data for JSON output
@@ -234,6 +232,11 @@ func listAllProfiles(paths *config.Paths) ([]profileInfo, error) {
 
 func checkHealth(paths *config.Paths) []string {
 	var issues []string
+	// Symlink checks use ~/.claude itself: inside an account or a
+	// CLAUDE_CONFIG_DIR session, paths.ClaudeDir is a real folder.
+	global := *paths
+	global.ClaudeDir = paths.GlobalClaudeDir
+	paths = &global
 
 	// Check ~/.claude is symlink
 	if !paths.ClaudeDirIsSymlink() {

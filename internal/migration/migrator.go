@@ -111,7 +111,20 @@ func (m *Migrator) Plan() (*MigrationPlan, error) {
 }
 
 // Execute performs the migration
+// GuardClaudeDir refuses a migration source inside ~/.ccp: with
+// CLAUDE_CONFIG_DIR naming a profile or account folder, the migration would
+// move that folder's entries and then delete it.
+func GuardClaudeDir(paths *config.Paths) error {
+	if profile.InsideCcp(paths, paths.ClaudeDir) {
+		return fmt.Errorf("the Claude config folder %s is inside %s (a ccp profile or account, from CLAUDE_CONFIG_DIR); unset CLAUDE_CONFIG_DIR and rerun", paths.ClaudeDir, paths.CcpDir)
+	}
+	return nil
+}
+
 func (m *Migrator) Execute(plan *MigrationPlan, dryRun bool) error {
+	if err := GuardClaudeDir(m.paths); err != nil {
+		return err
+	}
 	if dryRun {
 		return nil
 	}
@@ -402,6 +415,9 @@ func (m *Migrator) activateDefaultProfile() error {
 	}
 
 	// Remove the source directory (should be empty now)
+	if err := GuardClaudeDir(m.paths); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(m.paths.ClaudeDir); err != nil {
 		return fmt.Errorf("failed to remove source dir: %w", err)
 	}

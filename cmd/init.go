@@ -42,6 +42,12 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// An account or profile folder from CLAUDE_CONFIG_DIR is a real folder too,
+	// but migrating it would empty and delete it.
+	if err := migration.GuardClaudeDir(paths); err != nil {
+		return err
+	}
+
 	// Check if claude directory exists as a real directory (not symlink)
 	if !paths.ClaudeDirExistsAsDir() {
 		if paths.ClaudeDirIsSymlink() {

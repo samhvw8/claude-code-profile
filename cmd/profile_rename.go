@@ -58,15 +58,27 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("profile already exists: %s", newName)
 	}
 
-	// Check if this is the active profile
-	active, err := mgr.GetActive()
-	if err != nil {
-		return fmt.Errorf("failed to check active profile: %w", err)
-	}
-	isActive := active != nil && active.Name == oldName
-
 	oldPath := paths.ProfileDir(oldName)
 	newPath := paths.ProfileDir(newName)
+
+	// A CLAUDE_CONFIG_DIR naming the profile folder itself would point at a
+	// folder that no longer exists; ccp cannot rewrite that variable.
+	if os.Getenv("CLAUDE_CONFIG_DIR") != "" && profile.SamePath(paths.ClaudeDir, oldPath) {
+		return fmt.Errorf("profile '%s' is in use through CLAUDE_CONFIG_DIR in this shell; leave that session (and update the variable wherever it is set) before renaming", oldName)
+	}
+
+	// The global symlink follows the rename. It is always ~/.claude, whatever
+	// CLAUDE_CONFIG_DIR says: that may be a real profile or account folder.
+	globalPaths := *paths
+	globalPaths.ClaudeDir = paths.GlobalClaudeDir
+	isActive := false
+	if globalPaths.ClaudeDirIsSymlink() {
+		active, err := profile.NewManager(&globalPaths).GetActive()
+		if err != nil {
+			return fmt.Errorf("failed to check active profile: %w", err)
+		}
+		isActive = active != nil && active.Name == oldName
+	}
 
 	// Rename the directory
 	if err := os.Rename(oldPath, newPath); err != nil {
@@ -93,9 +105,19 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 
 	// Update symlink if this was the active profile
 	if isActive {
-		if err := symMgr.Swap(paths.ClaudeDir, newPath); err != nil {
+		if err := symMgr.Swap(paths.GlobalClaudeDir, newPath); err != nil {
 			return fmt.Errorf("profile renamed but failed to update active symlink: %w", err)
 		}
+	}
+
+	// Accounts linked to the old name move with it; their links into the old
+	// folder are broken now and are replaced.
+	warnings, err := profile.RelinkAccounts(paths, oldName, newName)
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
+	}
+	if err != nil {
+		return fmt.Errorf("profile renamed but accounts were not all moved: %w\nRun 'ccp env %s --account <name> --relink' for each", err, newName)
 	}
 
 	fmt.Printf("Renamed profile '%s' to '%s'\n", oldName, newName)

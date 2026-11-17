@@ -49,8 +49,11 @@ func runProfileList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Get active profile
-	active, _ := mgr.GetActive()
+	// Get the globally active profile: the ~/.claude symlink, whatever
+	// CLAUDE_CONFIG_DIR says (that is reported as "active (env)" below).
+	globalPaths := *paths
+	globalPaths.ClaudeDir = paths.GlobalClaudeDir
+	active, _ := profile.NewManager(&globalPaths).GetActive()
 	activeName := ""
 	if active != nil {
 		activeName = active.Name
