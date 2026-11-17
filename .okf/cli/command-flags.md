@@ -23,6 +23,7 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 | `init` | `--dry-run` | Show the migration plan only |
 | `init` | `--force` | Overwrite an existing hub structure |
 | `migrate` | `--dry-run` | Show what would migrate |
+| `migrate` | `--accounts` | Run only the opt-in login move: each profile's Claude login (Keychain on macOS, `.credentials.json` on Linux) moves into `~/.ccp/accounts/<profile>`. Refused per profile while Claude Code runs on that login; idempotent ([decision](/decisions/accounts-as-activation-option.md)) |
 | `doctor` | `--fix` | Fix what can be fixed: create missing hub dirs, reconcile drift, remove links (and manifest entries) whose hub item is gone. Only links directly inside the hub item dirs are checked — links inside a profile-local item, and `debug/`, `projects/` etc., are not ccp's |
 | `doctor` | `--verify-omp` | Ask a live omp what its prompt carries |
 | `reset` | `--force` | Skip confirmation |

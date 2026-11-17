@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-17
+* **Update**: [Accounts decision](/decisions/accounts-as-activation-option.md) gains a migration section: opt-in `ccp migrate --accounts [--dry-run]` moves each profile's Claude login (macOS Keychain, Linux `.credentials.json`) and its `oauthAccount` into the account of the same name, write-verify-then-delete with rollback, refused per profile while a Claude Code process uses the source folder, idempotent. Plain `ccp migrate` and bootstrap never run it. Updated the [command reference](/cli/command-reference.md), [command flags](/cli/command-flags.md) and `skills/ccp/SKILL.md`.
 * **Creation**: [Accounts are an option of Activation](/decisions/accounts-as-activation-option.md) — `--account <name>` (and `--relink`) on the hidden `ccp run`, `ccp session` and `ccp env` run a profile through `~/.ccp/accounts/<name>/`, a folder with its own `.claude.json` (seeded once without `oauthAccount`) and absolute links to every other profile entry, so one profile can use several Claude logins. Supersedes [API keys are per-profile](/decisions/api-keys-per-profile.md), now deprecated. `ccp which` and `ccp profile list` map an account folder to its profile. Updated [activation](/architecture/activation.md), the [~/.ccp tree](/architecture/directory-layout.md), [core concepts](/product/core-concepts.md), the [command reference](/cli/command-reference.md), [command flags](/cli/command-flags.md) and `skills/ccp/SKILL.md`.
 
 ## 2026-11-12
