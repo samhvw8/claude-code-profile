@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,7 @@ type noLogins struct{}
 
 func (noLogins) Get(string) ([]byte, string, bool, error) { return nil, "", false, nil }
 func (noLogins) Set(string, string, []byte) error         { return nil }
-func (noLogins) Delete(string) error                      { return nil }
+func (noLogins) Delete(string, string) (string, error)    { return "", nil }
 
 type noProcs struct{}
 
@@ -49,12 +50,40 @@ func TestMigrate_AccountsOnlyWithFlag(t *testing.T) {
 		t.Fatalf("plain ccp migrate reached the login migration %d time(s)", called)
 	}
 
+	if migrateCmd.SilenceUsage {
+		t.Error("plain ccp migrate silenced usage")
+	}
+
 	migrateAccounts = true
 	if err := runMigrate(migrateCmd, nil); err != nil {
 		t.Fatal(err)
 	}
 	if called != 1 {
 		t.Errorf("ccp migrate --accounts called the login migration %d time(s), want 1", called)
+	}
+}
+
+func TestMigrateAccounts_ErrorPrintsNoUsage(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("CCP_DIR", filepath.Join(root, "ccp"))
+	os.MkdirAll(filepath.Join(root, "ccp", "hub"), 0755)
+	orig := newAccountMigrator
+	newAccountMigrator = func(*config.Paths) (*migration.AccountMigrator, error) {
+		return nil, errors.New("refused")
+	}
+	t.Cleanup(func() { newAccountMigrator = orig; migrateAccounts = false; migrateCmd.SilenceUsage = false })
+
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	rootCmd.SetArgs([]string{"migrate", "--accounts"})
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil); rootCmd.SetArgs(nil) })
+	if err := rootCmd.Execute(); err == nil {
+		t.Fatal("no error")
+	}
+	if strings.Contains(out.String(), "Usage:") {
+		t.Errorf("usage printed after a login error:\n%s", out.String())
 	}
 }
 

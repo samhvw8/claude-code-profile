@@ -1,7 +1,11 @@
 package migration
 
 import (
+	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -22,70 +26,140 @@ type ProcessLister interface {
 	ClaudeProcesses() ([]ClaudeProcess, error)
 }
 
-// isClaudeArgv0 reports whether argv[0] is Claude Code: "claude", or a path
-// ending in /claude such as mise's .../installs/claude/<ver>/claude.
-func isClaudeArgv0(argv0 string) bool {
-	return filepath.Base(argv0) == "claude"
+var jsRuntime = regexp.MustCompile(`^(node|nodejs|bun|deno)[0-9.]*$`)
+
+// isClaudeArgv reports whether a command line is Claude Code: a native
+// "claude" binary (mise's .../claude/<ver>/claude included), or a JS runtime
+// running the npm package (node /usr/local/bin/claude, node .../@anthropic-ai/claude-code/cli.js).
+func isClaudeArgv(argv []string) bool {
+	if len(argv) == 0 {
+		return false
+	}
+	if filepath.Base(argv[0]) == "claude" {
+		return true
+	}
+	if !jsRuntime.MatchString(filepath.Base(argv[0])) {
+		return false
+	}
+	for _, a := range argv[1:min(len(argv), 3)] {
+		if filepath.Base(a) == "claude" || strings.Contains(a, "@anthropic-ai/claude-code") {
+			return true
+		}
+	}
+	return false
 }
 
-// psLister lists processes with ps(1) (macOS): one ps for the command lines,
-// then one per Claude process for its environment.
-type psLister struct {
-	run commandRunner
+// mayBeClaude reports whether a bare executable name could be Claude Code,
+// for processes whose arguments cannot be read.
+func mayBeClaude(comm string) bool {
+	return comm == "claude" || jsRuntime.MatchString(comm)
 }
 
-var envVarStart = regexp.MustCompile(` [A-Za-z_][A-Za-z0-9_]*=`)
+func configDirOf(env []string) string {
+	dir := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "CLAUDE_CONFIG_DIR="); ok {
+			dir = v
+		}
+	}
+	return dir
+}
 
-func (l psLister) ClaudeProcesses() ([]ClaudeProcess, error) {
-	out, errOut, code, err := l.run("", "ps", "-Axww", "-o", "pid=,command=")
+// procEntry is one process from the kernel's process table.
+type procEntry struct {
+	pid  int
+	comm string // executable name, possibly truncated
+}
+
+// errProcessGone marks a process that exited while it was being read.
+var errProcessGone = errors.New("process exited")
+
+// sysctlLister reads every process's exact argv and environment from the
+// kernel (macOS kern.procargs2), so paths with spaces stay intact.
+type sysctlLister struct {
+	procs    func() ([]procEntry, error)
+	procargs func(pid int) ([]byte, error) // returns errProcessGone for ESRCH
+}
+
+func (l sysctlLister) ClaudeProcesses() ([]ClaudeProcess, error) {
+	entries, err := l.procs()
 	if err != nil {
 		return nil, err
 	}
-	if code != 0 {
-		return nil, fmt.Errorf("ps failed: %s", strings.TrimSpace(errOut))
-	}
-	var procs []ClaudeProcess
-	for line := range strings.SplitSeq(out, "\n") {
-		pidStr, command, ok := strings.Cut(strings.TrimSpace(line), " ")
-		if !ok {
+	var out []ClaudeProcess
+	for _, e := range entries {
+		if e.pid <= 0 {
 			continue
 		}
-		pid, err := strconv.Atoi(pidStr)
+		buf, err := l.procargs(e.pid)
+		if errors.Is(err, errProcessGone) {
+			continue
+		}
+		var argv, env []string
+		if err == nil {
+			argv, env, err = parseProcargs2(buf)
+		}
 		if err != nil {
+			// Unreadable (another user's process, or a malformed buffer): a
+			// process that may be Claude counts as using every login.
+			if mayBeClaude(e.comm) {
+				out = append(out, ClaudeProcess{PID: e.pid})
+			}
 			continue
 		}
-		command = strings.TrimSpace(command)
-		argv0, _, _ := strings.Cut(command, " ")
-		if !isClaudeArgv0(argv0) {
-			continue
+		if isClaudeArgv(argv) {
+			out = append(out, ClaudeProcess{PID: e.pid, ConfigDir: configDirOf(env), EnvKnown: true})
 		}
-		p := ClaudeProcess{PID: pid}
-		envOut, _, code, err := l.run("", "ps", "eww", "-o", "command=", "-p", strconv.Itoa(pid))
-		envOut = strings.TrimSpace(envOut)
-		if err == nil && code == 0 && len(envOut) > len(command) && strings.HasPrefix(envOut, command) {
-			p.EnvKnown = true
-			p.ConfigDir = envValue(envOut[len(command):], "CLAUDE_CONFIG_DIR")
-		} else if code != 0 && envOut == "" {
-			continue // exited between the two ps calls
-		}
-		procs = append(procs, p)
 	}
-	return procs, nil
+	return out, nil
 }
 
-// envValue finds KEY=VALUE in ps's environment text; a value runs until the
-// next " NAME=" or the end, so paths with spaces survive.
-func envValue(env, key string) string {
-	env = " " + strings.TrimSpace(env)
-	i := strings.Index(env, " "+key+"=")
+// parseProcargs2 decodes a kern.procargs2 buffer: int32 argc, the exec path
+// and NUL padding, argc NUL-terminated arguments, then NUL-terminated
+// environment strings up to an empty one or the end.
+func parseProcargs2(buf []byte) (argv, env []string, err error) {
+	if len(buf) < 4 {
+		return nil, nil, fmt.Errorf("procargs2: short buffer")
+	}
+	argc := int(binary.NativeEndian.Uint32(buf[:4]))
+	rest := buf[4:]
+	i := bytes.IndexByte(rest, 0)
 	if i < 0 {
-		return ""
+		return nil, nil, fmt.Errorf("procargs2: no exec path")
 	}
-	rest := env[i+len(key)+2:]
-	if loc := envVarStart.FindStringIndex(rest); loc != nil {
-		rest = rest[:loc[0]]
+	rest = rest[i:]
+	for len(rest) > 0 && rest[0] == 0 {
+		rest = rest[1:]
 	}
-	return rest
+	next := func() (string, bool) {
+		if len(rest) == 0 {
+			return "", false
+		}
+		j := bytes.IndexByte(rest, 0)
+		if j < 0 {
+			s := string(rest)
+			rest = nil
+			return s, true
+		}
+		s := string(rest[:j])
+		rest = rest[j+1:]
+		return s, true
+	}
+	for range argc {
+		s, ok := next()
+		if !ok {
+			return nil, nil, fmt.Errorf("procargs2: %d of %d arguments", len(argv), argc)
+		}
+		argv = append(argv, s)
+	}
+	for {
+		s, ok := next()
+		if !ok || s == "" {
+			break
+		}
+		env = append(env, s)
+	}
+	return argv, env, nil
 }
 
 // procLister lists processes from /proc (Linux).
@@ -104,24 +178,33 @@ func (l procLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 		if err != nil {
 			continue
 		}
-		cmdline, err := os.ReadFile(filepath.Join(l.root, e.Name(), "cmdline"))
-		if err != nil || len(cmdline) == 0 {
-			continue
+		dir := filepath.Join(l.root, e.Name())
+		cmdline, err := os.ReadFile(filepath.Join(dir, "cmdline"))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // exited
 		}
-		argv0, _, _ := strings.Cut(string(cmdline), "\x00")
-		if !isClaudeArgv0(argv0) {
-			continue
-		}
-		p := ClaudeProcess{PID: pid}
-		if environ, err := os.ReadFile(filepath.Join(l.root, e.Name(), "environ")); err == nil {
-			p.EnvKnown = true
-			for kv := range strings.SplitSeq(string(environ), "\x00") {
-				if v, ok := strings.CutPrefix(kv, "CLAUDE_CONFIG_DIR="); ok {
-					p.ConfigDir = v
-				}
+		if err != nil {
+			comm, cerr := os.ReadFile(filepath.Join(dir, "comm"))
+			if cerr != nil || mayBeClaude(strings.TrimSpace(string(comm))) {
+				procs = append(procs, ClaudeProcess{PID: pid})
 			}
+			continue
 		}
-		procs = append(procs, p)
+		if len(cmdline) == 0 {
+			continue // kernel thread or zombie
+		}
+		if !isClaudeArgv(strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")) {
+			continue
+		}
+		environ, err := os.ReadFile(filepath.Join(dir, "environ"))
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			continue // exited
+		case err != nil:
+			procs = append(procs, ClaudeProcess{PID: pid})
+		default:
+			procs = append(procs, ClaudeProcess{PID: pid, ConfigDir: configDirOf(strings.Split(string(environ), "\x00")), EnvKnown: true})
+		}
 	}
 	return procs, nil
 }

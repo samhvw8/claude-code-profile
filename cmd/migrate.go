@@ -56,6 +56,8 @@ func runMigrate(cmd *cobra.Command, args []string) error {
 	}
 
 	if migrateAccounts {
+		// Past flag parsing an error is about logins, not usage: print only it.
+		cmd.SilenceUsage = true
 		return runAccountMigration(paths, migrateDryRun)
 	}
 
