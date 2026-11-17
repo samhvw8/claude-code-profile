@@ -241,6 +241,18 @@ ccp session default --account work2              # a shell as work2
 An account is linked to one profile. To move it to another, close its Claude sessions and
 add `--relink`. `ccp which` shows `default (account work1, from CLAUDE_CONFIG_DIR)`.
 
+To turn the logins you already have into accounts (profile `default` → account `default`),
+close every Claude Code session first (run it from a plain terminal, not from inside Claude),
+then:
+
+```bash
+ccp migrate --accounts --dry-run   # the plan, one line per profile
+ccp migrate --accounts             # moved / skipped (reason) / refused (reason)
+```
+
+After the global login moves, plain `claude` is logged out: start it with
+`ccp run default --account default -- claude`. Plain `ccp migrate` never moves logins.
+
 ## Tips
 
 - `ccp install` (no args) syncs all sources in `ccp.toml` at the commits `ccp.lock` pins — useful for new machines

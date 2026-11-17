@@ -29,7 +29,7 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp init` | Migrate an existing `~/.claude` to hub + default profile | `ccp init` |
-| `ccp migrate` | Run migrations from older ccp versions | `ccp migrate --dry-run` |
+| `ccp migrate` | Run migrations from older ccp versions; `--accounts` (opt-in) moves each profile's Claude login into the account of the same name | `ccp migrate --accounts --dry-run` |
 | `ccp reset` | Undo ccp and restore `~/.claude` | `ccp reset` |
 | `ccp use <name>` | Set the project profile (auto-detects mise.toml/.envrc) | `ccp use dev` |
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
