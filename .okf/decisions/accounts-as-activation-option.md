@@ -4,7 +4,7 @@ title: "Accounts are an option of Activation"
 description: "One profile can run under several Claude logins through account folders, chosen with --account; ccp migrate --accounts moves existing logins. Supersedes the per-profile API key decision."
 tags: [decision, activation, accounts]
 decided: 2026-11-17
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T13:00:00Z }
 ---
 
 # Decision
@@ -33,16 +33,22 @@ need three copies of the same profile and would have to keep them in sync by han
 - `.ccp-account.toml` records the profile the account is linked to. Linking it to another
   profile fails unless `--relink` is given: a running Claude session would see its files change
   under it. Crashing beats corrupting.
+- The bound profile must be a single path segment, not `shared` and not empty.
 - `.claude.json` is the account's own. It is seeded once from the profile's state (`~/.claude.json`
   when `~/.claude` resolves to the profile, else `<profile>/.claude.json`) without
-  `oauthAccount`, mode 0600, and never overwritten.
+  `oauthAccount`, mode 0600, and never overwritten. The seed is written to a temp file and
+  hard-linked into place, so a crash or a Claude Code starting at the same moment never sees an
+  empty or partial file. A top-level `null` state counts as an empty object. A symlink at
+  `.claude.json` or `.credentials.json` in the account is removed first, with a warning.
 - Every other profile entry, dotfiles included, is an absolute symlink into the profile. The
   account owns these itself, so they are never linked:
   - `.claude.json` and every name starting with it (`.claude.json.backup*`, locks);
   - `backups/`, where Claude Code keeps `.claude.json` backups that carry `oauthAccount`;
-  - `.ccp-account.toml`;
-  - `daemon*` (per-folder runtime files);
-  - `.credentials.json` (the token file where there is no Keychain).
+  - `.config.json`, which Claude Code 2.1.326 prefers over `.claude.json` when it is not empty;
+  - `.credentials.json` (the token file where there is no Keychain) and `.storage-write*`, its
+    write lock;
+  - `daemon*`, `jobs/` and any `*.lock` (per-folder runtime state);
+  - `.ccp-account.toml`.
 
   Linking any of them would share one login's data across accounts, or make Claude write the
   account's backups into the profile.
@@ -57,6 +63,38 @@ need three copies of the same profile and would have to keep them in sync by han
 `ccp which` and `ccp profile list` map an account folder back to its profile
 (`profile.ConfigDirProfile`), comparing absolute, clean paths (a relative `CCP_DIR`, a trailing
 slash in `CLAUDE_CONFIG_DIR`).
+
+## Keeping accounts in step with their profile
+
+- **Profile changes relink.** `followHarnesses`, the one place every profile-changing command
+  (link, unlink, profile sync and edit, use, install and hub updates for the active profile)
+  reaches, relinks every account bound to that profile. An account used only through mise,
+  direnv or a shell export therefore sees new top-level entries without rerunning
+  `--account`, before Claude can create a real file in their place.
+- **Profile delete** refuses while an account is bound to the profile, listing
+  `ccp env <other> --account <a> --relink` for each.
+- **Profile rename** moves every bound account to the new name (rewrites the binding, relinks).
+  It refuses when this shell's `CLAUDE_CONFIG_DIR` is the profile folder itself, which ccp cannot
+  rewrite; the global `~/.claude` link is swapped as before.
+- **`ccp doctor`** reports accounts with an unreadable binding, a missing profile, or broken links.
+- **`ccp reset`** lists the account folders it deletes with `~/.ccp` and where each login is:
+  the Keychain item `Claude Code-credentials-<hash>` is left orphaned on macOS, the
+  `.credentials.json` file is deleted elsewhere. Logins are not moved back; the plan's
+  confirmation covers them.
+
+## Inside an account session
+
+There `CLAUDE_CONFIG_DIR` is a real folder, so `paths.ClaudeDir` is not a symlink. The same was
+already true for `CLAUDE_CONFIG_DIR=<profile folder>`; both are handled the same way:
+
+- `ccp init` and the init migrator refuse a config folder inside `~/.ccp` (`GuardClaudeDir`)
+  instead of moving its entries and deleting it.
+- `ccp doctor` and `ccp status` check the `~/.claude` symlink itself (`GlobalClaudeDir`), and
+  `profile list` takes its "active (symlink)" marker from it.
+- Guards for a profile in use (profile delete, the harness follow in `follow.go`) use
+  `Manager.GetCurrent`: the symlink target, or the profile a `CLAUDE_CONFIG_DIR` folder belongs
+  to, an account folder counting as its bound profile. `GetActive` still sees only symlinks, so
+  default-profile choices elsewhere are unchanged.
 
 # Moving existing logins: `ccp migrate --accounts`
 
@@ -89,7 +127,9 @@ Per profile (`shared` and non-profiles are skipped):
    `environ`. A process that exited while being read (ESRCH, ENOENT) is dropped; any other read
    error keeps it with an unknown environment, which counts as using every login (on macOS only
    when its executable name could be Claude: `claude` or a JS runtime). Run from inside Claude
-   Code, the migration sees its own parent and refuses; that is intended.
+   Code, the migration sees its own parent and refuses; that is intended. A Claude Code process
+   whose `CLAUDE_CONFIG_DIR` is the **target** account folder also refuses the profile: a session
+   there, even one waiting at `/login`, would write its own login under the move.
 4. **Move order.** Read the secret and its `acct` → write the target (`/usr/bin/security -i` with
    the command on stdin, `-X <hex>`, so the secret never reaches argv; a 0600 file on Linux) → read
    it back and compare bytes → copy `oauthAccount` into the account's `.claude.json` (atomic, 0600)
@@ -99,6 +139,14 @@ Per profile (`shared` and non-profiles are skipped):
    10), because `security` deletes one match per run; an item of the same service under another
    account is left and named in a warning. `security` runs by absolute path, and its errors never
    quote the secret (only its length) or the hex command.
+
+   Reading follows Claude Code: `find-generic-password -a <current user> -s <service>` first,
+   and only when that finds nothing, `-s <service>` alone with the account it reports. Writing
+   goes through `security -i` on stdin unless the command line would pass 4000 bytes:
+   `security -i` reads lines into a 4096-byte buffer, so a large login (MCP OAuth tokens push it
+   past about 2 KB, and hex doubles it) goes through argv instead, exactly as Claude Code itself
+   does past 4032 bytes. The hex is then visible to `ps` while `security` runs; that is Claude
+   Code's own trade-off. State files whose top level is `null` count as empty objects.
 5. **`--dry-run`** prints the plan and writes nothing, not even the account folder.
 
 After a global login moves, ccp prints how to start it: `ccp run <P> --account <P> -- claude`.
@@ -111,6 +159,19 @@ Credential access (`CredentialStore`: Keychain or file) and process listing (`Pr
 Keychain.
 
 **Known limits.**
+
+- **Seeded caches.** The seed copies the profile's whole `.claude.json` except `oauthAccount`,
+  so org-scoped caches of the other login come along; Claude Code refreshes them for the new
+  login.
+- **A failed write leaves a seeded folder.** `LinkAccount` runs before the credential write; if
+  the write fails and is rolled back, the account folder stays, seeded and linked but with no
+  login. That is harmless: the next run moves into it, or `/login` fills it.
+- **Why the migration spans several files.** [Over-modularized migrations](/anti-patterns/over-modularized-migrations.md)
+  warns against a file per migration type. There is one migration here (`account_migrator.go`);
+  `credentials.go` (Keychain and file stores) and `processes.go` (the Claude process listers) are
+  adapters behind interfaces that tests replace, and `processes_darwin.go`/`processes_other.go`
+  exist because the `sysctl` calls only build on macOS. Merging them would put build-tagged
+  code into the migration and hide the two seams the tests depend on.
 
 - **Linux state file.** When `~/.claude` is the profile, the credential file is the same for both
   activation paths, but the state with `oauthAccount` may be `~/.claude.json` (plain `claude`) or
