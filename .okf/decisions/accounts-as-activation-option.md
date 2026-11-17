@@ -4,7 +4,7 @@ title: "Accounts are an option of Activation"
 description: "One profile can run under several Claude logins through account folders, chosen with --account; ccp migrate --accounts moves existing logins. Supersedes the per-profile API key decision."
 tags: [decision, activation, accounts]
 decided: 2026-11-17
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T13:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T14:00:00Z }
 ---
 
 # Decision
@@ -66,16 +66,27 @@ slash in `CLAUDE_CONFIG_DIR`).
 
 ## Keeping accounts in step with their profile
 
-- **Profile changes relink.** `followHarnesses`, the one place every profile-changing command
-  (link, unlink, profile sync and edit, use, install and hub updates for the active profile)
-  reaches, relinks every account bound to that profile. An account used only through mise,
-  direnv or a shell export therefore sees new top-level entries without rerunning
-  `--account`, before Claude can create a real file in their place.
-- **Profile delete** refuses while an account is bound to the profile, listing
-  `ccp env <other> --account <a> --relink` for each.
-- **Profile rename** moves every bound account to the new name (rewrites the binding, relinks).
-  It refuses when this shell's `CLAUDE_CONFIG_DIR` is the profile folder itself, which ccp cannot
-  rewrite; the global `~/.claude` link is swapped as before.
+- **Every profile change relinks that profile's accounts**, whichever profile it is, at the
+  point the folder changes: `Manager.LinkHubItem`/`UnlinkHubItem`/`LinkHubBundle`/
+  `UnlinkHubBundle`, drift `Fix` (so `profile fix`, `doctor --fix` and bootstrap's fix of every
+  profile), `ApplySettings`, and `hub remove --copy` all call `RefreshAccounts`. `install --link
+  <profile>` reaches it through `LinkHubItem`. An account used only through mise, direnv or a
+  shell export therefore sees new top-level entries without rerunning `--account`, before
+  Claude can create a real file in their place. Only failures are printed there; entries an
+  account holds as real files are reported by `run`/`session`/`env --account` and by
+  `followHarnesses`, once per command.
+- **Profile delete** refuses while the profile is the `~/.claude` target **or** this shell's
+  current profile (`CLAUDE_CONFIG_DIR`, a profile or account folder): either way deleting it
+  breaks a live configuration. It also refuses while an account is bound to it (listing
+  `ccp env <other> --account <a> --relink` for each), and while **any** account's binding cannot
+  be read, since that account may be bound to it.
+- **Profile rename** validates the new name first (one path segment, not `shared`, not an
+  existing profile), moves every bound account to it, and warns about each account whose
+  binding cannot be read. It refuses when this shell's `CLAUDE_CONFIG_DIR` is the profile folder
+  itself, which ccp cannot rewrite; the `~/.claude` link is swapped when it points at the profile,
+  whatever `CLAUDE_CONFIG_DIR` says.
+- **Bindings are validated.** A `.ccp-account.toml` naming something that cannot be a profile
+  (`shared`, `../hub`) counts as unreadable, like a corrupt one.
 - **`ccp doctor`** reports accounts with an unreadable binding, a missing profile, or broken links.
 - **`ccp reset`** lists the account folders it deletes with `~/.ccp` and where each login is:
   the Keychain item `Claude Code-credentials-<hash>` is left orphaned on macOS, the
@@ -87,14 +98,22 @@ slash in `CLAUDE_CONFIG_DIR`).
 There `CLAUDE_CONFIG_DIR` is a real folder, so `paths.ClaudeDir` is not a symlink. The same was
 already true for `CLAUDE_CONFIG_DIR=<profile folder>`; both are handled the same way:
 
-- `ccp init` and the init migrator refuse a config folder inside `~/.ccp` (`GuardClaudeDir`)
-  instead of moving its entries and deleting it.
-- `ccp doctor` and `ccp status` check the `~/.claude` symlink itself (`GlobalClaudeDir`), and
-  `profile list` takes its "active (symlink)" marker from it.
-- Guards for a profile in use (profile delete, the harness follow in `follow.go`) use
-  `Manager.GetCurrent`: the symlink target, or the profile a `CLAUDE_CONFIG_DIR` folder belongs
-  to, an account folder counting as its bound profile. `GetActive` still sees only symlinks, so
-  default-profile choices elsewhere are unchanged.
+- `ccp init` and the init migrator refuse a **real** config folder inside `~/.ccp`
+  (`GuardClaudeDir`) instead of moving its entries and deleting it. A symlinked `~/.claude`, the
+  normal state of an initialized machine, is not refused there and keeps init's own "already a
+  symlink" messages. "Inside" is lexical or resolved, against `~/.ccp` and the resolved
+  `profiles/` and `accounts/`, so a real `~/.ccp` whose `profiles/` links into a dotfiles repo is
+  still covered.
+- `ccp reset`, `ccp doctor` and `ccp status` work on `~/.claude` itself (`GlobalClaudeDir`);
+  `status` marks a target that no longer exists as "(missing)". `profile list` takes its
+  "active (symlink)" marker from it.
+- **The global harnesses follow `~/.claude` only.** pi, omp, opencode and agy mirror the profile
+  `~/.claude` points at (`globalActive` in `follow.go`), whatever `CLAUDE_CONFIG_DIR` says: a
+  command run from an account or project session on another profile must not push that profile
+  into every other harness session. Account relinking is separate and per changed profile.
+- Guards for a profile in use (profile delete) use `Manager.GetCurrent` (the symlink target, or
+  the profile a `CLAUDE_CONFIG_DIR` folder belongs to) together with the `~/.claude` target.
+  `GetActive` still sees only symlinks, so default-profile choices elsewhere are unchanged.
 
 # Moving existing logins: `ccp migrate --accounts`
 
@@ -110,19 +129,34 @@ Per profile (`shared` and non-profiles are skipped):
    `<profile>/.claude.json`; Linux `<profile>/.credentials.json`). When both exist the global one
    moves and the other is left, with a warning. No credential: skipped, "no login".
 2. **Target.** The account folder from `LinkAccount`; its service hashes the account folder path.
-   With no source left and a target present, the profile is skipped as "already migrated", so
-   reruns are safe. A target that holds the **same** secret as a source that still exists is a
-   move that stopped before the source delete: the run finishes it (delete the source, carry
-   `oauthAccount`) and reports "moved (finished an interrupted move)". A target holding a
-   **different** secret is refused ("both … hold a login; remove one by hand") and nothing changes.
-   An account linked to another profile is refused. A source state file that is not JSON fails the
-   profile before anything is written.
+   The binding is checked first, so a dry run reports what the real run would: an account linked
+   to another profile is refused, an unreadable binding fails. When a move completes, the login it
+   moved is recorded in `.ccp-account.toml` as `migrated_from` (the Keychain service or
+   credentials file), written **before** the source is deleted and cleared by a rollback. On a
+   later run with a credential already in the account:
+   - with `migrated_from` set, only that login may be finished: if it still exists with the same
+     secret, the run finishes the interrupted move ("moved (finished an interrupted move)");
+     otherwise the profile is "already migrated". Any other login of the profile (the env login
+     a global profile also had) is left untouched with a warning, never moved or deleted;
+   - without a record (a move interrupted before recording), the default source is finished when
+     it holds the same secret, refused when it holds a different one ("both … hold a login; remove
+     one by hand"), and "already migrated" when it has vanished, since the account then holds the
+     only copy.
+
+   A source state file that is not JSON fails the profile before anything is written. A source
+   folder (for the global login, `~`) with a non-empty `.config.json` is refused: Claude Code
+   2.1.326 reads that file instead of `.claude.json`, and ccp does not move state between them.
+   `LinkAccount`'s seed warns about such a file and seeds from `.claude.json` only.
+
 3. **Running sessions.** The profile is refused, with the PIDs, while a Claude Code process uses
    the source folder: for the global login, `CLAUDE_CONFIG_DIR` unset, `~/.claude`, or the profile;
-   for an env login, the profile. A Claude Code process is `argv[0]` basename `claude` (mise's
-   `…/claude/<ver>/claude` included), or a JS runtime (`node`, `node22`, `bun`, `deno`) whose
-   `argv[1]` or `argv[2]` has basename `claude` or contains `@anthropic-ai/claude-code` (npm
-   installs). On macOS the exact argv and environment come from `sysctl kern.procargs2` over the
+   for an env login, the profile. Folders compare equal when they are the same once absolute and
+   clean, or resolve to the same folder through symlinks. A Claude Code process is `argv[0]`
+   basename `claude` (mise's `…/claude/<ver>/claude` included), a native install started through
+   its resolved path (exec path under `/claude/versions/` or `/installs/claude/`, from
+   `procargs2`'s exec path or `/proc/<pid>/exe`), or a JS runtime (`node`, `node22`, `bun`,
+   `deno`) with any later argument whose basename is `claude` or that contains
+   `@anthropic-ai/claude-code` (npm installs). On macOS the exact argv and environment come from `sysctl kern.procargs2` over the
    `kern.proc.all` table, so paths with spaces stay whole; on Linux from `/proc/<pid>/cmdline` and
    `environ`. A process that exited while being read (ESRCH, ENOENT) is dropped; any other read
    error keeps it with an unknown environment, which counts as using every login (on macOS only
@@ -146,7 +180,9 @@ Per profile (`shared` and non-profiles are skipped):
    `security -i` reads lines into a 4096-byte buffer, so a large login (MCP OAuth tokens push it
    past about 2 KB, and hex doubles it) goes through argv instead, exactly as Claude Code itself
    does past 4032 bytes. The hex is then visible to `ps` while `security` runs; that is Claude
-   Code's own trade-off. State files whose top level is `null` count as empty objects.
+   Code's own trade-off. State files whose top level is `null` count as empty objects. A
+   rollback of a resumed move also removes `oauthAccount` from the account, which the interrupted
+   run had already written: an account never keeps account info without its credential.
 5. **`--dry-run`** prints the plan and writes nothing, not even the account folder.
 
 After a global login moves, ccp prints how to start it: `ccp run <P> --account <P> -- claude`.

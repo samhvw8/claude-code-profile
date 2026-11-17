@@ -52,7 +52,7 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp profile check <name>` | Validate against the manifest (hidden) | `ccp profile check quickfix` |
 | `ccp profile fix [name]` | Reconcile to the manifest | `ccp profile fix quickfix --dry-run` |
 | `ccp profile delete <name>` | Delete; refused while an account is linked to it | `ccp profile delete quickfix` |
-| `ccp profile rename <old> <new>` | Rename; linked accounts move with it | `ccp profile rename dev development` |
+| `ccp profile rename <old> <new>` | Rename (the new name is validated); linked accounts move with it | `ccp profile rename dev development` |
 | `ccp profile clone <src> <new>` | Clone (hidden) | `ccp profile clone default dev` |
 | `ccp profile diff <a> [b]` | Compare two profiles (hidden) | `ccp profile diff dev prod` |
 | `ccp profile sync [name]` | Regenerate symlinks and settings.json | `ccp profile sync --all` |
