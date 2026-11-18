@@ -4,7 +4,7 @@ title: "Accounts are an option of Activation"
 description: "One profile can run under several Claude logins through account folders, chosen with --account (or --account auto, the one with the most plan limit left); ccp migrate --accounts moves existing logins. Supersedes the per-profile API key decision."
 tags: [decision, activation, accounts]
 decided: 2026-11-17
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-18T09:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-18T14:30:00Z }
 ---
 
 # Decision
@@ -13,7 +13,8 @@ A profile can run under several Claude Code logins. `--account <name>` on `ccp r
 and `ccp env` activates the profile through an **account folder**, `~/.ccp/accounts/<name>/`, instead
 of the profile folder ([activation](/architecture/activation.md)). Accounts are a flag of
 Activation, not a sixth concept ([core concepts](/product/core-concepts.md)), and there is no
-account command. With a named account the profile may be left out (the account's own profile is
+account command. (Since 2026-11-18 Account is a concept with a `ccp account` command:
+[account concept](/decisions/account-concept.md). The mechanism below is unchanged.) With a named account the profile may be left out (the account's own profile is
 used), and `ccp run` defaults its command to `claude`: `ccp run --account work1`.
 `--account auto` picks the account with the most plan limit left (below).
 
@@ -275,7 +276,8 @@ Keychain.
 # Alternatives refused
 
 - **An `account` concept or command.** It would be a sixth concept; the need is one more way to
-  activate a profile, so it is a flag.
+  activate a profile, so it is a flag. Reversed on 2026-11-18 by
+  [account concept](/decisions/account-concept.md): the flag alone left accounts undiscoverable.
 - **Copying the login between folders.** The Keychain entry is keyed by the folder path, so a copy
   is a different login slot.
 - **Swapping `.claude.json` and the Keychain entry in place.** That mutates the user's real login

@@ -123,6 +123,8 @@ ccp project add skills/coding agents/reviewer
 | `ccp use <profile> [-g]` | Switch profile (project or global) |
 | `ccp which` | Show current active profile |
 | `ccp status` | Show ccp status and health, and each account's plan usage |
+| `ccp account [list]` | List accounts with their profile and plan usage |
+| `ccp account add <name> [<profile>]` | Create an account for a profile |
 | `ccp doctor [--fix]` | Diagnose and fix common issues |
 | `ccp bootstrap` | New machine: sync sources from `ccp.toml`, then fix all profiles |
 | `ccp config shell` | Print the `ccp-use` shell function |
@@ -263,11 +265,14 @@ Claude Code loads the profile's `CLAUDE.md` and rules from `CLAUDE_CONFIG_DIR` (
 
 One profile can run under several Claude logins. Each account is a folder in `~/.ccp/accounts/<name>/` with its own login; everything else links to the profile, so skills, settings and history stay the same.
 
-Log in once per account. The first run names the account's profile; type `/login` in Claude Code:
+Add each account, then log in once. Type `/login` in Claude Code:
 
 ```bash
-ccp run work --account work1
-ccp run work --account work2
+ccp account add work1 work       # account work1 for profile work
+ccp run --account work1          # log in with /login
+ccp account add work2 work
+ccp run --account work2
+ccp account                      # list accounts and their usage
 ```
 
 Then use them:

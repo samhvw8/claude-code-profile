@@ -1,9 +1,9 @@
 ---
 type: Concept Model
 title: Core concepts and glossary
-description: The five user-facing concepts ccp is allowed to have, bundles as a composite hub item, and the glossary.
+description: The user-facing concepts ccp is allowed to have (at most seven, six in use), bundles as a composite hub item, and the glossary.
 tags: [product, concepts, glossary]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-18T14:30:00Z }
 sources:
   - id: identity-rule
     resource: ".claude/rules/01-project-identity.md (pre-migration version, 2026-09-14)"
@@ -13,10 +13,12 @@ sources:
     title: ccp product specification
 ---
 
-# The five concepts
+# The concepts
 
-ccp has a hard budget of five user-facing concepts; adding a sixth requires removing
-one ([design principles](/engineering/design-principles.md)).[^identity-rule]
+ccp has a hard budget of seven user-facing concepts; adding an eighth requires removing
+one ([design principles](/engineering/design-principles.md)).[^identity-rule] The budget was five
+until 2026-11-18, when it rose to seven "for now" and Account became the sixth
+([decision](/decisions/account-concept.md)).
 
 | Concept | What |
 |---------|------|
@@ -24,9 +26,10 @@ one ([design principles](/engineering/design-principles.md)).[^identity-rule]
 | **Profile** | Named configuration that references hub items plus an optional settings template |
 | **Settings Template** | Complete `settings.json` stored in the hub, referenced by name ([details](/reference/settings-templates.md)) |
 | **Source** | External repository providing hub items — GitHub, skills.sh ([details](/features/source-system.md)) |
-| **Activation** | How a profile becomes active — `ccp use -g` globally, an env var per project, optionally under an account (`--account`) with its own Claude login ([details](/architecture/activation.md)) |
+| **Activation** | How a profile becomes active — `ccp use -g` globally, an env var per project, optionally under an account (`--account`) ([details](/architecture/activation.md)) |
+| **Account** | A Claude login a profile runs under: a folder in `~/.ccp/accounts/<name>/` that links the profile and keeps its own login; `ccp account` lists and adds them ([decision](/decisions/account-concept.md)) |
 
-# Bundles are a kind of hub item, not a sixth concept
+# Bundles are a kind of hub item, not a concept
 
 A **bundle** is an atomic group of hub items (skill + agent + hook + …) installed, linked,
 and removed together. Members live inside `hub/bundles/<name>/` and are never exposed as
@@ -46,6 +49,6 @@ Bundles are deliberately excluded from `config.AllHubItemTypes()`. See
 | **Hook Type** | Event that triggers a hook — `SessionStart`, `PreToolUse`, … ([format](/reference/hooks-format.md)) |
 | **Project Config** | `.ccp.yaml` in a project root for automatic profile selection ([format](/reference/project-config.md)) |
 | **Source** | External repository (GitHub, skills.sh) that provides hub items |
-| **Account** | An option of Activation, not a concept: a folder under `~/.ccp/accounts/` that runs a profile under its own Claude login ([decision](/decisions/accounts-as-activation-option.md)) |
+| **Account** | A folder under `~/.ccp/accounts/` that runs a profile under its own Claude login; chosen at Activation with `--account` ([concept decision](/decisions/account-concept.md), [mechanism](/decisions/accounts-as-activation-option.md)) |
 
 [^identity-rule]: Project identity rule
