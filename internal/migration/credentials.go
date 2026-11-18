@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -44,6 +45,119 @@ func LoginLocation(goos, dir string) string {
 		return fmt.Sprintf("Keychain item %q", KeychainServiceFor(dir, false))
 	}
 	return filepath.Join(dir, ".credentials.json")
+}
+
+// LoginKey returns where Claude Code keeps the login of the config folder dir
+// (a CLAUDE_CONFIG_DIR) on goos: a Keychain service on macOS, the credentials
+// file elsewhere.
+func LoginKey(goos, dir string) string {
+	if goos == "darwin" {
+		return KeychainServiceFor(dir, false)
+	}
+	return filepath.Join(dir, ".credentials.json")
+}
+
+// NewCredentialStore returns the store Claude Code keeps logins in on goos.
+func NewCredentialStore(goos string) (CredentialStore, error) {
+	switch goos {
+	case "darwin":
+		return NewKeychainStore(), nil
+	case "linux":
+		return FileStore{}, nil
+	}
+	return nil, fmt.Errorf("reading Claude Code logins is not supported on %s", goos)
+}
+
+// ClaudeLogin is the claude.ai OAuth login in a credential secret. The secret
+// can also hold tokens of MCP servers (mcpOAuth), which are not a login.
+type ClaudeLogin struct {
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	ExpiresAt    int64  `json:"expiresAt"` // Unix milliseconds
+}
+
+// ParseLogin returns the claude.ai login in secret; ok is false when the
+// secret holds none (only MCP server tokens, say) or is not JSON.
+func ParseLogin(secret []byte) (login ClaudeLogin, ok bool) {
+	var s struct {
+		Oauth *ClaudeLogin `json:"claudeAiOauth"`
+	}
+	if json.Unmarshal(secret, &s) != nil || s.Oauth == nil {
+		return ClaudeLogin{}, false
+	}
+	if s.Oauth.AccessToken == "" && s.Oauth.RefreshToken == "" {
+		return ClaudeLogin{}, false
+	}
+	return *s.Oauth, true
+}
+
+// HasLogin reports whether secret holds a claude.ai login. A secret that is
+// not JSON counts as one: its layout is unknown, so it is never overwritten.
+func HasLogin(secret []byte) bool {
+	if !json.Valid(secret) {
+		return len(bytes.TrimSpace(secret)) > 0
+	}
+	_, ok := ParseLogin(secret)
+	return ok
+}
+
+// loginPart returns the compact claudeAiOauth value of a secret.
+func loginPart(secret []byte) ([]byte, bool) {
+	var obj map[string]json.RawMessage
+	if json.Unmarshal(secret, &obj) != nil {
+		return nil, false
+	}
+	raw, ok := obj["claudeAiOauth"]
+	if !ok || string(raw) == "null" {
+		return nil, false
+	}
+	var buf bytes.Buffer
+	if json.Compact(&buf, raw) != nil {
+		return nil, false
+	}
+	return buf.Bytes(), true
+}
+
+// sameLogin reports whether two secrets hold the same claude.ai login; other
+// keys (MCP server tokens) may differ. Secrets that are not JSON objects must
+// be equal byte for byte.
+func sameLogin(a, b []byte) bool {
+	la, okA := loginPart(a)
+	lb, okB := loginPart(b)
+	if okA && okB {
+		return bytes.Equal(la, lb)
+	}
+	return bytes.Equal(a, b)
+}
+
+// mergeLogin returns src with the MCP server tokens of target added: target's
+// own entry wins for a server both hold, being the newer one. Other keys come
+// from src.
+func mergeLogin(target, src []byte) ([]byte, error) {
+	var t, s map[string]json.RawMessage
+	if err := json.Unmarshal(target, &t); err != nil || t == nil {
+		return nil, fmt.Errorf("the account's credential is not a JSON object")
+	}
+	if err := json.Unmarshal(src, &s); err != nil || s == nil {
+		return nil, fmt.Errorf("the source credential is not a JSON object")
+	}
+	if tm, ok := t["mcpOAuth"]; ok {
+		merged := map[string]json.RawMessage{}
+		for _, raw := range []json.RawMessage{s["mcpOAuth"], tm} {
+			var m map[string]json.RawMessage
+			if len(raw) > 0 && json.Unmarshal(raw, &m) == nil {
+				for k, v := range m {
+					merged[k] = v
+				}
+			}
+		}
+		out, err := json.Marshal(merged)
+		if err != nil {
+			return nil, err
+		}
+		s["mcpOAuth"] = out
+	}
+	return json.Marshal(s)
 }
 
 // CredentialStore reads and writes one login secret by key: a Keychain

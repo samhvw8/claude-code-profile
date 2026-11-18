@@ -1138,3 +1138,70 @@ func TestIsClaudeProcess_NativeInstallPath(t *testing.T) {
 		t.Errorf("native install by version path not found: %+v", got)
 	}
 }
+
+func TestLoginHelpers(t *testing.T) {
+	login := []byte(`{"claudeAiOauth":{"accessToken":"a","refreshToken":"r","expiresAt":5},"mcpOAuth":{"s1":{"accessToken":"m1"}}}`)
+	if l, ok := ParseLogin(login); !ok || l.AccessToken != "a" || l.ExpiresAt != 5 {
+		t.Errorf("ParseLogin = %+v %v", l, ok)
+	}
+	for name, s := range map[string]string{"mcp only": `{"mcpOAuth":{}}`, "null": `{"claudeAiOauth":null}`, "empty": `{"claudeAiOauth":{}}`} {
+		if HasLogin([]byte(s)) {
+			t.Errorf("%s: HasLogin true", name)
+		}
+	}
+	if !HasLogin([]byte("opaque")) || HasLogin([]byte("  ")) {
+		t.Error("a secret that is not JSON counts as a login unless blank")
+	}
+	same := []byte(`{"mcpOAuth":{"other":{}},"claudeAiOauth":{"accessToken":"a", "refreshToken":"r","expiresAt":5}}`)
+	if !sameLogin(login, same) || sameLogin(login, []byte(`{"claudeAiOauth":{"accessToken":"b"}}`)) {
+		t.Error("sameLogin must compare only claudeAiOauth")
+	}
+	merged, err := mergeLogin([]byte(`{"mcpOAuth":{"s1":{"accessToken":"new"},"s2":{"accessToken":"t2"}}}`), login)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m struct {
+		Oauth ClaudeLogin                             `json:"claudeAiOauth"`
+		Mcp   map[string]struct{ AccessToken string } `json:"mcpOAuth"`
+	}
+	if err := json.Unmarshal(merged, &m); err != nil || m.Oauth.AccessToken != "a" || m.Mcp["s1"].AccessToken != "new" || m.Mcp["s2"].AccessToken != "t2" {
+		t.Errorf("merged %s (%v)", merged, err)
+	}
+}
+
+func TestAccountMigrator_TargetWithOnlyMCPTokens(t *testing.T) {
+	e := newMigrateEnv(t, "p")
+	src := []byte(`{"claudeAiOauth":{"accessToken":"a","refreshToken":"r"}}`)
+	mcp := []byte(`{"mcpOAuth":{"srv":{"accessToken":"m"}}}`)
+	e.store.items[e.envService("p")] = fakeCred{secret: src, acct: "sam"}
+	e.store.items[e.accountService("p")] = fakeCred{secret: mcp, acct: "sam"}
+	r := only(t, must(e.migrator().Migrate(false)))
+	if r.Status != AccountMoved {
+		t.Fatalf("result %+v", r)
+	}
+	got := e.store.items[e.accountService("p")].secret
+	if l, ok := ParseLogin(got); !ok || l.AccessToken != "a" || !strings.Contains(string(got), `"srv"`) {
+		t.Errorf("account credential %s: want the login and the MCP token", got)
+	}
+	if _, ok := e.store.items[e.envService("p")]; ok {
+		t.Error("source login kept")
+	}
+	if r := only(t, must(e.migrator().Migrate(false))); r.Status != AccountSkipped {
+		t.Errorf("second run %+v", r)
+	}
+}
+
+func TestAccountMigrator_RollbackRestoresMCPTokens(t *testing.T) {
+	e := newMigrateEnv(t, "p")
+	mcp := []byte(`{"mcpOAuth":{"srv":{"accessToken":"m"}}}`)
+	e.store.items[e.envService("p")] = fakeCred{secret: []byte(`{"claudeAiOauth":{"accessToken":"a"}}`), acct: "sam"}
+	e.store.items[e.accountService("p")] = fakeCred{secret: mcp, acct: "sam"}
+	e.store.failDelete = e.envService("p")
+	r := only(t, must(e.migrator().Migrate(false)))
+	if r.Status != AccountFailed || !strings.Contains(r.Reason, "rolled back") {
+		t.Fatalf("result %+v", r)
+	}
+	if got := e.store.items[e.accountService("p")].secret; string(got) != string(mcp) {
+		t.Errorf("account credential after rollback = %s, want the MCP tokens back", got)
+	}
+}

@@ -119,6 +119,9 @@ func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() 
 	if err != nil {
 		return done(AccountFailed, err.Error())
 	}
+	// A credential with only MCP server tokens (from a session run in the
+	// account before the move) is not a login: the move keeps those tokens.
+	targetFound = targetFound && HasLogin(targetSecret)
 
 	// The binding is checked first, so a dry run reports what the real run
 	// would: LinkAccount refuses an unreadable or foreign binding.
@@ -163,7 +166,7 @@ func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() 
 		if err != nil {
 			return done(AccountFailed, err.Error())
 		}
-		if !found || !bytes.Equal(srcSecret, targetSecret) {
+		if !found || !sameLogin(srcSecret, targetSecret) {
 			if found {
 				r.Warnings = append(r.Warnings, fmt.Sprintf("%s now holds a different login; it is left untouched", m.describe(src.key)))
 			}
@@ -185,7 +188,7 @@ func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() 
 		if !found {
 			return done(AccountSkipped, "already migrated (the source login is gone; the account holds the only copy)")
 		}
-		if !bytes.Equal(srcSecret, targetSecret) {
+		if !sameLogin(srcSecret, targetSecret) {
 			return done(AccountRefused, fmt.Sprintf("both %s and %s hold a login; remove one by hand", m.describe(src.key), m.describe(target)))
 		}
 		resume = true
@@ -361,12 +364,30 @@ func (m *AccountMigrator) move(src *loginSource, target, dir string, resume bool
 		return nil, fmt.Errorf("login %s disappeared", m.describe(src.key))
 	}
 
+	prevTarget, prevAcct, prevTargetFound, err := m.store.Get(target)
+	if err != nil {
+		return nil, err
+	}
+	want := secret
+	if !resume && prevTargetFound {
+		// The account holds only MCP server tokens (migrateOne refuses a
+		// login there): keep them next to the moved login.
+		if want, err = mergeLogin(prevTarget, secret); err != nil {
+			return nil, fmt.Errorf("%s holds data ccp cannot merge: %w", m.describe(target), err)
+		}
+		warnings = append(warnings, fmt.Sprintf("kept the MCP server tokens already in %s", m.describe(target)))
+	}
+
 	targetState := filepath.Join(dir, ".claude.json")
 	prevState, prevErr := os.ReadFile(targetState)
 	stateChanged, recorded := false, false
 	rollback := func(cause error) error {
 		var errs []error
-		if _, err := m.store.Delete(target, acct); err != nil {
+		if !resume && prevTargetFound {
+			if err := m.store.Set(target, prevAcct, prevTarget); err != nil {
+				errs = append(errs, fmt.Errorf("could not restore %s: %w", m.describe(target), err))
+			}
+		} else if _, err := m.store.Delete(target, acct); err != nil {
 			errs = append(errs, fmt.Errorf("could not remove %s: %w", m.describe(target), err))
 		}
 		if recorded {
@@ -399,12 +420,13 @@ func (m *AccountMigrator) move(src *loginSource, target, dir string, resume bool
 	}
 
 	if !resume {
-		if err := m.store.Set(target, acct, secret); err != nil {
+		if err := m.store.Set(target, acct, want); err != nil {
 			return nil, rollback(fmt.Errorf("writing %s: %w", m.describe(target), err))
 		}
 	}
 	got, _, found, err := m.store.Get(target)
-	if err != nil || !found || !bytes.Equal(got, secret) {
+	verified := found && (resume && sameLogin(got, secret) || !resume && bytes.Equal(got, want))
+	if err != nil || !verified {
 		if err == nil {
 			err = errors.New("read-back differs from the source")
 		}
