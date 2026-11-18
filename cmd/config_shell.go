@@ -19,9 +19,10 @@ Add the output to your shell configuration file (.bashrc, .zshrc, etc.):
   source ~/.zshrc
 
 This configures:
-  - claude alias: Loads profile's CLAUDE.md and rules via --add-dir
   - ccp-use function: Quick profile switching with mise env reload
-  - Automatic CLAUDE_CONFIG_DIR from ccp which --path
+
+No claude alias is needed: Claude Code loads the profile's CLAUDE.md and
+rules from CLAUDE_CONFIG_DIR (or the ~/.claude symlink) on its own.
 
 The output is wrapped in a ccp existence check, making it safe for
 synced shell configs across machines where ccp may not be installed.`,
@@ -43,11 +44,6 @@ func runConfigShell(cmd *cobra.Command, args []string) error {
 	// Wrap in ccp existence check for synced shell configs
 	fmt.Println("# Only load if ccp is installed")
 	fmt.Println("if command -v ccp &> /dev/null; then")
-
-	// Claude alias with --add-dir for loading profile CLAUDE.md/rules
-	fmt.Println("  # Claude alias - loads profile's CLAUDE.md and rules")
-	fmt.Println(`  alias claude='CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 command claude --add-dir "${CLAUDE_CONFIG_DIR:-$(ccp which --path 2>/dev/null)}"'`)
-	fmt.Println()
 
 	// Optional: ccp cd function
 	fmt.Println("  # Quick profile switch (optional)")

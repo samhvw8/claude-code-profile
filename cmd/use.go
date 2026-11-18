@@ -214,8 +214,6 @@ func updateProjectEnv(profilePath, profileName string) error {
 	// Environment variables to set
 	envVars := map[string]string{
 		"CLAUDE_CONFIG_DIR": profilePath,
-		// Enable loading CLAUDE.md from additional directories (for --add-dir usage)
-		"CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD": "1",
 	}
 
 	// 1. Check for mise.toml

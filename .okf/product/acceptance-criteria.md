@@ -117,7 +117,7 @@ AND env override takes precedence over ~/.claude symlink
 ```gherkin
 GIVEN profile exists at ~/.ccp/profiles/dev
 WHEN user runs `ccp use dev` in a directory with mise.toml
-THEN mise.toml is updated with CLAUDE_CONFIG_DIR and CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD
+THEN mise.toml is updated with CLAUDE_CONFIG_DIR
 AND Claude Code uses dev profile in that project
 
 GIVEN profile exists at ~/.ccp/profiles/quickfix
