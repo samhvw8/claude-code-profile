@@ -33,6 +33,10 @@ const (
 
 var accountNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
+// AutoAccount is the --account value that picks the account with the most
+// plan limit left; no account folder may take the name.
+const AutoAccount = "auto"
+
 // validateBoundProfile rejects a profile name an account cannot be linked to:
 // empty, the shared data folder, or anything but a single path segment.
 func validateBoundProfile(name string) error {
@@ -47,6 +51,9 @@ func validateBoundProfile(name string) error {
 func ValidateAccountName(name string) error {
 	if !accountNameRe.MatchString(name) {
 		return fmt.Errorf("invalid account name %q: use letters, digits, '-' and '_', starting with a letter or digit", name)
+	}
+	if name == AutoAccount {
+		return fmt.Errorf("account name %q is reserved: --account auto picks an account", name)
 	}
 	return nil
 }
@@ -405,13 +412,13 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 //   - the credentials file Claude uses where there is no Keychain, and its
 //     write lock (.storage-write*);
 //   - per-folder runtime state: daemon*, jobs/, *.lock;
-//   - the binding file.
+//   - ccp's own per-folder files (.ccp-*: the binding, usage, last use).
 func skipAccountEntry(name string) bool {
 	switch name {
 	case "backups", "jobs", ".config.json", AccountFile, claudeCredentialsFile:
 		return true
 	}
-	return strings.HasPrefix(name, claudeStateFile) || strings.HasPrefix(name, "daemon") ||
+	return strings.HasPrefix(name, claudeStateFile) || strings.HasPrefix(name, "daemon") || strings.HasPrefix(name, ".ccp-") ||
 		strings.HasPrefix(name, ".storage-write") || strings.HasSuffix(name, ".lock")
 }
 

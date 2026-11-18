@@ -30,6 +30,11 @@ func TestParseRunArgs(t *testing.T) {
 		{args: []string{"--", "claude"}, wantErr: true},
 		{args: []string{"dev", "--account=", "--", "claude"}, wantErr: true},
 		{args: []string{"dev", "--account", "", "--", "claude"}, wantErr: true},
+		// The profile may be left out with --account, and the command defaults to claude.
+		{args: []string{"--account", "work1"}, want: runArgs{account: "work1", command: []string{"claude"}}},
+		{args: []string{"--account=auto", "--", "claude", "-c"}, want: runArgs{account: "auto", command: []string{"claude", "-c"}}},
+		{args: []string{"dev"}, want: runArgs{profile: "dev", command: []string{"claude"}}},
+		{args: []string{}, wantErr: true},
 	}
 	for _, tt := range tests {
 		got, err := parseRunArgs(tt.args)
@@ -88,4 +93,90 @@ func must[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+func TestActivationProfile(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("CCP_DIR", filepath.Join(root, "ccp"))
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	os.MkdirAll(filepath.Join(root, "ccp", "hub"), 0755)
+	paths := must(config.ResolvePaths())
+	mgr := profile.NewManager(paths)
+	for _, name := range []string{"default", "companyA"} {
+		if _, err := mgr.Create(name, profile.NewManifest(name, "")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := profile.LinkAccount(paths, "gt1", "companyA", false); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := activationProfile(paths, "", "gt1"); err != nil || got != "companyA" {
+		t.Errorf("named account: %q, %v; want its own profile", got, err)
+	}
+	if _, err := activationProfile(paths, "", "gt9"); err == nil || !strings.Contains(err.Error(), "does not exist yet") {
+		t.Errorf("unknown account: %v", err)
+	}
+	if got, err := activationProfile(paths, "default", "gt9"); err != nil || got != "default" {
+		t.Errorf("a named profile wins: %q, %v", got, err)
+	}
+	if _, err := activationProfile(paths, "nope", ""); err == nil {
+		t.Error("unknown profile must fail")
+	}
+	// auto takes the current profile: here CLAUDE_CONFIG_DIR, as a project's mise.toml sets it.
+	t.Setenv("CLAUDE_CONFIG_DIR", paths.ProfileDir("companyA"))
+	if got, err := activationProfile(must(config.ResolvePaths()), "", "auto"); err != nil || got != "companyA" {
+		t.Errorf("auto: %q, %v", got, err)
+	}
+	// Inside an account session, auto stays on the account's profile.
+	t.Setenv("CLAUDE_CONFIG_DIR", paths.AccountDir("gt1"))
+	if got, err := activationProfile(must(config.ResolvePaths()), "", "auto"); err != nil || got != "companyA" {
+		t.Errorf("auto inside an account: %q, %v", got, err)
+	}
+}
+
+func TestChooseAccount_EmptyPool(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("CCP_DIR", filepath.Join(root, "ccp"))
+	os.MkdirAll(filepath.Join(root, "ccp", "hub"), 0755)
+	paths := must(config.ResolvePaths())
+	if _, err := profile.NewManager(paths).Create("dev", profile.NewManifest("dev", "")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chooseAccount(paths, "dev", "auto", false); err == nil || !strings.Contains(err.Error(), "no account is linked") {
+		t.Errorf("empty pool: %v", err)
+	}
+	if _, err := chooseAccount(paths, "dev", "auto", true); err == nil || !strings.Contains(err.Error(), "--relink") {
+		t.Errorf("auto with --relink: %v", err)
+	}
+	if got, err := chooseAccount(paths, "dev", "w1", false); err != nil || got != "w1" {
+		t.Errorf("named account passes through: %q, %v", got, err)
+	}
+}
+
+func TestEnvCmd_AutoOnlyForShell(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", filepath.Join(root, "home"))
+	t.Setenv("CCP_DIR", filepath.Join(root, "ccp"))
+	os.MkdirAll(filepath.Join(root, "ccp", "hub"), 0755)
+	if _, err := profile.NewManager(must(config.ResolvePaths())).Create("dev", profile.NewManifest("dev", "")); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	rootCmd.SetOut(&out)
+	rootCmd.SetErr(&out)
+	t.Cleanup(func() {
+		rootCmd.SetOut(nil)
+		rootCmd.SetErr(nil)
+		rootCmd.SetArgs(nil)
+		envAccount, envFormat = "", "shell"
+		envCmd.Flags().Lookup("account").Changed = false
+		envCmd.Flags().Lookup("format").Changed = false
+	})
+	rootCmd.SetArgs([]string{"env", "dev", "--account", "auto", "--format", "mise"})
+	if err := rootCmd.Execute(); err == nil || !strings.Contains(err.Error(), "picks once") {
+		t.Errorf("auto into mise.toml: %v", err)
+	}
 }

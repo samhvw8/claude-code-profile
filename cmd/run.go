@@ -14,21 +14,27 @@ import (
 )
 
 var runCmd = &cobra.Command{
-	Use:    "run <profile> [--account <name> [--relink]] -- <command> [args...]",
+	Use:    "run [<profile>] [--account <name>|auto [--relink]] [-- <command> [args...]]",
 	Hidden: true,
 	Short:  "Run a command with a specific profile active",
 	Long: `Execute a command with CLAUDE_CONFIG_DIR set to the specified profile.
 
 With --account, CLAUDE_CONFIG_DIR is the account folder ~/.ccp/accounts/<name>,
 which keeps its own Claude login and links everything else to the profile.
+The profile may then be left out: a named account runs its own profile.
 --relink moves an account that is linked to another profile.
 
+--account auto picks, among the accounts linked to the profile (the current
+one when none is named), the one with the most plan limit left: Claude's usage
+endpoint, read at most every 5 minutes per account, else the account started
+least recently. The command defaults to claude.
+
 Examples:
+  ccp run --account work1                  # claude, account work1's profile
+  ccp run --account auto -- claude -c      # continue on the freest account
+  ccp run companyA --account auto
   ccp run minimal -- claude "fix this bug"
-  ccp run default --account work1 -- claude
-  ccp run dev -- npm test
-  ccp run quickfix -- bash -c "claude && git commit"`,
-	Args:               cobra.MinimumNArgs(1),
+  ccp run dev -- npm test`,
 	DisableFlagParsing: true,
 	RunE:               runRunCmd,
 }
@@ -43,6 +49,8 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	profileName, cmdArgs := ra.profile, ra.command
+	// Past argument parsing an error is about profiles or accounts, not usage.
+	cmd.SilenceUsage = true
 
 	paths, err := config.ResolvePaths()
 	if err != nil {
@@ -53,15 +61,23 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ccp not initialized: run 'ccp init' first")
 	}
 
-	// Verify profile exists
-	mgr := profile.NewManager(paths)
-	if !mgr.Exists(profileName) {
-		return fmt.Errorf("profile not found: %s", profileName)
+	if ra.accountSet && ra.account == "" {
+		return profile.ValidateAccountName("")
 	}
-
-	configDir, err := activationDir(paths, profileName, ra.account, ra.accountSet, ra.relink)
+	profileName, err = activationProfile(paths, profileName, ra.account)
 	if err != nil {
 		return err
+	}
+	account, err := chooseAccount(paths, profileName, ra.account, ra.relink)
+	if err != nil {
+		return err
+	}
+	configDir, err := activationDir(paths, profileName, account, ra.accountSet, ra.relink)
+	if err != nil {
+		return err
+	}
+	if account != "" {
+		markAccountUsed(configDir)
 	}
 
 	// Execute command with CLAUDE_CONFIG_DIR set
@@ -80,16 +96,15 @@ type runArgs struct {
 	command            []string
 }
 
-// parseRunArgs reads "<profile> [--account <name>] [--relink] -- <command>".
+// parseRunArgs reads "[<profile>] [--account <name>] [--relink] [-- <command>]".
 // Flag parsing is off for run so the command's own flags pass through; only
-// the arguments before "--" belong to ccp.
+// the arguments before "--" belong to ccp. Without "--" the command is claude.
 func parseRunArgs(args []string) (runArgs, error) {
 	var ra runArgs
-	sep := slices.Index(args, "--")
-	if sep < 0 {
-		return ra, fmt.Errorf("command required after --")
+	own, command := args, []string{"claude"}
+	if sep := slices.Index(args, "--"); sep >= 0 {
+		own, command = args[:sep], args[sep+1:]
 	}
-	own := args[:sep]
 	for i := 0; i < len(own); i++ {
 		arg := own[i]
 		switch {
@@ -113,9 +128,9 @@ func parseRunArgs(args []string) (runArgs, error) {
 			return ra, fmt.Errorf("unexpected argument before --: %s", arg)
 		}
 	}
-	ra.command = args[sep+1:]
-	if ra.profile == "" {
-		return ra, fmt.Errorf("profile name required")
+	ra.command = command
+	if ra.profile == "" && !ra.accountSet {
+		return ra, fmt.Errorf("profile name required (or --account)")
 	}
 	if len(ra.command) == 0 {
 		return ra, fmt.Errorf("command required after --")
