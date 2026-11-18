@@ -233,13 +233,19 @@ profiles. `--account <name>` runs a profile through `~/.ccp/accounts/<name>/`: i
 
 ```bash
 ccp run default --account work1 -- claude        # start Claude as work1 (first run: /login)
+ccp run --account work1                          # same: the account's profile, claude by default
+ccp run companyA --account auto -- claude -c    # the account with most plan limit left
+eval "$(ccp env --account auto)"                 # this terminal: pick once, export it
+ccp status                                       # accounts with 5h / 7d use and last use
 eval "$(ccp env default --account work1)"        # export CLAUDE_CONFIG_DIR in this shell
 ccp env default --account work1 --format=mise    # pin it in a project's mise.toml
 ccp session default --account work2              # a shell as work2
 ```
 
 An account is linked to one profile. To move it to another, close its Claude sessions and
-add `--relink`. `ccp which` shows `default (account work1, from CLAUDE_CONFIG_DIR)`.
+add `--relink`. `--account auto` picks among the accounts linked to the profile (the current
+one when none is named): lowest usage from Claude's usage endpoint (cached 5 minutes), else the
+account started least recently. `ccp which` shows `default (account work1, from CLAUDE_CONFIG_DIR)`.
 
 To turn the logins you already have into accounts (profile `default` → account `default`),
 close every Claude Code session first (run it from a plain terminal, not from inside Claude),

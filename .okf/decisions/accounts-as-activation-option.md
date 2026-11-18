@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: "Accounts are an option of Activation"
-description: "One profile can run under several Claude logins through account folders, chosen with --account; ccp migrate --accounts moves existing logins. Supersedes the per-profile API key decision."
+description: "One profile can run under several Claude logins through account folders, chosen with --account (or --account auto, the one with the most plan limit left); ccp migrate --accounts moves existing logins. Supersedes the per-profile API key decision."
 tags: [decision, activation, accounts]
 decided: 2026-11-17
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T14:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-18T09:00:00Z }
 ---
 
 # Decision
@@ -13,7 +13,9 @@ A profile can run under several Claude Code logins. `--account <name>` on `ccp r
 and `ccp env` activates the profile through an **account folder**, `~/.ccp/accounts/<name>/`, instead
 of the profile folder ([activation](/architecture/activation.md)). Accounts are a flag of
 Activation, not a sixth concept ([core concepts](/product/core-concepts.md)), and there is no
-account command.
+account command. With a named account the profile may be left out (the account's own profile is
+used), and `ccp run` defaults its command to `claude`: `ccp run --account work1`.
+`--account auto` picks the account with the most plan limit left (below).
 
 This supersedes [API keys are per-profile](/decisions/api-keys-per-profile.md).
 
@@ -48,7 +50,8 @@ need three copies of the same profile and would have to keep them in sync by han
   - `.credentials.json` (the token file where there is no Keychain) and `.storage-write*`, its
     write lock;
   - `daemon*`, `jobs/` and any `*.lock` (per-folder runtime state);
-  - `.ccp-account.toml`.
+  - `.ccp-*`: ccp's own per-folder files (`.ccp-account.toml`, `.ccp-usage.json`,
+    `.ccp-last-used`).
 
   Linking any of them would share one login's data across accounts, or make Claude write the
   account's backups into the profile.
@@ -115,6 +118,53 @@ already true for `CLAUDE_CONFIG_DIR=<profile folder>`; both are handled the same
   the profile a `CLAUDE_CONFIG_DIR` folder belongs to) together with the `~/.claude` target.
   `GetActive` still sees only symlinks, so default-profile choices elsewhere are unchanged.
 
+# Picking an account: `--account auto`
+
+For a pool of accounts on one profile (three company logins on `companyA`, say), `--account
+auto` on `run`, `session` and `env` (shell format only: mise and direnv would freeze one pick)
+picks among the accounts linked to the profile. With no profile named it uses the current one:
+`CLAUDE_CONFIG_DIR` (a project's `mise.toml`, or the account folder of the running session),
+else `~/.claude`. `auto` is reserved and cannot name an account. The pick is printed on stderr:
+`ccp: account gt2 (7d 30%)`.
+
+**Usage source (A).** Each logged-in account's token is read from where Claude Code keeps it
+(the Keychain item of the account folder, or its `.credentials.json`) and sent to `GET
+https://api.anthropic.com/api/oauth/usage` with `anthropic-beta: oauth-2025-04-20`, the
+endpoint Claude Code's own `/usage` reads (also used by ccburn, claude-usage-line and others).
+It is undocumented. A read in November 2026 for a team plan returned `five_hour: null`,
+`seven_day.utilization` (percent) and a `limits[]` list (`weekly_all`, and `weekly_scoped` per
+model, such as Fable), so ccp takes `five_hour` and `seven_day`, falls back to the
+`weekly_all` limit for the week, and keeps model-scoped weeks for `ccp status` only (whether they
+matter depends on the session's model). Reads run in parallel with a 5-second timeout and never
+follow a redirect. ccp never refreshes a token or writes a login: an expired access token is
+not sent ("token expired; Claude Code renews it when it starts").
+
+Each account folder keeps `.ccp-usage.json`: the last good read, and the time and error of the
+last failed try. A read younger than 5 minutes is reused without a request, and so is a failure:
+the endpoint answers 429 to a burst and also to a token it does not accept. Errors never quote
+the token or the response body.
+
+**Ranking.** Logged-in accounts only (a credential with no `claudeAiOauth` is not a login).
+A window whose `resets_at` has passed counts as 0.
+
+1. usage known, under 80% of the 5-hour and 95% of the 7-day limit: lowest 5-hour, then 7-day;
+2. usage unknown (never read, or every read failed);
+3. usage known and above those marks: lowest first;
+4. a limit used up (the pick still runs and says so).
+
+Ties go to the account ccp started least recently (`.ccp-last-used`, touched by `run`,
+`session` and `env` with an account), so with no usage data at all the pick rotates **(B)**.
+
+`ccp status` lists every account with its profile, email, 5-hour and 7-day use, model-scoped
+weeks, the age of the read and the last use, plus the reason a logged-in account has no live
+read.
+
+**One workspace, one pool.** A project folder whose `mise.toml` sets `CLAUDE_CONFIG_DIR` to the
+profile can put a `claude` wrapper on its PATH that runs `ccp run <profile> --account auto --
+<real claude> "$@"` while an account is linked to the profile, keeps `CLAUDE_CONFIG_DIR` when it
+already names an account (a session's child), and runs plain `claude` otherwise. Plain `claude`
+elsewhere keeps the personal login.
+
 # Moving existing logins: `ccp migrate --accounts`
 
 An opt-in migration moves each profile's existing login into the account of the same name
@@ -142,6 +192,11 @@ Per profile (`shared` and non-profiles are skipped):
      it holds the same secret, refused when it holds a different one ("both … hold a login; remove
      one by hand"), and "already migrated" when it has vanished, since the account then holds the
      only copy.
+
+   Logins compare by their `claudeAiOauth` value, not the whole secret. A target credential
+   holding only MCP server tokens (`mcpOAuth`, from a session run in the account before the move)
+   is not a login: the move writes the source login merged with those tokens (the account's entry
+   wins for a server both hold), and a rollback writes the old tokens back.
 
    A source state file that is not JSON fails the profile before anything is written. A source
    folder (for the global login, `~`) with a non-empty `.config.json` is refused: Claude Code
@@ -225,3 +280,10 @@ Keychain.
   is a different login slot.
 - **Swapping `.claude.json` and the Keychain entry in place.** That mutates the user's real login
   state and breaks any session running on the old account.
+- **Usage from the statusline (C).** Claude Code passes `rate_limits` to a statusline command,
+  which needs no extra request, but only while a session runs: an idle account's data would be
+  hours old, and it needs a wrapper chained before the user's own statusline. The usage endpoint
+  with a 5-minute cache costs one request per account per pick at most.
+- **A gateway or proxy that switches accounts per request.** Sessions would change login mid-way;
+  ccp picks once, at start. Remuda (`ya-luotao/remuda`) is a standalone TUI for the same
+  multi-login layout.
