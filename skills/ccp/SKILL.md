@@ -1,6 +1,6 @@
 ---
 name: ccp
-description: "Use and manage ccp — the Claude Code Profile Manager. Use when: switching profiles, creating profiles, installing skills from sources, managing hub items, linking/unlinking items, setting up ccp for the first time, activating profiles per-project. Actions: switch, create, install, link, unlink, init, find, list, update profiles and hub items. Keywords: ccp use, ccp init, profile switch, hub link, source add, install skill, settings template, find skills, profile create. Casual triggers: 'switch to my dev profile', 'install a skill', 'set up ccp', 'find skills on github', 'which profile am I using', 'add this skill to my profile', 'how do I use ccp'."
+description: "Use and manage ccp — the Claude Code Profile Manager. Use when: switching profiles, creating profiles, installing skills from sources, managing hub items, linking/unlinking items, setting up ccp for the first time, activating profiles per-project. Actions: switch, create, install, link, unlink, init, find, list, update profiles and hub items. Keywords: ccp use, ccp init, profile switch, hub link, source add, install skill, settings template, find skills, profile create. Also: Claude accounts and pools — add a Claude account or login, several accounts or seats for one client or workspace, auto-pick the account with the most limit left, load-balance logins, ccp account, --account auto, ccp use --accounts, move or remove an account. Casual triggers: 'add another Claude account', 'my company gave me more accounts', 'which account has limit left', 'switch to my dev profile', 'install a skill', 'set up ccp', 'find skills on github', 'which profile am I using', 'add this skill to my profile', 'how do I use ccp'."
 ---
 
 # ccp — Claude Code Profile Manager
@@ -223,44 +223,140 @@ first.
 | Global | `ccp use dev -g` | ~/.claude symlink → profile dir |
 | Project | `ccp use dev` | Updates mise.toml/envrc |
 | Inline | env var | `CLAUDE_CONFIG_DIR=~/.ccp/profiles/dev claude` |
-| Account | `--account <name>` | One profile, several Claude logins (see below) |
+| Account | `--account <name>\|auto`, `ccp use <p> --accounts` | One profile, several Claude logins: a pool (see below) |
 
-### Several Claude accounts on one profile
+## Accounts and pools
 
-Claude Code keeps one login per config folder, so a login cannot be copied between
-profiles. `--account <name>` runs a profile through `~/.ccp/accounts/<name>/`: its own
-`.claude.json` (login), and symlinks to everything else in the profile.
+An **account** is one Claude login: a folder `~/.ccp/accounts/<name>/` with its own login that
+links everything else (skills, settings, history) to one profile. A **pool** is every account
+linked to the same profile. The profile is the scope: one client or employer = one profile =
+one pool. `--account auto` picks inside the pool, never across pools.
 
-```bash
-ccp account                                      # list accounts with 5h / 7d use
-ccp account add work1 default                    # create account work1 for profile default
-ccp use default --accounts                       # in a project: plain claude picks the account
-ccp run default --account work1 -- claude        # start Claude as work1 (first run: /login)
-ccp run --account work1                          # same: the account's profile, claude by default
-ccp run companyA --account auto -- claude -c    # the account with most plan limit left
-eval "$(ccp env --account auto)"                 # this terminal: pick once, export it
-ccp status                                       # accounts with 5h / 7d use and last use
-eval "$(ccp env default --account work1)"        # export CLAUDE_CONFIG_DIR in this shell
-ccp env default --account work1 --format=mise    # pin it in a project's mise.toml
-ccp session default --account work2              # a shell as work2
+```text
+profile companyA ── gt1, gt2, gt3     (pool of the companyA workspace)
+profile acme      ── acme1, acme2      (another client's pool)
+profile default   ── (no accounts: plain claude, personal login)
 ```
 
-An account is linked to one profile. To move it to another, close its Claude sessions and
-add `--relink`. `--account auto` picks among the accounts linked to the profile (the current
-one when none is named): lowest usage from Claude's usage endpoint (cached 5 minutes), else the
-account started least recently. `ccp which` shows `default (account work1, from CLAUDE_CONFIG_DIR)`.
+Rules that shape every recipe:
 
-To turn the logins you already have into accounts (profile `default` → account `default`),
-close every Claude Code session first (run it from a plain terminal, not from inside Claude),
-then:
+- Claude Code keeps one login per config folder (the Keychain entry is keyed by the folder path;
+  on Linux it is `<folder>/.credentials.json`). A login cannot be copied or shared between
+  folders, so each account folder needs its own `/login` once.
+- An account belongs to one pool at a time. To use the same Claude login in two pools, add a
+  second account (another name, the other profile) and log in again.
+- `/login` approves with the claude.ai account signed in to the browser. To log in a
+  **different** account, sign out of claude.ai first, or open the login URL Claude Code shows in
+  an Incognito window. Otherwise every account gets the same login.
+
+### See the pools
 
 ```bash
-ccp migrate --accounts --dry-run   # the plan, one line per profile
-ccp migrate --accounts             # moved / skipped (reason) / refused (reason)
+ccp account          # every account: profile (pool), email, 5h / 7d use, last use
+ccp account --json   # the same for scripts
+ccp status           # also lists accounts
 ```
 
-After the global login moves, plain `claude` is logged out: start it with
-`ccp run default --account default -- claude`. Plain `ccp migrate` never moves logins.
+### Add accounts to a pool
+
+```bash
+ccp account add gt4 companyA    # create it (logged out); profile defaults to the current one
+ccp run --account gt4            # Claude Code on gt4: type /login once
+ccp account                      # check: gt4 shows its own email
+```
+
+Pick short names that say the pool (`gt1`, `acme1`). `auto` is reserved.
+
+### Make a folder use its pool (`claude` picks the account)
+
+```bash
+cd ~/workspace/work/acme
+ccp use acme --accounts
+```
+
+This writes `CLAUDE_CONFIG_DIR` into `mise.toml` (or `.envrc`), the shim `.ccp/bin/claude`, puts
+`.ccp/bin` first on PATH (`_.path` or `PATH_add`) and adds `.ccp/` to `.git/info/exclude`.
+Plain `claude` there then runs `ccp run --account auto --or-profile`:
+
+- a session already on an account keeps it (sub-agents and nested `claude` stay on it);
+- otherwise the account with the most limit left;
+- with no account logged in yet, the profile itself (no error).
+
+Never write this shim by hand: it must start the real `claude` from `mise which claude`. A mise
+shim reapplies `mise.toml` and resets `CLAUDE_CONFIG_DIR` to the profile, so every login lands
+in the profile. Rerun `ccp use <profile> --accounts` to rewrite it.
+
+### A new pool for a new client or new accounts
+
+```bash
+ccp profile create acme --from companyA   # same skills and settings, separate pool
+ccp account add acme1 acme && ccp run --account acme1    # /login
+ccp account add acme2 acme && ccp run --account acme2    # /login
+cd ~/workspace/clients/acme && ccp use acme --accounts
+```
+
+Accounts you buy for yourself: put them in the pool of the profile you use them with (for
+example `default`), or in a profile of their own.
+
+### Choose the account by hand
+
+```bash
+ccp run --account gt2                         # one run on gt2 (its own profile)
+ccp run companyA --account auto -- claude -c # one run, auto pick, with claude flags after --
+eval "$(ccp env --account gt2)"               # this terminal only
+ccp session --account gt2                     # a sub-shell on gt2
+ccp env companyA --account gt2 --format=mise # pin a folder to one account
+```
+
+Everything after `--` is the command; name `claude` before its flags.
+
+### How auto picks
+
+1. Usage comes from Claude's usage endpoint, read with each account's token, cached 5 minutes
+   in `<account>/.ccp-usage.json` (failures are cached too). ccp never refreshes a token.
+2. Order: accounts under 80% of the 5-hour and 95% of the weekly limit, lowest 5-hour use first
+   then lowest weekly; then accounts with unknown usage; then busy ones; then exhausted ones.
+   A window whose reset time has passed counts as 0%.
+3. Ties go to the account started least recently (`.ccp-last-used`), so with no usage data
+   the pick rotates.
+4. The pick happens once, at start. A running session never switches; when its account runs
+   out, exit and start `claude` again.
+
+### Move an account to another pool
+
+Close its Claude sessions, then:
+
+```bash
+ccp run acme --account gt3 --relink   # gt3 now belongs to the acme pool (same login)
+```
+
+### Remove an account
+
+There is no remove command yet. Confirm with the user first, close its sessions, then delete
+its login and its folder:
+
+```bash
+d=$HOME/.ccp/accounts/gt4
+security delete-generic-password -s "Claude Code-credentials-$(printf %s "$d" | shasum -a 256 | cut -c1-8)"  # macOS only
+rm -rf "$d"
+```
+
+### Move existing logins into accounts
+
+`ccp migrate --accounts [--dry-run]` moves each profile's current login into the account of the
+same name (profile `default` → account `default`). It acts on **every** profile, including the
+personal `default`, and refuses a profile while Claude Code runs on its login. After the global
+login moves, plain `claude` is logged out. Prefer `ccp account add` plus a fresh `/login`.
+
+### Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| Every account shows the same email | The browser approved each `/login` with the same claude.ai account. Sign out of claude.ai (or use Incognito), then `/logout` and `/login` in that account |
+| Logged in, but `ccp account` says "(not logged in)" | The session ran in another folder. Check `claude auth status`: `configDirectory` must be the account folder. A hand-written wrapper that calls the mise shim causes this; use `ccp use --accounts` |
+| `no account in the pool is logged in` | Log in one account (`ccp run --account <name>`, `/login`), or start through the `--accounts` shim, which falls back to the profile |
+| `Warning: mcp-needs-auth-cache.json is a real file …` | Claude Code replaced that link with a file. Harmless |
+| The status line shows another account's usage | The status line tool caches usage globally; trust `ccp account` |
 
 ## Tips
 
