@@ -30,7 +30,7 @@ internal/
 3. Register in `init()` with `parentCmd.AddCommand()`
 4. Keep cmd layer thin — delegate to `internal/`
 
-**Watch out:** Max 5 user-facing concepts. Prefer flags on existing commands over new commands.
+**Watch out:** Max 7 user-facing concepts (6 in use). Prefer flags on existing commands over new commands.
 
 ### Picker TUI (`internal/picker/`)
 
@@ -109,6 +109,6 @@ type Source struct {
 - Flat profiles, no composition layers
 - Hub IS the sharing mechanism
 - Complete templates over fragments
-- Max 5 user-facing concepts
+- Max 7 user-facing concepts (6 in use)
 - If it can be a flag, don't make it a command
 - Hidden commands are OK for power users

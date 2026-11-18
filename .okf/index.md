@@ -9,8 +9,8 @@ Go CLI that manages Claude Code profiles through a central hub of skills, agents
 # Start here
 
 * [Product overview](product/overview.md) - The problem ccp solves, its solution, explicit non-goals, assumptions, and deferred questions.
-* [Core concepts and glossary](product/core-concepts.md) - The five user-facing concepts ccp is allowed to have, bundles as a composite hub item, and the glossary.
-* [Design principles](engineering/design-principles.md) - How design choices are made in ccp — reuse over abstraction, a five-concept budget, flags over commands, one-function settings generation.
+* [Core concepts and glossary](product/core-concepts.md) - The user-facing concepts ccp is allowed to have (at most seven, six in use), bundles as a composite hub item, and the glossary.
+* [Design principles](engineering/design-principles.md) - How design choices are made in ccp — reuse over abstraction, a seven-concept budget, flags over commands, one-function settings generation.
 * [Development and release workflow](engineering/workflow.md) - How to change ccp safely — build and test loop, common tasks, release and tagging, git rules, version tracking.
 
 # Sections

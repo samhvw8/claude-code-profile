@@ -1,7 +1,7 @@
 ---
 type: Principle
 title: Design principles
-description: How design choices are made in ccp — reuse over abstraction, a five-concept budget, flags over commands, one-function settings generation.
+description: How design choices are made in ccp — reuse over abstraction, a seven-concept budget, flags over commands, one-function settings generation.
 tags: [engineering, design, principles]
 generated: { by: claude-code/claude-opus-5, at: 2026-09-14T00:50:10Z }
 sources:
@@ -21,7 +21,7 @@ reuse", reuse wins by default; propose a new abstraction only when reuse is genu
 
 | Rule | Consequence |
 |------|-------------|
-| Max 5 user-facing concepts ([the five](/product/core-concepts.md)) | A sixth requires removing one |
+| Max 7 user-facing concepts, 6 in use ([the concepts](/product/core-concepts.md)); 5 until 2026-11-18 ([decision](/decisions/account-concept.md)) | An eighth requires removing one |
 | No processor/builder interfaces for single-path logic | Plain functions ([anti-pattern](/anti-patterns/processor-interface-chains.md)) |
 | A feature that can be a flag on an existing command is a flag | No new command |
 | Power-user commands may be hidden (`Hidden: true`) | Keeps the visible surface near 18 commands ([decision](/decisions/command-surface.md)) |

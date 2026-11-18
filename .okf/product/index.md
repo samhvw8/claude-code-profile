@@ -1,7 +1,7 @@
 # Product
 
 * [Overview](overview.md) - The problem ccp solves, its solution, explicit non-goals, assumptions, and deferred questions.
-* [Core concepts and glossary](core-concepts.md) - The five user-facing concepts ccp is allowed to have, bundles as a composite hub item, and the glossary.
+* [Core concepts and glossary](core-concepts.md) - The user-facing concepts ccp is allowed to have (at most seven, six in use), bundles as a composite hub item, and the glossary.
 * [User stories](user-stories.md) - The ten user stories ccp was specified against, with their implementation status as of v0.48.
 * [User journeys](user-journeys.md) - Step-by-step flows for first-time setup, creating a purpose-specific profile, and fixing drift.
 * [Acceptance criteria](acceptance-criteria.md) - Gherkin acceptance criteria AC-1 to AC-24 for ccp's commands.

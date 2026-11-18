@@ -35,6 +35,8 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
 | `ccp which [--path]` | Show the active profile (and account), or its directory | `ccp which --path` |
+| `ccp account [list] [--json]` | List accounts with profile, email, 5-hour and weekly use and last use; with none, how to add one | `ccp account` |
+| `ccp account add <name> [<profile>]` | Create an account for a profile (default: the current one); it starts logged out, so log in with `ccp run --account <name>` and `/login` | `ccp account add gt1 companyA` |
 | `ccp status` | Status and health; with accounts, each one's profile, email, 5-hour and 7-day use and last use | `ccp status` |
 | `ccp doctor` | Diagnose (including accounts with a missing profile or broken links), and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
