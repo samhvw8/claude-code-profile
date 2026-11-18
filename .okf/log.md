@@ -1,6 +1,8 @@
 # Update Log
 
 ## 2026-11-18
+* **Update**: Released v0.54.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
+* **Decision**: [Account is the sixth concept; the budget is seven for now](/decisions/account-concept.md), at the user's request after an account list could not be found. New visible `ccp account` (list, add), tests in `cmd/account_test.go`. Updated [core concepts](/product/core-concepts.md), [design principles](/engineering/design-principles.md), the [command reference](/cli/command-reference.md), the [accounts decision](/decisions/accounts-as-activation-option.md) (its "no account command" part is replaced), `.claude/rules/01-project-identity.md`, `02-design-principles.md`, the ccp-dev and ccp skills, and the README.
 * **Update**: Released v0.53.2: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: Help fixes, no concept changed: `ccp run` handles `-h`/`--help` itself (its flag parsing is off), `hub list`/`hub add` help and the invalid-type error list every type from `config.AllHubItemTypes`, `status` help names the accounts table. Tests in `cmd/help_test.go`.
 * **Update**: [Workflow](/engineering/workflow.md) release steps: push several new tags oldest first, one Release run at a time, and upgrade with `mise cache clear && MISE_USE_VERSIONS_HOST=0 mise up …`, because a plain `mise up` missed v0.52.0 and v0.53.1.
