@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-18
+* **Update**: `skills/ccp/SKILL.md` gets an "Accounts and pools" playbook: the pool model (profile = scope), adding accounts, `ccp use --accounts`, a new pool per client, picking by hand, how auto picks, moving and removing an account, `migrate --accounts` caveats and troubleshooting; its description now triggers on account and pool requests.
 * **Update**: Released v0.55.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: `ccp use <profile> --accounts` and `ccp run --or-profile` replace the hand-written growtrics `claude` wrapper. Updated the [accounts decision](/decisions/accounts-as-activation-option.md) (one workspace, one pool), [activation](/architecture/activation.md), [command flags](/cli/command-flags.md), the [command reference](/cli/command-reference.md), the README and the ccp skill. New anti-pattern [starting claude through a mise shim](/anti-patterns/mise-shim-in-claude-wrapper.md), found when three logins all landed in the growtrics profile. Tests in `cmd/use_accounts_test.go`.
 * **Update**: Released v0.54.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
