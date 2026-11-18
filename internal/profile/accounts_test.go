@@ -59,6 +59,15 @@ func readJSON(t *testing.T, path string) map[string]any {
 	return m
 }
 
+func TestValidateAccountName_ReservesAuto(t *testing.T) {
+	if err := ValidateAccountName(AutoAccount); err == nil || !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("auto: %v", err)
+	}
+	if _, _, err := LinkAccount(nil, AutoAccount, "dev", false); err == nil {
+		t.Error("LinkAccount must refuse an account named auto")
+	}
+}
+
 func TestValidateAccountName(t *testing.T) {
 	tests := []struct {
 		name string
@@ -448,7 +457,7 @@ func TestConfigDirProfile_Normalizes(t *testing.T) {
 func TestLinkAccount_NeverLinksPerFolderState(t *testing.T) {
 	paths := accountTestPaths(t, "p")
 	prof := paths.ProfileDir("p")
-	own := []string{".config.json", ".storage-write.lock", ".storage-write", "history.lock", "jobs"}
+	own := []string{".config.json", ".storage-write.lock", ".storage-write", "history.lock", "jobs", ".ccp-usage.json", ".ccp-last-used"}
 	for _, name := range own {
 		writeFile(t, filepath.Join(prof, name), "{}")
 	}

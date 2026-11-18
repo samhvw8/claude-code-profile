@@ -67,6 +67,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	profiles, profilesErr := listAllProfiles(paths)
 
 	issues := checkHealth(paths)
+	accounts := readAccountStatuses(paths)
 
 	// JSON output
 	if statusJSON {
@@ -117,6 +118,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 				})
 			}
 			output["profiles"] = profileList
+		}
+
+		if len(accounts) > 0 {
+			output["accounts"] = accountJSON(accounts)
 		}
 
 		if len(issues) > 0 {
@@ -176,6 +181,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Total: %d profiles\n", len(profiles))
 	}
 	fmt.Println()
+
+	if len(accounts) > 0 {
+		printAccounts(accounts)
+	}
 
 	// Health check
 	fmt.Println("--- Health ---")

@@ -18,7 +18,7 @@ var (
 )
 
 var envCmd = &cobra.Command{
-	Use:    "env <profile>",
+	Use:    "env [<profile>]",
 	Hidden: true,
 	Short:  "Configure project environment to use a profile",
 	Long: `Update project configuration files to use a specific profile.
@@ -35,8 +35,12 @@ Examples:
   ccp env dev                    # Print shell export
   ccp env dev --format=mise      # Update mise.toml
   ccp env dev --format=direnv    # Update .envrc
-  ccp env default --account work1 --format=mise`,
-	Args: cobra.ExactArgs(1),
+  ccp env default --account work1 --format=mise
+  eval "$(ccp env --account auto)"   # this terminal: the freest account
+
+With a named account the profile may be left out. --account auto (shell
+format only) picks the account with the most plan limit left once, now.`,
+	Args: cobra.RangeArgs(0, 1),
 	RunE: runEnv,
 }
 
@@ -47,7 +51,11 @@ func init() {
 }
 
 func runEnv(cmd *cobra.Command, args []string) error {
-	profileName := args[0]
+	cmd.SilenceUsage = true
+	profileName := ""
+	if len(args) > 0 {
+		profileName = args[0]
+	}
 
 	paths, err := config.ResolvePaths()
 	if err != nil {
@@ -58,25 +66,32 @@ func runEnv(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ccp not initialized: run 'ccp init' first")
 	}
 
-	// Verify profile exists
-	mgr := profile.NewManager(paths)
-	p, err := mgr.Get(profileName)
-	if err != nil {
-		return fmt.Errorf("failed to get profile: %w", err)
-	}
-	if p == nil {
-		return fmt.Errorf("profile not found: %s", profileName)
-	}
-
 	switch envFormat {
 	case "shell", "mise", "direnv":
 	default:
 		return fmt.Errorf("unknown format: %s (valid: shell, mise, direnv)", envFormat)
 	}
-
-	profilePath, err := activationDir(paths, profileName, envAccount, cmd.Flags().Changed("account"), envRelink)
+	accountSet := cmd.Flags().Changed("account")
+	if accountSet && envAccount == "" {
+		return profile.ValidateAccountName("")
+	}
+	if envAccount == profile.AutoAccount && envFormat != "shell" {
+		return fmt.Errorf("--account auto picks once, so it cannot go into %s; use 'ccp run --account auto' to pick at each start", envFormat)
+	}
+	profileName, err = activationProfile(paths, profileName, envAccount)
 	if err != nil {
 		return err
+	}
+	account, err := chooseAccount(paths, profileName, envAccount, envRelink)
+	if err != nil {
+		return err
+	}
+	profilePath, err := activationDir(paths, profileName, account, accountSet, envRelink)
+	if err != nil {
+		return err
+	}
+	if account != "" && envFormat == "shell" {
+		markAccountUsed(profilePath)
 	}
 
 	switch envFormat {
