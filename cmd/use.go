@@ -221,6 +221,9 @@ func updateProjectEnv(profilePath, profileName string) error {
 		if err := updateMiseTomlMulti(envVars); err != nil {
 			return err
 		}
+		if err := removeStaleAddDirEnv("mise.toml"); err != nil {
+			return err
+		}
 		fmt.Printf("Profile '%s' configured for this project\n", profileName)
 		return nil
 	}
@@ -228,6 +231,9 @@ func updateProjectEnv(profilePath, profileName string) error {
 	// 2. Check for .envrc
 	if _, err := os.Stat(".envrc"); err == nil {
 		if err := updateEnvrcMulti(envVars); err != nil {
+			return err
+		}
+		if err := removeStaleAddDirEnv(".envrc"); err != nil {
 			return err
 		}
 		fmt.Printf("Profile '%s' configured for this project\n", profileName)
@@ -263,6 +269,39 @@ func updateProjectEnv(profilePath, profileName string) error {
 	for k, v := range envVars {
 		fmt.Printf("  export %s=\"%s\"\n", k, v)
 	}
+	return nil
+}
+
+// staleAddDirEnv is the env var ccp use wrote before 0.53.0 for the removed
+// claude --add-dir alias (see .okf/anti-patterns/add-dir-profile-folder.md).
+const staleAddDirEnv = "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD"
+
+// removeStaleAddDirEnv deletes the lines of an env file that set
+// staleAddDirEnv ("KEY = ..." in mise.toml, "export KEY=..." in .envrc) and
+// leaves every other line as it was.
+func removeStaleAddDirEnv(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	kept := lines[:0]
+	removed := false
+	for _, line := range lines {
+		t := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "export "))
+		if strings.HasPrefix(t, staleAddDirEnv+"=") || strings.HasPrefix(t, staleAddDirEnv+" ") {
+			removed = true
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if !removed {
+		return nil
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(kept, "\n")), 0644); err != nil {
+		return fmt.Errorf("failed to write %s: %w", path, err)
+	}
+	fmt.Printf("Removed %s from %s (no longer needed)\n", staleAddDirEnv, path)
 	return nil
 }
 
