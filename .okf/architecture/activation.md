@@ -14,7 +14,7 @@ sources:
 
 | Mode | Command | Effect |
 |------|---------|--------|
-| Project (default) | `ccp use dev` | Detects `mise.toml`/`.envrc` and writes `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` |
+| Project (default) | `ccp use dev` | Detects `mise.toml`/`.envrc` and writes `CLAUDE_CONFIG_DIR` |
 | Global | `ccp use quickfix -g` | `~/.claude` → `~/.ccp/profiles/quickfix` (relative symlink) |
 | Override | env var | `CLAUDE_CONFIG_DIR` beats the symlink |
 | Account | `--account <name>` or `--account auto` on `run`, `session`, `env` | `CLAUDE_CONFIG_DIR` is `~/.ccp/accounts/<name>`, which links the profile but keeps its own Claude login; `auto` picks the account of the profile with the most plan limit left |
@@ -23,11 +23,9 @@ sources:
 # mise (.mise.toml in the project root)
 [env]
 CLAUDE_CONFIG_DIR = "~/.ccp/profiles/quickfix"
-CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1"
 
 # direnv (.envrc in the project root)
 export CLAUDE_CONFIG_DIR="$HOME/.ccp/profiles/quickfix"
-export CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD="1"
 
 # one command
 CLAUDE_CONFIG_DIR=~/.ccp/profiles/quickfix claude "fix the bug"
@@ -64,12 +62,19 @@ time; `--relink` moves it, after its sessions are closed. `ccp which` prints
 Different terminals can run different profiles through the env override, while the
 `~/.claude` symlink stays the fallback.
 
-# Loading a profile's CLAUDE.md and rules with --add-dir
+# Loading a profile's CLAUDE.md and rules
 
-```bash
-alias claude='CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1 claude --add-dir "${CLAUDE_CONFIG_DIR:-$(ccp which --path)}"'
-```
+Claude Code loads `CLAUDE.md` and `rules/` from the active config folder (`CLAUDE_CONFIG_DIR`,
+else `~/.claude`) as user memory, so no flag is needed. Verified on Claude Code 2.1.327: a
+`claude -p` run with only `CLAUDE_CONFIG_DIR` set listed the profile's `CLAUDE.md` and every
+linked rule.
 
-`ccp config shell` prints aliases like this one. Other entry points: `ccp session <profile>`
+ccp used to print `alias claude='… claude --add-dir "$CLAUDE_CONFIG_DIR"'` and write
+`CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`. Remove both where they remain: since Claude
+Code 2.1.326 every `--add-dir` folder needs workspace trust, a "Yes, add it" answer lasts one
+session, and each profile and account folder keeps its own `.claude.json` trust records, so the
+alias showed a trust prompt on every start in any profile whose folder was never trusted.
+
+`ccp config shell` prints the `ccp-use` function. Other entry points: `ccp session <profile>`
 (a shell with the profile active), `ccp run <profile> -- <cmd>`, and `ccp auto` with
 [`.ccp.yaml`](/reference/project-config.md).

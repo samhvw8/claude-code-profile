@@ -40,7 +40,7 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
 | `ccp env [<profile>]` | Configure a project env for a profile, optionally under an account (`auto`: shell format only) (hidden) | `ccp env default --account work1 --format=mise` |
 | `ccp config init` | Write a default `ccp.toml` | `ccp config init` |
-| `ccp config shell` | Print shell aliases for Claude integration | `ccp config shell >> ~/.zshrc` |
+| `ccp config shell` | Print the `ccp-use` shell function | `ccp config shell >> ~/.zshrc` |
 | `ccp bootstrap [--push]` | New-machine setup: sync sources, fix profiles; `--push` adds to chezmoi ([details](/features/bootstrap.md)) | `ccp bootstrap` |
 
 # Profiles
