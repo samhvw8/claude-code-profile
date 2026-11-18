@@ -1,6 +1,8 @@
 # Update Log
 
 ## 2026-11-18
+* **Update**: Released v0.55.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
+* **Update**: `ccp use <profile> --accounts` and `ccp run --or-profile` replace the hand-written companyA `claude` wrapper. Updated the [accounts decision](/decisions/accounts-as-activation-option.md) (one workspace, one pool), [activation](/architecture/activation.md), [command flags](/cli/command-flags.md), the [command reference](/cli/command-reference.md), the README and the ccp skill. New anti-pattern [starting claude through a mise shim](/anti-patterns/mise-shim-in-claude-wrapper.md), found when three logins all landed in the companyA profile. Tests in `cmd/use_accounts_test.go`.
 * **Update**: Released v0.54.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Decision**: [Account is the sixth concept; the budget is seven for now](/decisions/account-concept.md), at the user's request after an account list could not be found. New visible `ccp account` (list, add), tests in `cmd/account_test.go`. Updated [core concepts](/product/core-concepts.md), [design principles](/engineering/design-principles.md), the [command reference](/cli/command-reference.md), the [accounts decision](/decisions/accounts-as-activation-option.md) (its "no account command" part is replaced), `.claude/rules/01-project-identity.md`, `02-design-principles.md`, the ccp-dev and ccp skills, and the README.
 * **Update**: Released v0.53.2: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.

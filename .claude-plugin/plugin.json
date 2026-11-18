@@ -1,6 +1,6 @@
 {
   "name": "ccp",
   "description": "Claude Code Profile Manager — manage multiple Claude Code configurations via a central hub",
-  "version": "0.54.0",
+  "version": "0.55.0",
   "skills": "./skills"
 }
