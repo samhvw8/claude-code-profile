@@ -48,6 +48,9 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if ra.help {
+		return cmd.Help()
+	}
 	profileName, cmdArgs := ra.profile, ra.command
 	// Past argument parsing an error is about profiles or accounts, not usage.
 	cmd.SilenceUsage = true
@@ -93,6 +96,7 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 type runArgs struct {
 	profile, account   string
 	accountSet, relink bool
+	help               bool
 	command            []string
 }
 
@@ -104,6 +108,11 @@ func parseRunArgs(args []string) (runArgs, error) {
 	own, command := args, []string{"claude"}
 	if sep := slices.Index(args, "--"); sep >= 0 {
 		own, command = args[:sep], args[sep+1:]
+	}
+	// Flag parsing is off, so cobra never sees a help flag: handle it here.
+	if slices.Contains(own, "-h") || slices.Contains(own, "--help") {
+		ra.help = true
+		return ra, nil
 	}
 	for i := 0; i < len(own); i++ {
 		arg := own[i]

@@ -32,7 +32,7 @@ With one argument:
   - If it's a type: Error (requires name-or-path)
 With two arguments: Add item of <type> from <name-or-path>
 
-Types: skills, agents, hooks, rules, commands
+Types: skills, agents, hooks, rules, commands, output-styles, settings-templates
 
 Examples:
   # Interactive mode (promote local items to hub, symlink back)
