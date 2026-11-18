@@ -1,6 +1,8 @@
 # Update Log
 
 ## 2026-11-18
+* **Update**: Released v0.53.2: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
+* **Update**: Help fixes, no concept changed: `ccp run` handles `-h`/`--help` itself (its flag parsing is off), `hub list`/`hub add` help and the invalid-type error list every type from `config.AllHubItemTypes`, `status` help names the accounts table. Tests in `cmd/help_test.go`.
 * **Update**: [Workflow](/engineering/workflow.md) release steps: push several new tags oldest first, one Release run at a time, and upgrade with `mise cache clear && MISE_USE_VERSIONS_HOST=0 mise up …`, because a plain `mise up` missed v0.52.0 and v0.53.1.
 * **Update**: Released v0.53.1: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: `ccp use` removes a `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` line (written by ccp before 0.53.0) from the `mise.toml` or `.envrc` it updates and says so; other lines stay as they were. Updated [activation](/architecture/activation.md), AC-9 in [acceptance criteria](/product/acceptance-criteria.md) and the [anti-pattern](/anti-patterns/add-dir-profile-folder.md). Test: `TestUpdateProjectEnvRemovesStaleAddDirEnvVar`.
