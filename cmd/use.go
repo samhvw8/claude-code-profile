@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	useShowFlag   bool
-	useGlobalFlag bool
+	useShowFlag     bool
+	useGlobalFlag   bool
+	useAccountsFlag bool
 )
 
 var useCmd = &cobra.Command{
@@ -38,7 +39,13 @@ Examples:
   ccp use dev -g           # Update global ~/.claude symlink
   ccp use                  # Interactive picker (project env)
   ccp use -g               # Interactive picker (global symlink)
-  ccp use --show           # Show current active profile`,
+  ccp use --show           # Show current active profile
+  ccp use work --accounts  # ...and claude here picks work's freest account
+
+--accounts also writes .ccp/bin/claude, puts .ccp/bin on PATH through
+mise.toml (or .envrc) and adds .ccp/ to .git/info/exclude. claude in the
+folder then runs on the profile's account with the most plan limit left
+(ccp run --account auto), or on the profile while no account is logged in.`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: completeProfileNames,
 	RunE:              runUse,
@@ -47,6 +54,7 @@ Examples:
 func init() {
 	useCmd.Flags().BoolVar(&useShowFlag, "show", false, "Show current active profile")
 	useCmd.Flags().BoolVarP(&useGlobalFlag, "global", "g", false, "Update global ~/.claude symlink")
+	useCmd.Flags().BoolVar(&useAccountsFlag, "accounts", false, "Project mode: claude here picks the profile's account with the most limit left")
 	rootCmd.AddCommand(useCmd)
 }
 
@@ -79,6 +87,10 @@ func runUse(cmd *cobra.Command, args []string) error {
 			fmt.Printf("Description: %s\n", active.Manifest.Description)
 		}
 		return nil
+	}
+
+	if useAccountsFlag && useGlobalFlag {
+		return fmt.Errorf("--accounts sets up a project folder; it cannot be used with -g")
 	}
 
 	// Interactive mode (no args)
@@ -207,7 +219,13 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 	}
 
 	// Project mode: auto-detect environment file
-	return updateProjectEnv(profilePath, profileName)
+	if err := updateProjectEnv(profilePath, profileName); err != nil {
+		return err
+	}
+	if useAccountsFlag {
+		return installAccountShim()
+	}
+	return nil
 }
 
 func updateProjectEnv(profilePath, profileName string) error {

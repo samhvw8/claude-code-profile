@@ -285,6 +285,16 @@ eval "$(ccp env work --account auto)"            # this terminal only
 ccp status                                       # each account's 5-hour and weekly usage
 ```
 
+To make plain `claude` in a project folder pick the account by itself:
+
+```bash
+cd ~/work/acme
+ccp use work --accounts   # mise.toml (or .envrc) + a .ccp/bin/claude shim
+claude                    # runs on work's account with the most limit left
+```
+
+With no account logged in yet, `claude` there runs on the profile itself.
+
 `--account auto` picks among the accounts linked to the profile, once, when the command starts. It reads each account's plan usage from Claude's usage endpoint (cached 5 minutes) and prefers an account under 80% of its 5-hour limit and 95% of its weekly limit. When usage is unknown or equal, it picks the account used least recently. ccp never refreshes a token and never switches accounts in a running session: to move off a busy account, start Claude Code again.
 
 `ccp migrate --accounts [--dry-run]` moves each profile's existing login into the account of the same name.

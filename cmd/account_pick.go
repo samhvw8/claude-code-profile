@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/samhvw8/claude-code-profile/internal/accountusage"
@@ -63,7 +64,7 @@ func chooseAccount(paths *config.Paths, profileName, account string, relink bool
 		return "", err
 	}
 	if len(pool) == 0 {
-		return "", fmt.Errorf("no account is linked to profile %q; add one with 'ccp run %s --account <name>' and /login in it", profileName, profileName)
+		return "", fmt.Errorf("%w: no account is linked to profile %q; add one with 'ccp account add <name> %s' and /login in it", errNoUsableAccount, profileName, profileName)
 	}
 	reader, err := accountusage.NewReader(Version)
 	if err != nil {
@@ -71,10 +72,32 @@ func chooseAccount(paths *config.Paths, profileName, account string, relink bool
 	}
 	picked, reason, err := accountusage.Pick(reader.Read(pool), time.Now())
 	if err != nil {
-		return "", fmt.Errorf("%w (profile %q); log in with 'ccp run %s --account <name>' and /login", err, profileName, profileName)
+		return "", fmt.Errorf("%w: %w (profile %q); log in with 'ccp run --account <name>' and /login", errNoUsableAccount, err, profileName)
 	}
 	fmt.Fprintf(os.Stderr, "ccp: account %s (%s)\n", picked.Name, reason)
 	return picked.Name, nil
+}
+
+// errNoUsableAccount marks the --account auto failures where the pool has no
+// account to run: none linked to the profile, or none logged in. run
+// --or-profile falls back to the profile folder on it.
+var errNoUsableAccount = errors.New("no usable account")
+
+// currentAccountDir returns CLAUDE_CONFIG_DIR when it is an existing account
+// folder (a session already started on an account), else "".
+func currentAccountDir(paths *config.Paths) string {
+	dir := os.Getenv("CLAUDE_CONFIG_DIR")
+	if dir == "" {
+		return ""
+	}
+	dir = filepath.Clean(dir)
+	if filepath.Dir(dir) != filepath.Clean(paths.AccountsDir()) {
+		return ""
+	}
+	if _, err := profile.AccountProfile(dir); err != nil {
+		return ""
+	}
+	return dir
 }
 
 // markAccountUsed records that an account was started, for the

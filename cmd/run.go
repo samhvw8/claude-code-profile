@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,7 +15,7 @@ import (
 )
 
 var runCmd = &cobra.Command{
-	Use:    "run [<profile>] [--account <name>|auto [--relink]] [-- <command> [args...]]",
+	Use:    "run [<profile>] [--account <name>|auto [--relink|--or-profile]] [-- <command> [args...]]",
 	Hidden: true,
 	Short:  "Run a command with a specific profile active",
 	Long: `Execute a command with CLAUDE_CONFIG_DIR set to the specified profile.
@@ -28,6 +29,10 @@ The profile may then be left out: a named account runs its own profile.
 one when none is named), the one with the most plan limit left: Claude's usage
 endpoint, read at most every 5 minutes per account, else the account started
 least recently. The command defaults to claude.
+
+--or-profile (with --account auto) never fails for lack of an account: a
+session already on an account keeps it, and a pool with no account logged in
+runs on the profile itself. The shim from 'ccp use --accounts' passes it.
 
 Examples:
   ccp run --account work1                  # claude, account work1's profile
@@ -67,20 +72,9 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 	if ra.accountSet && ra.account == "" {
 		return profile.ValidateAccountName("")
 	}
-	profileName, err = activationProfile(paths, profileName, ra.account)
+	configDir, err := runConfigDir(paths, profileName, ra)
 	if err != nil {
 		return err
-	}
-	account, err := chooseAccount(paths, profileName, ra.account, ra.relink)
-	if err != nil {
-		return err
-	}
-	configDir, err := activationDir(paths, profileName, account, ra.accountSet, ra.relink)
-	if err != nil {
-		return err
-	}
-	if account != "" {
-		markAccountUsed(configDir)
 	}
 
 	// Execute command with CLAUDE_CONFIG_DIR set
@@ -93,9 +87,42 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 	return execCmd.Run()
 }
 
+// runConfigDir resolves the CLAUDE_CONFIG_DIR that run starts the command in.
+// With --or-profile (what the 'ccp use --accounts' shim passes), a session
+// already on an account keeps it, and a pool with no usable account falls back
+// to the profile folder instead of failing.
+func runConfigDir(paths *config.Paths, profileName string, ra runArgs) (string, error) {
+	if ra.orProfile {
+		if dir := currentAccountDir(paths); dir != "" {
+			return dir, nil
+		}
+	}
+	profileName, err := activationProfile(paths, profileName, ra.account)
+	if err != nil {
+		return "", err
+	}
+	account, err := chooseAccount(paths, profileName, ra.account, ra.relink)
+	if ra.orProfile && errors.Is(err, errNoUsableAccount) {
+		fmt.Fprintf(os.Stderr, "ccp: no account of profile %s is logged in; running on the profile\n", profileName)
+		return paths.ProfileDir(profileName), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	configDir, err := activationDir(paths, profileName, account, ra.accountSet, ra.relink)
+	if err != nil {
+		return "", err
+	}
+	if account != "" {
+		markAccountUsed(configDir)
+	}
+	return configDir, nil
+}
+
 type runArgs struct {
 	profile, account   string
 	accountSet, relink bool
+	orProfile          bool
 	help               bool
 	command            []string
 }
@@ -119,6 +146,8 @@ func parseRunArgs(args []string) (runArgs, error) {
 		switch {
 		case arg == "--relink":
 			ra.relink = true
+		case arg == "--or-profile":
+			ra.orProfile = true
 		case arg == "--account":
 			if i+1 >= len(own) {
 				return ra, fmt.Errorf("--account needs a name")
@@ -149,6 +178,9 @@ func parseRunArgs(args []string) (runArgs, error) {
 	}
 	if ra.relink && ra.account == "" {
 		return ra, fmt.Errorf("--relink needs --account")
+	}
+	if ra.orProfile && ra.account != profile.AutoAccount {
+		return ra, fmt.Errorf("--or-profile needs --account auto")
 	}
 	return ra, nil
 }
