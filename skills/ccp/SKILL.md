@@ -234,6 +234,7 @@ profiles. `--account <name>` runs a profile through `~/.ccp/accounts/<name>/`: i
 ```bash
 ccp account                                      # list accounts with 5h / 7d use
 ccp account add work1 default                    # create account work1 for profile default
+ccp use default --accounts                       # in a project: plain claude picks the account
 ccp run default --account work1 -- claude        # start Claude as work1 (first run: /login)
 ccp run --account work1                          # same: the account's profile, claude by default
 ccp run companyA --account auto -- claude -c    # the account with most plan limit left

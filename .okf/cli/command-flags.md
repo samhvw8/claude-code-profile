@@ -29,10 +29,12 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 | `reset` | `--force` | Skip confirmation |
 | `use` | `-g, --global` | Update the global `~/.claude` symlink (default: project env) |
 | `use` | `--show` | Show the current profile |
+| `use` | `--accounts` | Project mode: write `.ccp/bin/claude`, put `.ccp/bin` on PATH (`mise.toml` `_.path` or `.envrc` `PATH_add`), add `.ccp/` to `.git/info/exclude`; plain `claude` then picks the profile's account with the most limit left. Not with `-g` |
 | `which` | `--path` | Print only the profile directory (the account folder when an account is active) |
 | `env` | `--format=shell\|mise\|direnv` | Print an export (default), or update `mise.toml` / `.envrc` |
 | `run`, `session`, `env` | `--account <name>` | Use the account folder `~/.ccp/accounts/<name>` (own Claude login, links to the profile) as `CLAUDE_CONFIG_DIR` ([activation](/architecture/activation.md)). For `run`, put it before `--` |
 | `run`, `session`, `env` | `--account auto` | Pick, among the accounts linked to the profile (the current one when none is named), the one with the most plan limit left: Claude's usage endpoint cached 5 minutes, else least recently used. `env`: shell format only ([decision](/decisions/accounts-as-activation-option.md)) |
+| `run` | `--or-profile` | With `--account auto`: keep `CLAUDE_CONFIG_DIR` when it already names an account, and run on the profile when no account of the pool is logged in, instead of failing. The `use --accounts` shim passes it |
 | `run`, `session`, `env` | `--relink` | With `--account`: link an account that is linked to another profile. Close its Claude sessions first |
 | `auto` | `--path` | Print the profile path instead of its name |
 

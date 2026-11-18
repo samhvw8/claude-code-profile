@@ -160,11 +160,15 @@ Ties go to the account ccp started least recently (`.ccp-last-used`, touched by 
 weeks, the age of the read and the last use, plus the reason a logged-in account has no live
 read.
 
-**One workspace, one pool.** A project folder whose `mise.toml` sets `CLAUDE_CONFIG_DIR` to the
-profile can put a `claude` wrapper on its PATH that runs `ccp run <profile> --account auto --
-<real claude> "$@"` while an account is linked to the profile, keeps `CLAUDE_CONFIG_DIR` when it
-already names an account (a session's child), and runs plain `claude` otherwise. Plain `claude`
-elsewhere keeps the personal login.
+**One workspace, one pool.** `ccp use <profile> --accounts` (since 0.55.0) sets a project folder up
+so plain `claude` there picks the profile's account: it writes `.ccp/bin/claude`, puts `.ccp/bin`
+on PATH through `mise.toml` `_.path` (or `PATH_add` in `.envrc`) and adds `.ccp/` to
+`.git/info/exclude`. The shim names no profile and runs `ccp run --account auto --or-profile --
+<real claude> "$@"`. `--or-profile` keeps `CLAUDE_CONFIG_DIR` when it already names an account (a
+session's child) and runs on the profile while no account of the pool is logged in, instead of
+failing. The real claude comes from `mise which claude`, never a mise shim
+([anti-pattern](/anti-patterns/mise-shim-in-claude-wrapper.md)). Plain `claude` elsewhere keeps the
+personal login.
 
 # Moving existing logins: `ccp migrate --accounts`
 

@@ -17,7 +17,7 @@ sources:
 | Project (default) | `ccp use dev` | Detects `mise.toml`/`.envrc` and writes `CLAUDE_CONFIG_DIR` |
 | Global | `ccp use quickfix -g` | `~/.claude` → `~/.ccp/profiles/quickfix` (relative symlink) |
 | Override | env var | `CLAUDE_CONFIG_DIR` beats the symlink |
-| Account | `--account <name>` or `--account auto` on `run`, `session`, `env` | `CLAUDE_CONFIG_DIR` is `~/.ccp/accounts/<name>`, which links the profile but keeps its own Claude login; `auto` picks the account of the profile with the most plan limit left |
+| Account | `--account <name>` or `--account auto` on `run`, `session`, `env`; `ccp use <name> --accounts` for a project folder | `CLAUDE_CONFIG_DIR` is `~/.ccp/accounts/<name>`, which links the profile but keeps its own Claude login; `auto` picks the account of the profile with the most plan limit left |
 
 ```bash
 # mise (.mise.toml in the project root)
@@ -56,6 +56,11 @@ first `claude` run in a new account asks for `/login`. An account is linked to o
 time; `--relink` moves it, after its sessions are closed. `ccp which` prints
 `<profile> (account <name>, from CLAUDE_CONFIG_DIR)`. Rationale and details:
 [accounts decision](/decisions/accounts-as-activation-option.md).
+
+`ccp use <profile> --accounts` in a project folder makes plain `claude` there pick the profile's
+account with the most limit left: a shim in `.ccp/bin/claude` (on PATH through `mise.toml` or
+`.envrc`, kept out of git through `.git/info/exclude`) runs `ccp run --account auto --or-profile`.
+With no account logged in it runs on the profile.
 
 # Parallel sessions
 

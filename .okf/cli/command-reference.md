@@ -32,6 +32,7 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp migrate` | Run migrations from older ccp versions; `--accounts` (opt-in) moves each profile's Claude login into the account of the same name | `ccp migrate --accounts --dry-run` |
 | `ccp reset` | Undo ccp and restore `~/.claude`; the plan lists account folders and their orphaned logins | `ccp reset` |
 | `ccp use <name>` | Set the project profile (auto-detects mise.toml/.envrc) | `ccp use dev` |
+| `ccp use <name> --accounts` | Set the project profile, and make plain `claude` here pick the profile's account with the most limit left (`.ccp/bin/claude` shim) | `ccp use companyA --accounts` |
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
 | `ccp which [--path]` | Show the active profile (and account), or its directory | `ccp which --path` |
