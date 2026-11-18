@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -28,7 +29,8 @@ var hubListCmd = &cobra.Command{
 	Short:   "List hub contents",
 	Long: `List all items in the hub, optionally filtered by type.
 
-Types: skills, agents, hooks, rules, commands`,
+Types: skills, agents, hooks, rules, commands, output-styles, settings-templates
+Bundles have their own listing: ccp bundle list`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runHubList,
 }
@@ -62,7 +64,7 @@ func runHubList(cmd *cobra.Command, args []string) error {
 		// Validate type
 		valid := slices.Contains(config.AllHubItemTypes(), itemType)
 		if !valid {
-			return fmt.Errorf("invalid type: %s (valid: skills, agents, hooks, rules, commands)", args[0])
+			return fmt.Errorf("invalid type: %s (valid: %s)", args[0], hubTypeNames())
 		}
 		typesToShow = []config.HubItemType{itemType}
 	} else {
@@ -120,4 +122,13 @@ func runHubList(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// hubTypeNames lists the hub item types for messages, in config order.
+func hubTypeNames() string {
+	names := make([]string, 0, len(config.AllHubItemTypes()))
+	for _, t := range config.AllHubItemTypes() {
+		names = append(names, string(t))
+	}
+	return strings.Join(names, ", ")
 }
