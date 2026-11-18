@@ -3,7 +3,7 @@ type: Changelog
 title: Release history
 description: What changed in each ccp release that the spec recorded, newest first.
 tags: [product, releases, history]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-06T00:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-18T09:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md revision history (removed 2026-09-14 by the OKF migration)"
@@ -20,6 +20,7 @@ The authoritative version is the latest git tag (also stated in `CLAUDE.md`).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.52.0 | 2026-11-18 | Added: accounts — one profile under several Claude logins. `--account <name>` on the hidden `run`, `session` and `env` uses `~/.ccp/accounts/<name>/`, a folder with its own login that links every other profile entry; a named account brings its own profile, and `run` defaults its command to `claude`. `--account auto` picks, among the profile's accounts, the one with the most plan limit left (Claude's usage endpoint, cached 5 minutes, else least recently used); `ccp status` lists accounts with their usage. Opt-in `ccp migrate --accounts [--dry-run]` moves each profile's existing login into the account of the same name, refused while Claude Code runs on it, and keeps MCP server tokens already in the account ([accounts decision](/decisions/accounts-as-activation-option.md)). Supersedes [API keys are per-profile](/decisions/api-keys-per-profile.md). Fixed: a command error prints once. |
 | 0.51.0 | 2026-11-12 | Added: hidden `ccp agy sync` mirroring a profile into Antigravity CLI (`~/.gemini/config`): `AGENTS.md` linked to `CLAUDE.md`, the output style in `GEMINI.md`, skills linked per item, agents and rules written as converted copies with agy frontmatter; agy follows `use -g`, link/unlink and bootstrap after the first sync ([agy](/features/agy.md)). Changed: opencode's copy ledger is shared code. |
 | 0.50.0 | 2026-11-06 | Added: `ccp source update` relinks a shadow whose item moved upstream (`skills/x` to `.claude/skills/x`) and, on every run, lists each installed item it did not reach (a hub copy, a foreign link, an item missing from the hub or gone upstream) with its fix command; `ccp install` accepts an item by its harness path in the clone (`.claude/skills/x`) ([source system](/features/source-system.md)). omp: a two-layer harness-aware sync skill, and the zero-LLM sync honors `~/.omp/agent/config.yml` `agentModelOverrides` and `ignoredSkills` ([omp](/features/omp/overview.md)). Fixed: unlinking a bundle no longer deletes the profile's direct link of the same name ([bundles](/features/bundles.md)); symlinked hub items stay inside `~/.ccp` on `ccp omp sync`. |
 | 0.49.1 | 2026-10-21 | Fixed: `doctor` no longer counts files the source repo's git ignores (a `__pycache__/` written when a skill's script ran) as a local edit, so `doctor --fix` turns those hub copies into shadows instead of leaving them stale ([shadow source items](/decisions/shadow-source-items.md)). |
