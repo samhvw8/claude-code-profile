@@ -3,7 +3,7 @@ type: Playbook
 title: Development and release workflow
 description: How to change ccp safely — build and test loop, common tasks, release and tagging, git rules, version tracking.
 tags: [engineering, workflow, release, git]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-01T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-18T12:05:00Z }
 sources:
   - id: workflow-rule
     resource: ".claude/rules/03-workflow.md (pre-migration version, 2026-09-14)"
@@ -56,6 +56,16 @@ When asked to "update docs and commit" or similar:
    GitHub, and `--follow-tags` pushes annotated tags only: v0.46.0 got a lightweight tag that never
    left the machine, so no release was built and mise
    users stayed on v0.45.0 until v0.47.0.
+6. After a push with several new tags, push them oldest first (`git push origin vX.Y.Z`) and let
+   each Release run finish before the next, so the newest release is created last and keeps the
+   Latest label.
+7. Upgrade the local ccp once the Release run is green. A plain `mise up` can report "up to date"
+   for a while, because mise reads versions from a cache and a shared versions server; on
+   2026-11-18 it missed v0.52.0 and v0.53.1 that way. This reads GitHub directly:
+
+   ```bash
+   mise cache clear && MISE_USE_VERSIONS_HOST=0 mise up github:samhvw8/claude-code-profile
+   ```
 
 # Git rules
 

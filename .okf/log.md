@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-18
+* **Update**: [Workflow](/engineering/workflow.md) release steps: push several new tags oldest first, one Release run at a time, and upgrade with `mise cache clear && MISE_USE_VERSIONS_HOST=0 mise up …`, because a plain `mise up` missed v0.52.0 and v0.53.1.
 * **Update**: Released v0.53.1: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: `ccp use` removes a `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` line (written by ccp before 0.53.0) from the `mise.toml` or `.envrc` it updates and says so; other lines stay as they were. Updated [activation](/architecture/activation.md), AC-9 in [acceptance criteria](/product/acceptance-criteria.md) and the [anti-pattern](/anti-patterns/add-dir-profile-folder.md). Test: `TestUpdateProjectEnvRemovesStaleAddDirEnvVar`.
 * **Update**: Review of v0.53.0: [activation](/architecture/activation.md) states when a profile prompted (trust lives in the `.claude.json` of the config folder in use; `~/.claude.json` usually trusts `~`, a profile's own file does not) and that only the alias must be removed, the env var is optional; the 0.53.0 row in [release history](/product/release-history.md) says the same. New anti-pattern [adding the profile folder with --add-dir](/anti-patterns/add-dir-profile-folder.md). `cmd/use_test.go` restores stdout with `t.Cleanup`.
