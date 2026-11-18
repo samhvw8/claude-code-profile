@@ -35,10 +35,10 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
 | `ccp which [--path]` | Show the active profile (and account), or its directory | `ccp which --path` |
-| `ccp status` | Status and health | `ccp status` |
+| `ccp status` | Status and health; with accounts, each one's profile, email, 5-hour and 7-day use and last use | `ccp status` |
 | `ccp doctor` | Diagnose (including accounts with a missing profile or broken links), and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
-| `ccp env <profile>` | Configure a project env for a profile, optionally under an account (hidden) | `ccp env default --account work1 --format=mise` |
+| `ccp env [<profile>]` | Configure a project env for a profile, optionally under an account (`auto`: shell format only) (hidden) | `ccp env default --account work1 --format=mise` |
 | `ccp config init` | Write a default `ccp.toml` | `ccp config init` |
 | `ccp config shell` | Print shell aliases for Claude integration | `ccp config shell >> ~/.zshrc` |
 | `ccp bootstrap [--push]` | New-machine setup: sync sources, fix profiles; `--push` adds to chezmoi ([details](/features/bootstrap.md)) | `ccp bootstrap` |
@@ -108,8 +108,8 @@ Workflow and discovery layouts: [source system](/features/source-system.md).
 | `ccp link [profile] [path]` | Link a hub item (interactive without args) | `ccp link quickfix skills/vue-dev` |
 | `ccp unlink <profile> <path>` | Unlink a hub item | `ccp unlink quickfix skills/vue-dev` |
 | `ccp auto [--path]` | Profile from `.ccp.yaml` (hidden) | `ccp auto --path` |
-| `ccp session <profile>` | Shell with the profile active, optionally under an account (hidden) | `ccp session default --account work2` |
-| `ccp run <profile> [--account <name>] -- <cmd>` | Run a command with the profile, optionally under an account (hidden) | `ccp run default --account work1 -- claude` |
+| `ccp session [<profile>]` | Shell with the profile active, optionally under an account (`auto` picks) (hidden) | `ccp session --account work2` |
+| `ccp run [<profile>] [--account <name>\|auto] [-- <cmd>]` | Run a command (default `claude`) with the profile, optionally under an account; a named account brings its own profile, `auto` picks the freest (hidden) | `ccp run growtrics --account auto` |
 
 # omp (hidden)
 

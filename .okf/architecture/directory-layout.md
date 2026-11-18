@@ -48,6 +48,8 @@ sources:
 ├── accounts/<name>/            # Account folder: a CLAUDE_CONFIG_DIR with its own login (--account)
 │   ├── .ccp-account.toml       # profile = "<linked profile>"
 │   ├── .claude.json            # Own state and oauthAccount; seeded once, never overwritten
+│   ├── .ccp-usage.json         # Last plan-usage read (and last failed try), for --account auto
+│   ├── .ccp-last-used          # Touched when ccp starts the account (least-recently-used fallback)
 │   └── <entry> → profiles/<profile>/<entry>   # Absolute symlinks to every other profile entry
 ├── state/settings/<profile>.json  # What ccp last wrote to each settings.json; machine-local
 └── ccp.toml                    # Config + installed sources

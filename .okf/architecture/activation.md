@@ -17,7 +17,7 @@ sources:
 | Project (default) | `ccp use dev` | Detects `mise.toml`/`.envrc` and writes `CLAUDE_CONFIG_DIR` and `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` |
 | Global | `ccp use quickfix -g` | `~/.claude` → `~/.ccp/profiles/quickfix` (relative symlink) |
 | Override | env var | `CLAUDE_CONFIG_DIR` beats the symlink |
-| Account | `--account <name>` on `run`, `session`, `env` | `CLAUDE_CONFIG_DIR` is `~/.ccp/accounts/<name>`, which links the profile but keeps its own Claude login |
+| Account | `--account <name>` or `--account auto` on `run`, `session`, `env` | `CLAUDE_CONFIG_DIR` is `~/.ccp/accounts/<name>`, which links the profile but keeps its own Claude login; `auto` picks the account of the profile with the most plan limit left |
 
 ```bash
 # mise (.mise.toml in the project root)
@@ -45,6 +45,8 @@ one profile under several logins, `--account <name>` activates it through an acc
 
 ```bash
 ccp run default --account work1 -- claude          # start Claude as work1
+ccp run --account work1                            # the same: its own profile, claude by default
+ccp run growtrics --account auto                   # the growtrics account with most limit left
 eval "$(ccp env default --account work1)"          # export it in this shell
 ccp env default --account work1 --format=mise      # write it into ./mise.toml
 ccp session default --account work2                # a shell as work2
