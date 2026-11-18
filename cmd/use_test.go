@@ -39,6 +39,37 @@ func TestUpdateProjectEnvWritesOnlyConfigDir(t *testing.T) {
 	}
 }
 
+// ccp use removes the CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD line that
+// ccp versions before 0.53.0 wrote, and leaves every other line alone.
+func TestUpdateProjectEnvRemovesStaleAddDirEnvVar(t *testing.T) {
+	cases := map[string]string{
+		"mise.toml": "[env]\nCLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = \"1\"\nCLAUDE_CONFIG_DIR = \"/p/old\"\nOTHER = \"x\"\n",
+		".envrc":    "export CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=\"1\"\nexport CLAUDE_CONFIG_DIR=\"/p/old\"\nexport OTHER=x\n",
+	}
+	for file, seed := range cases {
+		t.Run(file, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			if err := os.WriteFile(file, []byte(seed), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := updateProjectEnv("/p/dev", "dev"); err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(file)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := string(data)
+			if strings.Contains(got, "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD") {
+				t.Errorf("%s still has the stale env var:\n%s", file, got)
+			}
+			if !strings.Contains(got, "OTHER") || !strings.Contains(got, "/p/dev") || strings.Contains(got, "/p/old") {
+				t.Errorf("%s lost or kept the wrong lines:\n%s", file, got)
+			}
+		})
+	}
+}
+
 func TestConfigShellPrintsNoAddDirAlias(t *testing.T) {
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -46,6 +77,7 @@ func TestConfigShellPrintsNoAddDirAlias(t *testing.T) {
 	}
 	stdout := os.Stdout
 	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = stdout })
 	runErr := runConfigShell(nil, nil)
 	os.Stdout = stdout
 	w.Close()

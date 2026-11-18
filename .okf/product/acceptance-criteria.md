@@ -118,6 +118,7 @@ AND env override takes precedence over ~/.claude symlink
 GIVEN profile exists at ~/.ccp/profiles/dev
 WHEN user runs `ccp use dev` in a directory with mise.toml
 THEN mise.toml is updated with CLAUDE_CONFIG_DIR
+AND a CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD line written by an older ccp is removed
 AND Claude Code uses dev profile in that project
 
 GIVEN profile exists at ~/.ccp/profiles/quickfix

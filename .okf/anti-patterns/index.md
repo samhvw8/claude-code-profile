@@ -9,4 +9,5 @@ Approaches that were tried and removed. Do not re-introduce them.
 * [Configurable data sharing](configurable-data-sharing.md) - Letting users choose shared vs isolated per data directory type — all data is shared.
 * [Force-updating git tags](force-updating-git-tags.md) - Moving an existing tag with git tag -f — always increment the version instead.
 * [Over-modularized migrations](over-modularized-migrations.md) - A separate file for every migration type — keep migration code minimal and delete completed migrations.
+* [Adding the profile folder with --add-dir](add-dir-profile-folder.md) - Passing the profile folder to claude --add-dir to load its CLAUDE.md and rules — CLAUDE_CONFIG_DIR already loads them, and the flag triggers a trust prompt.
 * [Predicting another program's loader on the path that deletes](predicting-another-programs-loader.md) - Re-implementing another harness's loader and acting destructively on the guess — predictions may only report.

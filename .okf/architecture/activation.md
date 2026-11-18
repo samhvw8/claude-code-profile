@@ -70,10 +70,18 @@ else `~/.claude`) as user memory, so no flag is needed. Verified on Claude Code 
 linked rule.
 
 ccp used to print `alias claude='… claude --add-dir "$CLAUDE_CONFIG_DIR"'` and write
-`CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1`. Remove both where they remain: since Claude
-Code 2.1.326 every `--add-dir` folder needs workspace trust, a "Yes, add it" answer lasts one
-session, and each profile and account folder keeps its own `.claude.json` trust records, so the
-alias showed a trust prompt on every start in any profile whose folder was never trusted.
+`CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1` ([anti-pattern](/anti-patterns/add-dir-profile-folder.md)).
+Since Claude Code 2.1.326 every `--add-dir` folder needs workspace trust, and a "Yes, add it"
+answer lasts one session. Trust is saved only when Claude Code starts in a folder (or a non-git
+parent such as `~` is trusted), in the `.claude.json` of the config folder in use, and each
+profile and account folder has its own. So the alias prompted on every start unless that file
+already trusted the profile folder or a parent: `~/.claude.json` usually trusts `~`, a
+profile's own `.claude.json` usually does not.
+
+Remove the alias from shell configs: it causes the prompt. The env var alone does nothing
+unless you pass `--add-dir` yourself; `ccp use` no longer writes it and, since 0.53.1, removes
+an old `CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD` line from the `mise.toml` or `.envrc` it
+updates. Set it yourself (outside those files) if you want `CLAUDE.md` loaded from folders you add.
 
 `ccp config shell` prints the `ccp-use` function. Other entry points: `ccp session <profile>`
 (a shell with the profile active), `ccp run <profile> -- <cmd>`, and `ccp auto` with
