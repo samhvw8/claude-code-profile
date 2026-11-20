@@ -4,19 +4,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/migration"
 	"github.com/samhvw8/claude-code-profile/internal/profile"
 	"github.com/samhvw8/claude-code-profile/internal/source"
 )
 
 var (
-	doctorFix       bool
-	doctorVerifyOmp bool
+	doctorFix                  bool
+	doctorVerifyOmp            bool
+	newDoctorKeychainInspector = func() migration.KeychainInspector { return migration.NewKeychainStore() }
 )
 
 var doctorCmd = &cobra.Command{
@@ -220,6 +223,25 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 			issues++
 		default:
 			reportOmpDrift(paths, len(ompManaged))
+		}
+	}
+
+	// Check 8: orphan Claude Keychain items (macOS only; informational WARN, never --fix)
+	if runtime.GOOS == "darwin" {
+		fmt.Print("Checking Claude Keychain logins... ")
+		orphans, err := findOrphanKeychainLogins(paths, runtime.GOOS, newDoctorKeychainInspector())
+		switch {
+		case err != nil:
+			fmt.Println("SKIP")
+			fmt.Printf("  → %v\n", err)
+		case len(orphans) == 0:
+			fmt.Println("OK")
+		default:
+			fmt.Printf("WARN (%d orphan)\n", len(orphans))
+			for _, svc := range orphans {
+				fmt.Printf("  → orphan Claude login %s; created by a CLAUDE_CONFIG_DIR ccp does not know; remove it with: security delete-generic-password -s '%s'\n", svc, svc)
+			}
+			issues += len(orphans)
 		}
 	}
 
@@ -593,4 +615,95 @@ func checkAccounts(paths *config.Paths) []string {
 		}
 	}
 	return problems
+}
+
+const claudeKeychainPrefix = "Claude Code-credentials-"
+
+// findOrphanKeychainLogins returns macOS Keychain items named
+// "Claude Code-credentials-<8 hex>" whose hash matches none of ccp's profile
+// dirs, account dirs, ~/.claude, or their symlink-resolved targets.
+func findOrphanKeychainLogins(paths *config.Paths, goos string, inspector migration.KeychainInspector) ([]string, error) {
+	if goos != "darwin" || inspector == nil {
+		return nil, nil
+	}
+	services, err := inspector.ListServices(claudeKeychainPrefix)
+	if err != nil {
+		return nil, err
+	}
+	known := knownConfigDirHashes(paths)
+	var orphans []string
+	for _, svc := range services {
+		suffix, ok := strings.CutPrefix(svc, claudeKeychainPrefix)
+		if !ok || !isEightHex(suffix) {
+			continue
+		}
+		if _, found := known[strings.ToLower(suffix)]; found {
+			continue
+		}
+		orphans = append(orphans, svc)
+	}
+	return orphans, nil
+}
+
+func knownConfigDirHashes(paths *config.Paths) map[string]struct{} {
+	hashes := map[string]struct{}{}
+	addDir := func(dir string) {
+		if dir == "" {
+			return
+		}
+		abs, err := filepath.Abs(dir)
+		if err != nil {
+			abs = filepath.Clean(dir)
+		} else {
+			abs = filepath.Clean(abs)
+		}
+		hashes[migration.ConfigDirHash(abs)] = struct{}{}
+		if target, err := os.Readlink(abs); err == nil {
+			if !filepath.IsAbs(target) {
+				target = filepath.Join(filepath.Dir(abs), target)
+			}
+			hashes[migration.ConfigDirHash(filepath.Clean(target))] = struct{}{}
+		}
+		if real, err := filepath.EvalSymlinks(abs); err == nil {
+			hashes[migration.ConfigDirHash(filepath.Clean(real))] = struct{}{}
+		}
+	}
+
+	addDir(paths.GlobalClaudeDir)
+
+	if entries, err := os.ReadDir(paths.ProfilesDir); err == nil {
+		for _, e := range entries {
+			if e.Name() == "shared" {
+				continue
+			}
+			pDir := filepath.Join(paths.ProfilesDir, e.Name())
+			if info, err := os.Stat(pDir); err == nil && info.IsDir() {
+				addDir(pDir)
+			}
+		}
+	}
+
+	if entries, err := os.ReadDir(paths.AccountsDir()); err == nil {
+		for _, e := range entries {
+			aDir := filepath.Join(paths.AccountsDir(), e.Name())
+			if info, err := os.Stat(aDir); err == nil && info.IsDir() {
+				addDir(aDir)
+			}
+		}
+	}
+
+	return hashes
+}
+
+func isEightHex(s string) bool {
+	if len(s) != 8 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -167,6 +168,12 @@ type CredentialStore interface {
 	Get(key string) (secret []byte, acct string, found bool, err error)
 	Set(key, acct string, secret []byte) error
 	Delete(key, acct string) (warning string, err error)
+}
+
+// KeychainInspector queries Keychain item attributes without reading secrets.
+type KeychainInspector interface {
+	Exists(service, acct string) (bool, error)
+	ListServices(prefix string) ([]string, error)
 }
 
 // commandRunner runs a program with stdin and returns its stdout, stderr and
@@ -344,6 +351,60 @@ func (k *KeychainStore) Delete(service, acct string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("Keychain %q for account %q still present after %d deletes", service, acct, maxKeychainDeletes)
+}
+
+// Exists reports whether a generic password item exists for service (and acct
+// when non-empty) using an attribute-only lookup (never -g or -w).
+func (k *KeychainStore) Exists(service, acct string) (bool, error) {
+	args := []string{"find-generic-password"}
+	if acct != "" {
+		args = append(args, "-a", acct)
+	}
+	args = append(args, "-s", service)
+	_, errOut, code, err := k.run("", securityBin, args...)
+	if err != nil {
+		return false, err
+	}
+	if code == keychainNotFound {
+		return false, nil
+	}
+	if code != 0 {
+		return false, fmt.Errorf("security find-generic-password -s %q: exit %d: %s", service, code, strings.TrimSpace(errOut))
+	}
+	return true, nil
+}
+
+// ListServices lists generic password service names from an attribute-only
+// keychain dump (never -d), filtered by prefix when non-empty.
+func (k *KeychainStore) ListServices(prefix string) ([]string, error) {
+	out, errOut, code, err := k.run("", securityBin, "dump-keychain")
+	if err != nil {
+		return nil, err
+	}
+	if code != 0 {
+		return nil, fmt.Errorf("security dump-keychain: exit %d: %s", code, strings.TrimSpace(errOut))
+	}
+	seen := map[string]bool{}
+	var services []string
+	for line := range strings.SplitSeq(out, "\n") {
+		v, ok := strings.CutPrefix(strings.TrimSpace(line), `"svce"<blob>=`)
+		if !ok {
+			continue
+		}
+		svc, err := parseKeychainValue(v)
+		if err != nil || svc == "" {
+			continue
+		}
+		if prefix != "" && !strings.HasPrefix(svc, prefix) {
+			continue
+		}
+		if !seen[svc] {
+			seen[svc] = true
+			services = append(services, svc)
+		}
+	}
+	sort.Strings(services)
+	return services, nil
 }
 
 // FileStore keeps a login in a file (Claude Code's .credentials.json); the

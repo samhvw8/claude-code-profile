@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/samhvw8/claude-code-profile/internal/config"
 	"github.com/samhvw8/claude-code-profile/internal/migration"
 	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
@@ -92,12 +93,34 @@ type Status struct {
 	LastUsed                    time.Time // zero: never started by ccp
 }
 
+// Other login kinds shown read-only in `ccp account`.
+const (
+	OtherKindClaudeGlobal  = "claude global"
+	OtherKindClaudeProfile = "claude profile"
+	OtherKindAgyPlain      = "agy plain"
+)
+
+// OtherLogin is an unmanaged Claude Code or agy login outside ~/.ccp/accounts.
+// It is shown read-only in `ccp account` and never enters --account auto pools.
+type OtherLogin struct {
+	Kind     string
+	Where    string
+	CacheKey string
+	Harness  string
+	Profile  string
+	Email    string
+	Usage    *Snapshot
+	Live     bool
+	Note     string
+}
+
 // AgyRunner runs `agy <args>` in dir with env and returns stdout.
 type AgyRunner func(ctx context.Context, dir string, args, env []string) ([]byte, error)
 
 // Reader reads account logins and their usage.
 type Reader struct {
 	Store      migration.CredentialStore
+	Keychain   migration.KeychainInspector
 	GOOS       string
 	URL        string
 	HTTP       *http.Client
@@ -107,6 +130,7 @@ type Reader struct {
 	RunAgy     AgyRunner
 	HomeDir    string
 	AgyTimeout time.Duration
+	Env        []string
 }
 
 // NewReader returns a reader for this machine's credential store.
@@ -115,11 +139,16 @@ func NewReader(version string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	var kc migration.KeychainInspector
+	if inspector, ok := store.(migration.KeychainInspector); ok {
+		kc = inspector
+	}
 	home, _ := os.UserHomeDir()
 	return &Reader{
-		Store: store,
-		GOOS:  runtime.GOOS,
-		URL:   DefaultURL,
+		Store:    store,
+		Keychain: kc,
+		GOOS:     runtime.GOOS,
+		URL:      DefaultURL,
 		HTTP: &http.Client{
 			Timeout: 5 * time.Second,
 			// The token must never follow a redirect to another host.
@@ -151,82 +180,119 @@ func (r *Reader) Read(accounts []profile.Account) []Status {
 	return out
 }
 
+type usageTarget struct {
+	usage **Snapshot
+	live  *bool
+	note  *string
+}
+
 func (r *Reader) readOne(s *Status) {
 	if info, err := os.Stat(filepath.Join(s.Dir, LastUsedFile)); err == nil {
 		s.LastUsed = info.ModTime()
 	}
-	saved := loadUsageFile(s.Dir)
-	s.Usage = saved.Last
-
-	harness := profile.DefaultHarness(s.Harness)
-	if harness == profile.HarnessAgy {
-		r.readAgy(s, saved)
+	t := usageTarget{usage: &s.Usage, live: &s.Live, note: &s.Note}
+	cachePath := filepath.Join(s.Dir, UsageFile)
+	if profile.DefaultHarness(s.Harness) == profile.HarnessAgy {
+		saved := loadUsageFileAt(cachePath)
+		s.Usage = saved.Last
+		r.readAgy(s, saved, cachePath, t)
 		return
 	}
+	email, loggedIn, _ := r.readClaudeLogin(migration.LoginKey(r.GOOS, s.Dir), s.Dir, cachePath, t)
+	s.Email = email
+	s.LoggedIn = loggedIn
+}
 
-	s.Email = accountEmail(s.Dir)
-	secret, _, found, err := r.Store.Get(migration.LoginKey(r.GOOS, s.Dir))
+func (r *Reader) readClaudeLogin(credKey, stateDir, cachePath string, t usageTarget) (email string, loggedIn bool, err error) {
+	saved := loadUsageFileAt(cachePath)
+	*t.usage = saved.Last
+	email = accountEmail(stateDir)
+	secret, _, found, err := r.Store.Get(credKey)
 	if err != nil {
-		s.Note = fmt.Sprintf("cannot read the login: %v", err)
-		return
+		*t.note = fmt.Sprintf("cannot read the login: %v", err)
+		return email, false, err
 	}
 	login, ok := migration.ParseLogin(secret)
 	if !found || !ok {
-		s.Note = "not logged in"
-		return
+		*t.note = "not logged in"
+		return email, false, nil
 	}
-	s.LoggedIn = true
-
 	now := r.Now()
-	if r.cachedUsageValid(s, saved, now) {
-		return
+	if r.cachedUsageValid(t, saved, now) {
+		return email, true, nil
 	}
 	if login.AccessToken == "" || login.ExpiresAt > 0 && now.UnixMilli() >= login.ExpiresAt {
-		s.Note = "token expired; Claude Code renews it when it starts"
-		return
+		*t.note = "token expired; Claude Code renews it when it starts"
+		return email, true, nil
 	}
-	snap, err := r.fetch(login.AccessToken)
-	r.saveUsageResult(s, saved, now, snap, err)
+	snap, fetchErr := r.fetch(login.AccessToken)
+	r.saveUsageResultAt(cachePath, t, saved, now, snap, fetchErr)
+	return email, true, nil
 }
 
-func (r *Reader) cachedUsageValid(s *Status, saved usageFile, now time.Time) bool {
-	if s.Usage != nil && now.Sub(s.Usage.FetchedAt) < r.FreshFor {
+func (r *Reader) cachedUsageValid(t usageTarget, saved usageFile, now time.Time) bool {
+	if *t.usage != nil && now.Sub((*t.usage).FetchedAt) < r.FreshFor {
 		return true
 	}
 	// A failed read is not retried within FreshFor either: the endpoint
 	// answers 429 to a burst, and to a token it does not accept.
 	if saved.Error != "" && now.Sub(saved.TriedAt) < r.FreshFor {
-		s.Note = fmt.Sprintf("%s (%s)", saved.Error, Ago(now, saved.TriedAt))
+		*t.note = fmt.Sprintf("%s (%s)", saved.Error, Ago(now, saved.TriedAt))
 		return true
 	}
 	return false
 }
 
-func (r *Reader) saveUsageResult(s *Status, saved usageFile, now time.Time, snap *Snapshot, err error) {
+func (r *Reader) saveUsageResultAt(cachePath string, t usageTarget, saved usageFile, now time.Time, snap *Snapshot, err error) {
 	if err != nil {
-		s.Note = err.Error()
+		*t.note = err.Error()
 		saved.TriedAt, saved.Error = now, err.Error()
-		if err := saveUsageFile(s.Dir, saved); err != nil {
-			s.Note += fmt.Sprintf("; not saved: %v", err)
+		if saveErr := saveUsageFileAt(cachePath, saved); saveErr != nil {
+			*t.note += fmt.Sprintf("; not saved: %v", saveErr)
 		}
 		return
 	}
 	snap.FetchedAt = now
-	s.Usage, s.Live = snap, true
-	if err := saveUsageFile(s.Dir, usageFile{Last: snap, TriedAt: now}); err != nil {
-		s.Note = fmt.Sprintf("usage not saved: %v", err)
+	*t.usage, *t.live = snap, true
+	if saveErr := saveUsageFileAt(cachePath, usageFile{Last: snap, TriedAt: now}); saveErr != nil {
+		*t.note = fmt.Sprintf("usage not saved: %v", saveErr)
 	}
 }
 
-func (r *Reader) readAgy(s *Status, saved usageFile) {
-	home := r.HomeDir
-	if home == "" {
-		var err error
-		home, err = os.UserHomeDir()
-		if err != nil {
-			s.Note = fmt.Sprintf("cannot find home directory: %v", err)
-			return
-		}
+func (r *Reader) homeDir() (string, error) {
+	if r.HomeDir != "" {
+		return r.HomeDir, nil
+	}
+	return os.UserHomeDir()
+}
+
+func (r *Reader) env() []string {
+	if r.Env != nil {
+		return r.Env
+	}
+	return os.Environ()
+}
+
+func (r *Reader) keychainInspector() migration.KeychainInspector {
+	if r.Keychain != nil {
+		return r.Keychain
+	}
+	if kc, ok := r.Store.(migration.KeychainInspector); ok {
+		return kc
+	}
+	return nil
+}
+
+func nonEmptyFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
+func (r *Reader) readAgy(s *Status, saved usageFile, cachePath string, t usageTarget) {
+	home, err := r.homeDir()
+	if err != nil {
+		s.Note = fmt.Sprintf("cannot find home directory: %v", err)
+		return
 	}
 	// Logged in iff the file-mode token exists and is non-empty; never read it.
 	tokenPath := profile.AgyTokenPathIn(home, s.Name)
@@ -242,14 +308,24 @@ func (r *Reader) readAgy(s *Status, saved usageFile) {
 	s.LoggedIn = true
 
 	now := r.Now()
-	if r.cachedUsageValid(s, saved, now) {
+	if r.cachedUsageValid(t, saved, now) {
 		return
 	}
 	snap, err := r.fetchAgy(s.Name, home)
-	r.saveUsageResult(s, saved, now, snap, err)
+	r.saveUsageResultAt(cachePath, t, saved, now, snap, err)
 }
 
 func (r *Reader) fetchAgy(account, home string) (*Snapshot, error) {
+	flagArg, envEntry := profile.AgyLaunch(account)
+	args := []string{flagArg, "-p", "/usage", "--output-format", "json"}
+	env := profile.WithEnv(r.env(), envEntry)
+	if home != "" {
+		env = profile.WithEnv(env, "HOME="+home)
+	}
+	return r.runAgyUsage(home, args, env)
+}
+
+func (r *Reader) runAgyUsage(home string, args, env []string) (*Snapshot, error) {
 	runner := r.RunAgy
 	if runner == nil {
 		runner = defaultAgyRunner
@@ -261,17 +337,190 @@ func (r *Reader) fetchAgy(account, home string) (*Snapshot, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	flagArg, envEntry := profile.AgyLaunch(account)
-	args := []string{flagArg, "-p", "/usage", "--output-format", "json"}
-	env := profile.WithEnv(os.Environ(), envEntry)
-	if home != "" {
-		env = profile.WithEnv(env, "HOME="+home)
-	}
 	out, err := runner(ctx, home, args, env)
 	if err != nil {
 		return nil, err
 	}
 	return parseAgyUsage(out)
+}
+
+// ReadOtherLogins returns unmanaged Claude Code and agy logins that exist
+// outside ~/.ccp/accounts, caching usage in ~/.ccp/state/usage/<key>.json.
+func (r *Reader) ReadOtherLogins(paths *config.Paths) []OtherLogin {
+	cacheDir := filepath.Join(paths.CcpDir, "state", "usage")
+
+	type probe func() *OtherLogin
+	var probes []probe
+
+	// 1. Claude global (plain claude).
+	globalCredKey := filepath.Join(paths.GlobalClaudeDir, ".credentials.json")
+	if r.GOOS == "darwin" {
+		globalCredKey = migration.KeychainServiceFor("", true)
+	}
+	globalStateDir := filepath.Dir(paths.GlobalClaudeDir)
+	probes = append(probes, func() *OtherLogin {
+		out := OtherLogin{
+			Kind:     OtherKindClaudeGlobal,
+			Where:    "~/.claude",
+			CacheKey: "claude-global",
+			Harness:  profile.HarnessClaude,
+		}
+		t := usageTarget{usage: &out.Usage, live: &out.Live, note: &out.Note}
+		email, loggedIn, err := r.readClaudeLogin(globalCredKey, globalStateDir, filepath.Join(cacheDir, out.CacheKey+".json"), t)
+		if err != nil || !loggedIn {
+			return nil
+		}
+		out.Email = email
+		return &out
+	})
+
+	// 2. Claude profile logins (each profile dir P except "shared").
+	if entries, err := os.ReadDir(paths.ProfilesDir); err == nil {
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == "shared" {
+				continue
+			}
+			pDir := paths.ProfileDir(name)
+			info, err := os.Stat(pDir)
+			if err != nil || !info.IsDir() {
+				continue
+			}
+			absDir := absCleanPath(pDir)
+			if r.GOOS != "darwin" && sameResolvedDir(paths.GlobalClaudeDir, absDir) {
+				// Off macOS, ~/.claude/.credentials.json and <profile>/.credentials.json
+				// name the same file when ~/.claude links to this profile.
+				continue
+			}
+			credKey := migration.LoginKey(r.GOOS, absDir)
+			probes = append(probes, func() *OtherLogin {
+				out := OtherLogin{
+					Kind:     OtherKindClaudeProfile,
+					Where:    "profile " + name,
+					CacheKey: "claude-profile-" + name,
+					Harness:  profile.HarnessClaude,
+					Profile:  name,
+				}
+				t := usageTarget{usage: &out.Usage, live: &out.Live, note: &out.Note}
+				email, loggedIn, err := r.readClaudeLogin(credKey, absDir, filepath.Join(cacheDir, out.CacheKey+".json"), t)
+				if err != nil || !loggedIn {
+					return nil
+				}
+				out.Email = email
+				return &out
+			})
+		}
+	}
+
+	// 3. agy plain (shared login), macOS only via attribute-only Keychain lookup.
+	if r.GOOS == "darwin" {
+		if inspector := r.keychainInspector(); inspector != nil {
+			probes = append(probes, func() *OtherLogin {
+				found, err := inspector.Exists("gemini", "antigravity")
+				if err != nil || !found {
+					return nil
+				}
+				out := OtherLogin{
+					Kind:     OtherKindAgyPlain,
+					Where:    "~/.gemini/antigravity-cli",
+					CacheKey: "agy-global",
+					Harness:  profile.HarnessAgy,
+				}
+				cachePath := filepath.Join(cacheDir, out.CacheKey+".json")
+				saved := loadUsageFileAt(cachePath)
+				out.Usage = saved.Last
+				t := usageTarget{usage: &out.Usage, live: &out.Live, note: &out.Note}
+				now := r.Now()
+				if r.cachedUsageValid(t, saved, now) {
+					return &out
+				}
+				home, homeErr := r.homeDir()
+				if homeErr != nil {
+					out.Usage = nil
+					out.Note = fmt.Sprintf("cannot find home directory: %v", homeErr)
+					return &out
+				}
+				childEnv, realSSH := stripCCPSshClient(r.env())
+				if realSSH {
+					tokenPath := filepath.Join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token")
+					if !nonEmptyFile(tokenPath) {
+						out.Usage = nil
+						out.Note = "SSH session without file token (~/.gemini/antigravity-cli/antigravity-oauth-token)"
+						return &out
+					}
+				}
+				if home != "" {
+					childEnv = profile.WithEnv(childEnv, "HOME="+home)
+				}
+				snap, fetchErr := r.runAgyUsage(home, []string{"-p", "/usage", "--output-format", "json"}, childEnv)
+				r.saveUsageResultAt(cachePath, t, saved, now, snap, fetchErr)
+				return &out
+			})
+		}
+	}
+
+	results := make([]*OtherLogin, len(probes))
+	var wg sync.WaitGroup
+	for i, fn := range probes {
+		wg.Add(1)
+		go func(idx int, run probe) {
+			defer wg.Done()
+			results[idx] = run()
+		}(i, fn)
+	}
+	wg.Wait()
+
+	var out []OtherLogin
+	for _, r := range results {
+		if r != nil {
+			out = append(out, *r)
+		}
+	}
+	return out
+}
+
+// stripCCPSshClient removes SSH_CLIENT when it holds ccp's own "ccp 0 0" marker
+// and reports whether a real SSH session env var remains set.
+func stripCCPSshClient(env []string) (cleaned []string, realSSH bool) {
+	cleaned = make([]string, 0, len(env))
+	for _, entry := range env {
+		k, v, ok := strings.Cut(entry, "=")
+		if !ok {
+			cleaned = append(cleaned, entry)
+			continue
+		}
+		switch k {
+		case "SSH_CLIENT":
+			if v == "ccp 0 0" {
+				continue
+			}
+			if v != "" {
+				realSSH = true
+			}
+		case "SSH_CONNECTION", "SSH_TTY":
+			if v != "" {
+				realSSH = true
+			}
+		}
+		cleaned = append(cleaned, entry)
+	}
+	return cleaned, realSSH
+}
+
+func absCleanPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		return filepath.Clean(abs)
+	}
+	return filepath.Clean(p)
+}
+
+func sameResolvedDir(a, b string) bool {
+	if profile.SamePath(a, b) {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 func defaultAgyRunner(ctx context.Context, dir string, args, env []string) ([]byte, error) {
@@ -444,8 +693,12 @@ type usageFile struct {
 }
 
 func loadUsageFile(dir string) usageFile {
+	return loadUsageFileAt(filepath.Join(dir, UsageFile))
+}
+
+func loadUsageFileAt(path string) usageFile {
 	var f usageFile
-	data, err := os.ReadFile(filepath.Join(dir, UsageFile))
+	data, err := os.ReadFile(path)
 	if err != nil || json.Unmarshal(data, &f) != nil {
 		return usageFile{}
 	}
@@ -456,11 +709,19 @@ func loadUsageFile(dir string) usageFile {
 }
 
 func saveUsageFile(dir string, f usageFile) error {
+	return saveUsageFileAt(filepath.Join(dir, UsageFile), f)
+}
+
+func saveUsageFileAt(path string, f usageFile) error {
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, "."+UsageFile+".tmp-*")
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
 	if err != nil {
 		return err
 	}
@@ -469,10 +730,14 @@ func saveUsageFile(dir string, f usageFile) error {
 		tmp.Close()
 		return err
 	}
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp.Name(), filepath.Join(dir, UsageFile))
+	return os.Rename(tmp.Name(), path)
 }
 
 // accountEmail returns the email of the login Claude Code recorded in the

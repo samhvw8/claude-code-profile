@@ -252,9 +252,9 @@ Rules that shape every recipe:
 ### See the pools
 
 ```bash
-ccp account          # every account: profile (pool), email, 5h / 7d use, last use
-ccp account --json   # the same for scripts
-ccp status           # also lists accounts
+ccp account          # every account + read-only "Other logins (not accounts)" (Claude global/profile, macOS plain agy)
+ccp account --json   # managed accounts only, for scripts
+ccp status           # also lists managed accounts
 ```
 
 ### Add accounts to a pool
@@ -371,5 +371,5 @@ login moves, plain `claude` is logged out. Prefer `ccp account add` plus a fresh
 - `ccp install` (no args) syncs all sources in `ccp.toml` at the commits `ccp.lock` pins — useful for new machines
 - Installed items are shadows (symlinks into `~/.ccp/sources/`), so `ccp source update` updates them in place. To edit one, use `--clone` first; `source update` refuses a clone with local edits
 - `ccp project add` copies (not symlinks) so projects are git-committable
-- `ccp doctor` diagnoses broken hub links, manifests, and hub structure; `--fix` removes links whose hub item is gone
+- `ccp doctor` diagnoses broken hub links, manifests, hub structure, and (macOS) orphan Claude Keychain logins; `--fix` removes links whose hub item is gone
 - `ccp status` shows the active profile, hub counts and per-profile health

@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: "Account is the sixth concept; the budget is seven for now"
-description: "2026-11-18: the user-facing concept budget rises from five to seven, and Account becomes the sixth concept with a visible ccp account command (list, add). The --account activation mechanism is unchanged."
+description: "2026-11-18: the user-facing concept budget rises from five to seven, and Account becomes the sixth concept with a visible ccp account command (list, add). Extended 2026-11-20 with read-only display of unmanaged other logins."
 tags: [decision, concepts, accounts, command-surface]
 decided: 2026-11-18
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-18T14:30:00Z }
+generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T10:50:00Z }
 ---
 
 # Decision
@@ -48,3 +48,33 @@ account list and found nothing. The five-concept rule had pushed a real, user-vi
   [design principles](/engineering/design-principles.md) say seven (six in use).
 - Earlier concepts that say "not a sixth concept" (bundles, output styles, omp) were judged
   against the old budget of five; they are still not concepts.
+
+# Other logins (added 2026-11-20)
+
+`ccp account` (text output only) also lists unmanaged logins under **Other logins (not accounts)**
+when they exist: Claude global (`Claude Code-credentials` on macOS, `~/.claude/.credentials.json` on
+Linux), Claude profile-dir logins (`Claude Code-credentials-<sha256(profileDir)[:8]>` /
+`<profile>/.credentials.json`), and plain `agy` on macOS (only when an attribute-only Keychain
+lookup finds `gemini`/`antigravity`).
+
+- **Read-only, never in pools, `status`, or `--json`.** Adding unmanaged logins to `ccp status`
+  would add ~3s cold `agy` latency and extra `/api/oauth/usage` calls to a quick health check.
+  Putting shared/global logins into `--account auto` would burn personal quota from profile pools
+  and race with plain sessions. Keeping `ccp account --json` as the managed-only array preserves
+  callers that pass `.name` to `--account`.
+- **Cached in `~/.ccp/state/usage/<key>.json` (`0600`).** Reads reuse the 5-minute fresh window and
+  failure cache without writing inside profile folders (which may be dotfiles-linked, and a global
+  profile can hold two Claude logins while plain `agy` has no profile folder).
+- **Guards on plain `agy`.** Before spawning `agy -p /usage --output-format json` (without
+  `--app_data_dir`), `SSH_CLIENT=ccp 0 0` is stripped so calls inside a `ccp run --account <agy>`
+  session do not trigger file-token mode; real SSH sessions (`SSH_CLIENT`, `SSH_CONNECTION`,
+  `SSH_TTY`) run only when `~/.gemini/antigravity-cli/antigravity-oauth-token` is non-empty.
+- **Footer hints by kind, never a blanket `ccp migrate --accounts`.** `AccountMigrator` refuses
+  `agy` and migrates every profile at once (including the global login, logging out plain `claude`).
+  Claude profile logins suggest `ccp migrate --accounts --dry-run` with that caveat; plain `agy`
+  suggests `ccp account add <name> --harness agy`.
+- **Orphan Keychain items in `ccp doctor`.** On macOS, `ccp doctor` checks `security dump-keychain`
+  (attribute-only, never `-d`) for `Claude Code-credentials-<8 hex>` items whose hash matches no
+  profile dir, account dir, `~/.claude`, or their symlink-resolved targets. Each is an informational
+  `WARN` (never `FAIL`, never deleted by `--fix`) because a `CLAUDE_CONFIG_DIR` outside ccp may be
+  intentional.

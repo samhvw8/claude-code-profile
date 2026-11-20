@@ -99,13 +99,21 @@ func runAccountList(cmd *cobra.Command, args []string) error {
 		enc.SetIndent("", "  ")
 		return enc.Encode(out)
 	}
+	otherLogins := readOtherLogins(paths)
 	if len(accounts) == 0 {
 		fmt.Println("No accounts yet. Add one, then log in once:")
 		fmt.Println("  ccp account add <name> [<profile>]")
 		fmt.Println("  ccp run --account <name>        # type /login in Claude Code")
+		if len(otherLogins) > 0 {
+			fmt.Println()
+			printOtherLogins(otherLogins)
+		}
 		return nil
 	}
 	printAccounts(statuses)
+	if len(otherLogins) > 0 {
+		printOtherLogins(otherLogins)
+	}
 	return nil
 }
 

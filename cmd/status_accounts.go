@@ -12,6 +12,10 @@ import (
 	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
 
+var newAccountUsageReader = func() (*accountusage.Reader, error) {
+	return accountusage.NewReader(Version)
+}
+
 // readAccountStatuses returns every account with its login and usage, or nil
 // when there are none or they cannot be read (status still prints the rest).
 func readAccountStatuses(paths *config.Paths) []accountusage.Status {
@@ -19,7 +23,7 @@ func readAccountStatuses(paths *config.Paths) []accountusage.Status {
 	if err != nil || len(accounts) == 0 {
 		return nil
 	}
-	reader, err := accountusage.NewReader(Version)
+	reader, err := newAccountUsageReader()
 	if err != nil {
 		out := make([]accountusage.Status, len(accounts))
 		for i, a := range accounts {
@@ -28,6 +32,15 @@ func readAccountStatuses(paths *config.Paths) []accountusage.Status {
 		return out
 	}
 	return reader.Read(accounts)
+}
+
+// readOtherLogins returns unmanaged Claude and agy logins outside ~/.ccp/accounts.
+func readOtherLogins(paths *config.Paths) []accountusage.OtherLogin {
+	reader, err := newAccountUsageReader()
+	if err != nil {
+		return nil
+	}
+	return reader.ReadOtherLogins(paths)
 }
 
 func percent(w *accountusage.Window, now time.Time) string {
@@ -74,6 +87,48 @@ func printAccounts(statuses []accountusage.Status) {
 	for _, s := range statuses {
 		if s.LoggedIn && s.Note != "" {
 			fmt.Printf("  %s: %s\n", s.Name, s.Note)
+		}
+	}
+	fmt.Println()
+}
+
+func printOtherLogins(others []accountusage.OtherLogin) {
+	now := time.Now()
+	fmt.Println("--- Other logins (not accounts) ---")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "  KIND\tWHERE\tEMAIL\t5H\t7D\tAS OF")
+	hasClaudeProfile := false
+	hasAgy := false
+	for _, o := range others {
+		email, five, week, asOf := o.Email, "-", "-", "-"
+		if email == "" {
+			email = "-"
+		}
+		if o.Usage != nil {
+			five, week = percent(o.Usage.FiveHour, now), percent(o.Usage.SevenDay, now)
+			asOf = accountusage.Ago(now, o.Usage.FetchedAt)
+		}
+		if o.Kind == accountusage.OtherKindClaudeProfile {
+			hasClaudeProfile = true
+		}
+		if o.Harness == profile.HarnessAgy {
+			hasAgy = true
+		}
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\t%s\n", o.Kind, o.Where, email, five, week, asOf)
+	}
+	w.Flush()
+	for _, o := range others {
+		if o.Note != "" {
+			fmt.Printf("  %s (%s): %s\n", o.Kind, o.Where, o.Note)
+		}
+	}
+	if hasClaudeProfile || hasAgy {
+		fmt.Println()
+		if hasClaudeProfile {
+			fmt.Println("  ccp migrate --accounts --dry-run previews moving profile logins into accounts (it moves every profile, including the global login)")
+		}
+		if hasAgy {
+			fmt.Println("  add more agy logins with: ccp account add <name> --harness agy")
 		}
 	}
 	fmt.Println()
