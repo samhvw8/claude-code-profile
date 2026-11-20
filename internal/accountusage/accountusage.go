@@ -9,12 +9,15 @@
 package accountusage
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -35,6 +38,8 @@ const (
 	DefaultURL = "https://api.anthropic.com/api/oauth/usage"
 	// FreshFor is how long a saved read is used without asking again.
 	FreshFor = 5 * time.Minute
+
+	defaultAgyTimeout = 30 * time.Second
 
 	// An account at or above these is picked only when every other one is too.
 	busyFiveHour = 80
@@ -78,24 +83,30 @@ type Scoped struct {
 
 // Status is what ccp knows about one account.
 type Status struct {
-	Name, Profile, Dir string
-	Email              string
-	LoggedIn           bool
-	Usage              *Snapshot // nil: never read
-	Live               bool      // Usage was read just now
-	Note               string    // why Usage is not live
-	LastUsed           time.Time // zero: never started by ccp
+	Name, Profile, Harness, Dir string
+	Email                       string
+	LoggedIn                    bool
+	Usage                       *Snapshot // nil: never read
+	Live                        bool      // Usage was read just now
+	Note                        string    // why Usage is not live
+	LastUsed                    time.Time // zero: never started by ccp
 }
+
+// AgyRunner runs `agy <args>` in dir with env and returns stdout.
+type AgyRunner func(ctx context.Context, dir string, args, env []string) ([]byte, error)
 
 // Reader reads account logins and their usage.
 type Reader struct {
-	Store     migration.CredentialStore
-	GOOS      string
-	URL       string
-	HTTP      *http.Client
-	UserAgent string
-	Now       func() time.Time
-	FreshFor  time.Duration
+	Store      migration.CredentialStore
+	GOOS       string
+	URL        string
+	HTTP       *http.Client
+	UserAgent  string
+	Now        func() time.Time
+	FreshFor   time.Duration
+	RunAgy     AgyRunner
+	HomeDir    string
+	AgyTimeout time.Duration
 }
 
 // NewReader returns a reader for this machine's credential store.
@@ -104,6 +115,7 @@ func NewReader(version string) (*Reader, error) {
 	if err != nil {
 		return nil, err
 	}
+	home, _ := os.UserHomeDir()
 	return &Reader{
 		Store: store,
 		GOOS:  runtime.GOOS,
@@ -113,9 +125,12 @@ func NewReader(version string) (*Reader, error) {
 			// The token must never follow a redirect to another host.
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		UserAgent: "ccp/" + version,
-		Now:       time.Now,
-		FreshFor:  FreshFor,
+		UserAgent:  "ccp/" + version,
+		Now:        time.Now,
+		FreshFor:   FreshFor,
+		RunAgy:     defaultAgyRunner,
+		HomeDir:    home,
+		AgyTimeout: defaultAgyTimeout,
 	}, nil
 }
 
@@ -125,7 +140,7 @@ func (r *Reader) Read(accounts []profile.Account) []Status {
 	out := make([]Status, len(accounts))
 	var wg sync.WaitGroup
 	for i, a := range accounts {
-		out[i] = Status{Name: a.Name, Profile: a.Profile, Dir: a.Dir}
+		out[i] = Status{Name: a.Name, Profile: a.Profile, Harness: a.Harness, Dir: a.Dir}
 		wg.Add(1)
 		go func(s *Status) {
 			defer wg.Done()
@@ -137,13 +152,19 @@ func (r *Reader) Read(accounts []profile.Account) []Status {
 }
 
 func (r *Reader) readOne(s *Status) {
-	s.Email = accountEmail(s.Dir)
 	if info, err := os.Stat(filepath.Join(s.Dir, LastUsedFile)); err == nil {
 		s.LastUsed = info.ModTime()
 	}
 	saved := loadUsageFile(s.Dir)
 	s.Usage = saved.Last
 
+	harness := profile.DefaultHarness(s.Harness)
+	if harness == profile.HarnessAgy {
+		r.readAgy(s, saved)
+		return
+	}
+
+	s.Email = accountEmail(s.Dir)
 	secret, _, found, err := r.Store.Get(migration.LoginKey(r.GOOS, s.Dir))
 	if err != nil {
 		s.Note = fmt.Sprintf("cannot read the login: %v", err)
@@ -157,13 +178,7 @@ func (r *Reader) readOne(s *Status) {
 	s.LoggedIn = true
 
 	now := r.Now()
-	if s.Usage != nil && now.Sub(s.Usage.FetchedAt) < r.FreshFor {
-		return
-	}
-	// A failed read is not retried within FreshFor either: the endpoint
-	// answers 429 to a burst, and to a token it does not accept.
-	if saved.Error != "" && now.Sub(saved.TriedAt) < r.FreshFor {
-		s.Note = fmt.Sprintf("%s (%s)", saved.Error, Ago(now, saved.TriedAt))
+	if r.cachedUsageValid(s, saved, now) {
 		return
 	}
 	if login.AccessToken == "" || login.ExpiresAt > 0 && now.UnixMilli() >= login.ExpiresAt {
@@ -171,6 +186,23 @@ func (r *Reader) readOne(s *Status) {
 		return
 	}
 	snap, err := r.fetch(login.AccessToken)
+	r.saveUsageResult(s, saved, now, snap, err)
+}
+
+func (r *Reader) cachedUsageValid(s *Status, saved usageFile, now time.Time) bool {
+	if s.Usage != nil && now.Sub(s.Usage.FetchedAt) < r.FreshFor {
+		return true
+	}
+	// A failed read is not retried within FreshFor either: the endpoint
+	// answers 429 to a burst, and to a token it does not accept.
+	if saved.Error != "" && now.Sub(saved.TriedAt) < r.FreshFor {
+		s.Note = fmt.Sprintf("%s (%s)", saved.Error, Ago(now, saved.TriedAt))
+		return true
+	}
+	return false
+}
+
+func (r *Reader) saveUsageResult(s *Status, saved usageFile, now time.Time, snap *Snapshot, err error) {
 	if err != nil {
 		s.Note = err.Error()
 		saved.TriedAt, saved.Error = now, err.Error()
@@ -184,6 +216,142 @@ func (r *Reader) readOne(s *Status) {
 	if err := saveUsageFile(s.Dir, usageFile{Last: snap, TriedAt: now}); err != nil {
 		s.Note = fmt.Sprintf("usage not saved: %v", err)
 	}
+}
+
+func (r *Reader) readAgy(s *Status, saved usageFile) {
+	home := r.HomeDir
+	if home == "" {
+		var err error
+		home, err = os.UserHomeDir()
+		if err != nil {
+			s.Note = fmt.Sprintf("cannot find home directory: %v", err)
+			return
+		}
+	}
+	// Logged in iff the file-mode token exists and is non-empty; never read it.
+	tokenPath := profile.AgyTokenPathIn(home, s.Name)
+	info, err := os.Stat(tokenPath)
+	if errors.Is(err, os.ErrNotExist) || (err == nil && (info.IsDir() || info.Size() == 0)) {
+		s.Note = "not logged in"
+		return
+	}
+	if err != nil {
+		s.Note = fmt.Sprintf("cannot check login: %v", err)
+		return
+	}
+	s.LoggedIn = true
+
+	now := r.Now()
+	if r.cachedUsageValid(s, saved, now) {
+		return
+	}
+	snap, err := r.fetchAgy(s.Name, home)
+	r.saveUsageResult(s, saved, now, snap, err)
+}
+
+func (r *Reader) fetchAgy(account, home string) (*Snapshot, error) {
+	runner := r.RunAgy
+	if runner == nil {
+		runner = defaultAgyRunner
+	}
+	timeout := r.AgyTimeout
+	if timeout <= 0 {
+		timeout = defaultAgyTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	flagArg, envEntry := profile.AgyLaunch(account)
+	args := []string{flagArg, "-p", "/usage", "--output-format", "json"}
+	env := profile.WithEnv(os.Environ(), envEntry)
+	if home != "" {
+		env = profile.WithEnv(env, "HOME="+home)
+	}
+	out, err := runner(ctx, home, args, env)
+	if err != nil {
+		return nil, err
+	}
+	return parseAgyUsage(out)
+}
+
+func defaultAgyRunner(ctx context.Context, dir string, args, env []string) ([]byte, error) {
+	exe, err := exec.LookPath("agy")
+	if err != nil {
+		return nil, errors.New("agy not found on PATH; install Antigravity CLI (agy) first")
+	}
+	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd.Dir = dir
+	cmd.Env = env
+	cmd.WaitDelay = 2 * time.Second
+	configureAgyCmd(cmd)
+	out, err := cmd.Output()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return nil, errors.New("agy usage timed out")
+	}
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return nil, fmt.Errorf("agy usage failed (exit %d)", exitErr.ExitCode())
+		}
+		return nil, fmt.Errorf("agy usage failed: %w", err)
+	}
+	return out, nil
+}
+
+func parseAgyUsage(data []byte) (*Snapshot, error) {
+	var resp struct {
+		Status  string `json:"status"`
+		Command struct {
+			Data struct {
+				Groups []struct {
+					Name    string `json:"name"`
+					Buckets []struct {
+						Window            string     `json:"window"`
+						RemainingFraction *float64   `json:"remaining_fraction"`
+						ResetTime         *time.Time `json:"reset_time"`
+					} `json:"buckets"`
+				} `json:"groups"`
+			} `json:"data"`
+		} `json:"command"`
+	}
+	if err := json.Unmarshal(bytes.TrimSpace(data), &resp); err != nil {
+		return nil, errors.New("agy usage output is not the expected JSON")
+	}
+	if resp.Status != "" && resp.Status != "SUCCESS" {
+		return nil, fmt.Errorf("agy usage returned status %s", resp.Status)
+	}
+	snap := &Snapshot{}
+	for _, g := range resp.Command.Data.Groups {
+		for _, b := range g.Buckets {
+			if b.RemainingFraction == nil {
+				continue
+			}
+			used := (1 - *b.RemainingFraction) * 100
+			if used < 0 {
+				used = 0
+			} else if used > 100 {
+				used = 100
+			}
+			w := Window{Utilization: used}
+			if b.ResetTime != nil {
+				w.ResetsAt = *b.ResetTime
+			}
+			if g.Name == "Gemini Models" {
+				switch b.Window {
+				case "5h":
+					snap.FiveHour = &w
+				case "weekly":
+					snap.SevenDay = &w
+				}
+			} else if b.Window == "weekly" && g.Name != "" {
+				snap.Scoped = append(snap.Scoped, Scoped{Name: g.Name, Window: w})
+			}
+		}
+	}
+	if snap.FiveHour == nil && snap.SevenDay == nil {
+		return nil, errors.New("agy usage response has no Gemini Models 5h or weekly limit")
+	}
+	return snap, nil
 }
 
 type apiWindow struct {

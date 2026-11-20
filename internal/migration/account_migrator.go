@@ -114,6 +114,24 @@ func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() 
 		return r, err
 	}
 	dir = filepath.Clean(dir)
+
+	// The binding is checked first, so a dry run reports what the real run
+	// would and agy accounts never touch Claude's credential store.
+	recorded := ""
+	switch bound, harness, err := profile.AccountInfo(dir); {
+	case err == nil && harness == profile.HarnessAgy:
+		return done(AccountRefused, fmt.Sprintf("account %q uses harness %s", name, harness))
+	case err == nil && bound != name:
+		return done(AccountRefused, fmt.Sprintf("account %q is linked to profile %q", name, bound))
+	case err == nil:
+		recorded, _ = profile.AccountMigratedFrom(dir)
+	case !errors.Is(err, os.ErrNotExist):
+		if profile.IsAgyAccountDir(name, dir) {
+			return done(AccountRefused, fmt.Sprintf("account %q uses harness %s", name, profile.HarnessAgy))
+		}
+		return done(AccountFailed, fmt.Sprintf("%v; fix the file or relink it with 'ccp env %s --account %s --relink'", err, name, name))
+	}
+
 	target := m.credentialKey(dir, false)
 	targetSecret, _, targetFound, err := m.store.Get(target)
 	if err != nil {
@@ -122,18 +140,6 @@ func (m *AccountMigrator) migrateOne(name string, dryRun bool, listProcs func() 
 	// A credential with only MCP server tokens (from a session run in the
 	// account before the move) is not a login: the move keeps those tokens.
 	targetFound = targetFound && HasLogin(targetSecret)
-
-	// The binding is checked first, so a dry run reports what the real run
-	// would: LinkAccount refuses an unreadable or foreign binding.
-	recorded := ""
-	switch bound, err := profile.AccountProfile(dir); {
-	case err == nil && bound != name:
-		return done(AccountRefused, fmt.Sprintf("account %q is linked to profile %q", name, bound))
-	case err == nil:
-		recorded, _ = profile.AccountMigratedFrom(dir)
-	case !errors.Is(err, os.ErrNotExist):
-		return done(AccountFailed, fmt.Sprintf("%v; fix the file or relink it with 'ccp env %s --account %s --relink'", err, name, name))
-	}
 
 	logins, err := m.logins(name)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -174,6 +175,14 @@ func accountResetLines(paths *config.Paths, goos string) []string {
 		bound := a.Profile
 		if a.Err != nil {
 			bound = "unknown profile"
+		}
+		if a.Harness == profile.HarnessAgy || (a.Err != nil && profile.IsAgyAccountDir(a.Name, a.Dir)) {
+			tokenLoc, err := profile.AgyTokenPath(a.Name)
+			if err != nil {
+				tokenLoc = filepath.Join("~", ".gemini", profile.AgyAppDataDirName(a.Name), "antigravity-oauth-token")
+			}
+			lines = append(lines, fmt.Sprintf("    %s (%s, agy): login %s is kept outside ~/.ccp", a.Name, bound, tokenLoc))
+			continue
 		}
 		fate := "is left orphaned"
 		if goos != "darwin" {

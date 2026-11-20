@@ -1,0 +1,73 @@
+---
+type: Decision
+title: "agy accounts use file-based token storage with --app_data_dir and SSH_CLIENT"
+description: "2026-11-20: Account bindings gain harness = \"agy\" (default claude). Each agy account runs in ~/.gemini/antigravity-cli-ccp-<name>/ with SSH_CLIENT set, merged settings.json, and quota read via agy -p /usage."
+tags: [decision, agy, accounts, activation]
+decided: 2026-11-20
+generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T08:05:00Z }
+sources:
+  - id: agy-auth-re
+    resource: research/261119-agy-accounts/agy-auth-re.md
+    title: agy 1.5.11–1.5.13 auth and quota reverse engineering and live verification
+---
+
+# Decision
+
+Account bindings in `.ccp-account.toml` gain `harness = "agy"`; absent means `"claude"`. Each
+`agy` account keeps its ccp metadata in `~/.ccp/accounts/<name>/` (`.ccp-account.toml`,
+`.ccp-usage.json`, `.ccp-last-used`, with **no symlinks**) and its Antigravity state in
+`~/.gemini/antigravity-cli-ccp-<name>/` (derived by `profile.AgyAppDataDirName`).
+
+`profile.AgyLaunch` always returns both `--app_data_dir=antigravity-cli-ccp-<name>` and
+`SSH_CLIENT=ccp 0 0` together:
+
+- `ccp account add <name> [<profile>] --harness agy` creates both folders and writes the merged
+  `settings.json`.
+- `ccp run --account <name>` defaults to `agy`, inserts `--app_data_dir=...` immediately after the
+  executable, sets `SSH_CLIENT=ccp 0 0`, keeps `CLAUDE_CONFIG_DIR` on the bound profile folder,
+  refreshes `settings.json`, and touches `.ccp-last-used`. `--account auto` derives the pool's
+  harness from the command basename (`agy` vs everything else).
+- `ccp env` and `ccp session` refuse `agy` accounts because shell/mise/direnv exports cannot pass
+  `--app_data_dir`. `ccp use --accounts` stays Claude-only.
+- Before each run (and at creation), `~/.gemini/antigravity-cli-ccp-<name>/settings.json` is written
+  atomically (`0600`) from `~/.gemini/antigravity-cli/settings.json` while keeping extra account
+  items in `permissions.allow`, `permissions.deny`, `permissions.ask`, and `trustedWorkspaces`.
+- Usage (`internal/accountusage`) checks whether `antigravity-oauth-token` exists and is non-empty
+  (without reading it) and runs `agy --app_data_dir=... -p /usage --output-format json` in `$HOME`
+  under a 30s hard timeout, mapping `"Gemini Models"` to `five_hour`/`seven_day` (`(1 - remaining_fraction) * 100`)
+  and other groups' weekly buckets to model-scoped entries.
+
+# Verified facts (agy 1.5.13)[^agy-auth-re]
+
+1. `agy` stores its Google login in a single macOS Keychain item (`gemini`/`antigravity`) across all
+   processes; no flag or env var selects another Keychain item.
+2. When `SSH_CLIENT` (or `SSH_CONNECTION`/`SSH_TTY`) is set, `agy` bypasses the Keychain and stores
+   the token at `<appDataDir>/antigravity-oauth-token` (`0600`).
+3. Hidden flag `--app_data_dir=<name>` (relative under `~/.gemini`) moves `appDataDir` while leaving
+   shared config (`~/.gemini/config`) shared.
+4. Running `agy` with `SSH_CLIENT` and separate `--app_data_dir` values keeps multiple Google logins
+   isolated concurrently; a keyring-mode run in the same `appDataDir` can purge the file token on
+   refresh (agy issue #1514).
+5. `agy --app_data_dir=<name> -p "/usage" --output-format json` returns quota groups and buckets in
+   about 3s when signed in, but hangs ignoring `--print-timeout` when signed out.
+6. `agy` writes `settings.json` via atomic rename, replacing symlinks on first write.
+7. Setting `SSH_CLIENT` does not interfere with `harness-ops` (`termctl` reads no `SSH_*` vars).
+
+# Alternatives rejected
+
+- **Swapping the shared Keychain item** (e.g., `XiaoXioe/antigravity-cli-multi-account`,
+  `PrimeFox59/agy-resilience-toolkit`): a running `agy` session holds its token in memory and writes
+  it back on hourly refresh, silently reverting the swap.
+- **`HOME` per account** (with its own Keychain): relocates config and credentials for every child
+  tool `agy` spawns (`git`, shells, MCP servers).
+- **ADC / API keys**: switches billing away from the subscription plan.
+
+# Known limits
+
+- Conversations, history, and MCP sign-ins live inside `~/.gemini/antigravity-cli-ccp-<name>/`, so
+  `agy -c` continues only within one account.
+- `SSH_CLIENT` is inherited by every child command `agy` runs.
+- Depends on undocumented `agy` flags and behavior (`--app_data_dir`, SSH file-token trigger,
+  `/usage` JSON schema); upstream issue `#1610` tracks official multi-account support.
+
+[^agy-auth-re]: `research/261119-agy-accounts/agy-auth-re.md` and live verification on agy 1.5.13.

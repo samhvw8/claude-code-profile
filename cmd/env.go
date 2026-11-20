@@ -78,11 +78,14 @@ func runEnv(cmd *cobra.Command, args []string) error {
 	if envAccount == profile.AutoAccount && envFormat != "shell" {
 		return fmt.Errorf("--account auto picks once, so it cannot go into %s; use 'ccp run --account auto' to pick at each start", envFormat)
 	}
+	if err := refuseAgyAccountForEnvOrSession(paths, envAccount); err != nil {
+		return err
+	}
 	profileName, err = activationProfile(paths, profileName, envAccount)
 	if err != nil {
 		return err
 	}
-	account, err := chooseAccount(paths, profileName, envAccount, envRelink)
+	account, err := chooseAccount(paths, profileName, envAccount, envRelink, profile.HarnessClaude)
 	if err != nil {
 		return err
 	}

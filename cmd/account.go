@@ -12,21 +12,27 @@ import (
 	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
 
-var accountListJSON bool
+var (
+	accountListJSON   bool
+	accountAddHarness string
+)
 
 var accountCmd = &cobra.Command{
 	Use:     "account",
 	Aliases: []string{"accounts", "acc"},
-	Short:   "List and add accounts (Claude logins a profile runs under)",
+	Short:   "List and add accounts (logins a profile runs under)",
 	Long: `An account is a folder, ~/.ccp/accounts/<name>/, that runs one profile under
-its own Claude login. Skills, settings and history link to the profile; only
-the login differs. Log in once per account, then reuse it.
+its own login. For Claude Code accounts, skills, settings and history link to
+the profile; only the login differs. For agy accounts (--harness agy), agy uses
+file-based token storage in ~/.gemini/antigravity-cli-ccp-<name>/.
 
-  ccp account                          # list accounts with plan usage
-  ccp account add gt1 companyA        # create an account for a profile
-  ccp run --account gt1                # start Claude on it; type /login once
-  ccp run companyA --account auto     # the account with the most limit left
-  eval "$(ccp env --account gt2)"      # this terminal only
+  ccp account                                    # list accounts with plan usage
+  ccp account add gt1 companyA                  # create a Claude account
+  ccp account add agy1 companyA --harness agy   # create an agy account
+  ccp run --account gt1                          # start Claude on it; type /login once
+  ccp run --account agy1                         # start agy on it; sign in once
+  ccp run companyA --account auto               # the account with the most limit left
+  eval "$(ccp env --account gt2)"                # this terminal only (Claude only)
 
 With no subcommand, ccp account lists the accounts.`,
 	Args: cobra.NoArgs,
@@ -36,10 +42,10 @@ With no subcommand, ccp account lists the accounts.`,
 var accountListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
-	Short:   "List accounts with their profile, login and plan usage",
-	Long: `List every account with its profile, email, 5-hour and weekly plan usage,
-model-scoped weeks, the age of the usage read and when ccp last started it.
-Usage is read from Claude's usage endpoint at most every 5 minutes per account.`,
+	Short:   "List accounts with their harness, profile, login and plan usage",
+	Long: `List every account with its harness (claude/agy), profile, email, 5-hour and
+weekly plan usage, model-scoped weeks, the age of the usage read and when ccp
+last started it. Usage is read at most every 5 minutes per account.`,
 	Args: cobra.NoArgs,
 	RunE: runAccountList,
 }
@@ -47,19 +53,25 @@ Usage is read from Claude's usage endpoint at most every 5 minutes per account.`
 var accountAddCmd = &cobra.Command{
 	Use:   "add <name> [<profile>]",
 	Short: "Create an account for a profile (default: the current profile)",
-	Long: `Create the account folder ~/.ccp/accounts/<name>/ for a profile. It links
-every profile entry except the Claude login, so it starts logged out: run
-'ccp run --account <name>' and type /login in Claude Code once.
+	Long: `Create the account folder ~/.ccp/accounts/<name>/ for a profile.
+
+With --harness claude (default), it links every profile entry except the Claude
+login, so it starts logged out: run 'ccp run --account <name>' and type /login
+in Claude Code once.
+
+With --harness agy, it creates ~/.gemini/antigravity-cli-ccp-<name>/ with merged
+settings and no symlinks: run 'ccp run --account <name>' to sign in once.
 
 The profile defaults to the current one (CLAUDE_CONFIG_DIR, else ~/.claude).
 An account that already exists is refused; move it to another profile with
-'ccp env <profile> --account <name> --relink'.`,
+--relink.`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runAccountAdd,
 }
 
 func init() {
 	accountCmd.PersistentFlags().BoolVarP(&accountListJSON, "json", "j", false, "Output as JSON")
+	accountAddCmd.Flags().StringVar(&accountAddHarness, "harness", profile.HarnessClaude, "Account harness: claude or agy")
 	accountCmd.AddCommand(accountListCmd, accountAddCmd)
 	rootCmd.AddCommand(accountCmd)
 }
@@ -103,6 +115,10 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 	if err := profile.ValidateAccountName(name); err != nil {
 		return err
 	}
+	harness, err := profile.NormalizeHarness(accountAddHarness)
+	if err != nil {
+		return err
+	}
 	paths, err := config.ResolvePaths()
 	if err != nil {
 		return err
@@ -132,6 +148,17 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("no current profile; name one: ccp account add %s <profile>", name)
 		}
 		profileName = p.Name
+	}
+
+	if harness == profile.HarnessAgy {
+		dir, err := profile.CreateAgyAccount(paths, name, profileName)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Account %s (agy) created for profile %s: %s\n", name, profileName, dir)
+		fmt.Println("Sign in once with:")
+		fmt.Printf("  ccp run --account %s\n", name)
+		return nil
 	}
 
 	dir, warnings, err := profile.LinkAccount(paths, name, profileName, false)

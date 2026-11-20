@@ -1,11 +1,15 @@
 package accountusage
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -278,3 +282,231 @@ func TestReader_FailedReadWaits(t *testing.T) {
 		t.Errorf("after FreshFor: calls %d, want a retry", *calls)
 	}
 }
+
+const agyAcctCSample = `{"conversation_id":"","status":"SUCCESS","response":"","command":{"name":"usage","data":{"groups":[{"name":"Gemini Models","buckets":[{"id":"gemini-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.6148027181625366,"reset_time":"2026-11-24T23:40:35Z"},{"id":"gemini-5h","name":"Five Hour Limit Remaining","window":"5h","remaining_fraction":0.8139199018478394,"reset_time":"2026-11-20T01:40:35Z"}]},{"name":"Claude and GPT models","buckets":[{"id":"3p-weekly","name":"Weekly Limit Remaining","window":"weekly","remaining_fraction":0.030352680012583733,"reset_time":"2026-11-25T03:27:02Z"},{"id":"3p-5h","name":"Five Hour Limit Remaining","window":"5h","remaining_fraction":1,"reset_time":"2026-11-20T05:47:01Z"}]}]}}}`
+
+func setupAgy(t *testing.T, name string, tokenContent []byte, runner AgyRunner) (profile.Account, *Reader, string) {
+	t.Helper()
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	acctDir := filepath.Join(root, "ccp", "accounts", name)
+	if err := os.MkdirAll(acctDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if tokenContent != nil {
+		tokPath := filepath.Join(home, ".gemini", profile.AgyAppDataDirName(name), "antigravity-oauth-token")
+		if err := os.MkdirAll(filepath.Dir(tokPath), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(tokPath, tokenContent, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := &Reader{
+		Store:      migration.FileStore{},
+		GOOS:       "linux",
+		Now:        func() time.Time { return now },
+		FreshFor:   FreshFor,
+		HomeDir:    home,
+		RunAgy:     runner,
+		AgyTimeout: time.Second,
+	}
+	return profile.Account{Name: name, Profile: "dev", Harness: profile.HarnessAgy, Dir: acctDir}, r, home
+}
+
+func TestReader_AgyNotLoggedIn(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		token []byte
+	}{
+		{"missing token file", nil},
+		{"empty token file", []byte{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls int32
+			a, r, _ := setupAgy(t, "agy1", tc.token, func(context.Context, string, []string, []string) ([]byte, error) {
+				atomic.AddInt32(&calls, 1)
+				return []byte(agyAcctCSample), nil
+			})
+			s := r.Read([]profile.Account{a})[0]
+			if s.LoggedIn || calls != 0 || s.Note != "not logged in" {
+				t.Errorf("status %+v, calls %d", s, calls)
+			}
+		})
+	}
+}
+
+func TestReader_AgySampleAcctCAndCaching(t *testing.T) {
+	var calls int32
+	var gotDir string
+	var gotArgs, gotEnv []string
+	a, r, home := setupAgy(t, "acctC", []byte("secret-never-read"), func(_ context.Context, dir string, args, env []string) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		gotDir, gotArgs, gotEnv = dir, args, env
+		return []byte(agyAcctCSample), nil
+	})
+	// Make token file 0000 to verify ccp only stats it and never opens/reads it.
+	tokPath := filepath.Join(home, ".gemini", profile.AgyAppDataDirName("acctC"), "antigravity-oauth-token")
+	if err := os.Chmod(tokPath, 0000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(tokPath, 0600) })
+
+	s := r.Read([]profile.Account{a})[0]
+	if !s.LoggedIn || !s.Live || s.Email != "" || s.Harness != profile.HarnessAgy || calls != 1 {
+		t.Fatalf("status %+v, calls %d", s, calls)
+	}
+	if gotDir != home {
+		t.Errorf("cwd = %q, want home %q", gotDir, home)
+	}
+	wantArgs := []string{"--app_data_dir=antigravity-cli-ccp-acctC", "-p", "/usage", "--output-format", "json"}
+	if !slices.Equal(gotArgs, wantArgs) {
+		t.Errorf("args = %v, want %v", gotArgs, wantArgs)
+	}
+	if !slices.Contains(gotEnv, "SSH_CLIENT=ccp 0 0") {
+		t.Errorf("env lacks SSH_CLIENT=ccp 0 0")
+	}
+	if v, ok := s.Usage.SevenDay.At(now); !ok || math.Abs(v-38.519728) > 0.01 {
+		t.Errorf("acctC 7d = %v (%v), want ~38.52", v, ok)
+	}
+	if v, ok := s.Usage.FiveHour.At(now); !ok || math.Abs(v-18.608010) > 0.01 {
+		t.Errorf("acctC 5h = %v (%v), want ~18.61", v, ok)
+	}
+	if len(s.Usage.Scoped) != 1 || s.Usage.Scoped[0].Name != "Claude and GPT models" || math.Abs(s.Usage.Scoped[0].Utilization-96.964732) > 0.01 {
+		t.Errorf("scoped = %+v", s.Usage.Scoped)
+	}
+
+	// Second read within 5 minutes reuses cache without invoking agy.
+	s = r.Read([]profile.Account{a})[0]
+	if s.Live || calls != 1 || s.Usage == nil {
+		t.Errorf("cached read: live=%v calls=%d usage=%v", s.Live, calls, s.Usage)
+	}
+
+	// Verify exact 0.617 -> 38.3% mapping.
+	r.Now = func() time.Time { return now.Add(6 * time.Minute) }
+	r.RunAgy = func(context.Context, string, []string, []string) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		return []byte(`{"status":"SUCCESS","command":{"name":"usage","data":{"groups":[{"name":"Gemini Models","buckets":[{"window":"weekly","remaining_fraction":0.617,"reset_time":"2026-11-24T23:40:35Z"},{"window":"5h","remaining_fraction":0.8,"reset_time":"2026-11-20T01:40:35Z"}]}]}}}`), nil
+	}
+	s = r.Read([]profile.Account{a})[0]
+	if !s.Live || calls != 2 {
+		t.Fatalf("stale refresh: live=%v calls=%d", s.Live, calls)
+	}
+	if v, _ := s.Usage.SevenDay.At(now); math.Abs(v-38.3) > 1e-6 {
+		t.Errorf("0.617 remaining gave %v%% used, want 38.3%%", v)
+	}
+	if v, _ := s.Usage.FiveHour.At(now); math.Abs(v-20) > 1e-6 {
+		t.Errorf("0.8 remaining gave %v%% used, want 20%%", v)
+	}
+}
+
+func TestReader_AgyFailureCacheAndTimeout(t *testing.T) {
+	var calls int32
+	a, r, _ := setupAgy(t, "agy1", []byte("tok"), func(ctx context.Context, _ string, _ []string, _ []string) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		<-ctx.Done()
+		return nil, errors.New("agy usage timed out")
+	})
+	r.AgyTimeout = 20 * time.Millisecond
+	s := r.Read([]profile.Account{a})[0]
+	if !s.LoggedIn || s.Live || !strings.Contains(s.Note, "timed out") || calls != 1 {
+		t.Fatalf("timeout read: %+v calls=%d", s, calls)
+	}
+	// Failure is cached for FreshFor.
+	s = r.Read([]profile.Account{a})[0]
+	if calls != 1 || !strings.Contains(s.Note, "timed out") {
+		t.Errorf("cached failure: %+v calls=%d", s, calls)
+	}
+}
+
+func TestReader_MixedClaudeAndAgyParallel(t *testing.T) {
+	claudeAcc, r, _, srv := setup(t, cred(now.Add(time.Hour)))
+	_ = srv
+	// Avoid loopback bind in sandboxed environments: test Mixed Read with expired Claude + fake Agy.
+	claudeAcc, r, _, _ = setup(t, cred(now.Add(-time.Minute)))
+	home := t.TempDir()
+	r.HomeDir = home
+	agyDir := t.TempDir()
+	tokPath := filepath.Join(home, ".gemini", profile.AgyAppDataDirName("agy1"), "antigravity-oauth-token")
+	os.MkdirAll(filepath.Dir(tokPath), 0755)
+	os.WriteFile(tokPath, []byte("tok"), 0600)
+	r.RunAgy = func(context.Context, string, []string, []string) ([]byte, error) {
+		return []byte(agyAcctCSample), nil
+	}
+	agyAcc := profile.Account{Name: "agy1", Profile: "dev", Harness: profile.HarnessAgy, Dir: agyDir}
+	got := r.Read([]profile.Account{claudeAcc, agyAcc})
+	if len(got) != 2 || !got[0].LoggedIn || !got[1].LoggedIn || !got[1].Live {
+		t.Fatalf("mixed read = %+v", got)
+	}
+}
+
+func TestReader_AgyMissingBinary(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	a, r, _ := setupAgy(t, "agy1", []byte("tok"), nil)
+	s := r.Read([]profile.Account{a})[0]
+	if !s.LoggedIn || s.Live || !strings.Contains(s.Note, "agy not found") {
+		t.Errorf("missing agy: %+v", s)
+	}
+}
+
+func TestParseAgyUsage_EdgeCases(t *testing.T) {
+	if _, err := parseAgyUsage([]byte("not-json")); err == nil {
+		t.Error("invalid JSON accepted")
+	}
+	if _, err := parseAgyUsage([]byte(`{"status":"ERROR"}`)); err == nil || !strings.Contains(err.Error(), "ERROR") {
+		t.Errorf("non-SUCCESS status err = %v", err)
+	}
+	if _, err := parseAgyUsage([]byte(`{"status":"SUCCESS","command":{"data":{"groups":[{"name":"Other","buckets":[{"window":"weekly","remaining_fraction":0.5}]}]}}}`)); err == nil {
+		t.Error("missing Gemini Models accepted")
+	}
+	snap, err := parseAgyUsage([]byte(`{"status":"SUCCESS","command":{"data":{"groups":[{"name":"Gemini Models","buckets":[{"window":"5h","remaining_fraction":1.5},{"window":"weekly","remaining_fraction":-0.2}]}]}}}`))
+	if err != nil {
+		t.Fatalf("clamping parse failed: %v", err)
+	}
+	if v, ok := snap.FiveHour.At(now); !ok || v != 0 || !snap.FiveHour.ResetsAt.IsZero() {
+		t.Errorf("5h clamped = %v (%v) reset=%v", v, ok, snap.FiveHour.ResetsAt)
+	}
+	if v, ok := snap.SevenDay.At(now); !ok || v != 100 {
+		t.Errorf("7d clamped = %v (%v)", v, ok)
+	}
+}
+
+func TestDefaultAgyRunner_PropagatesHomeDirAndExitError(t *testing.T) {
+	binDir := t.TempDir()
+	a, r, home := setupAgy(t, "agy1", []byte("tok"), nil)
+	t.Setenv("HOME", t.TempDir()) // deliberately different from r.HomeDir
+	t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
+
+	script := "#!/bin/sh\nif [ \"$HOME\" != \"" + home + "\" ]; then\n  echo \"wrong HOME: $HOME\" >&2\n  exit 2\nfi\nprintf '%s' '{\"status\":\"SUCCESS\",\"command\":{\"data\":{\"groups\":[{\"name\":\"Gemini Models\",\"buckets\":[{\"window\":\"5h\",\"remaining_fraction\":0.5,\"reset_time\":\"2026-11-20T01:40:35Z\"}]}]}}}'\n"
+	if err := os.WriteFile(filepath.Join(binDir, "agy"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	s := r.Read([]profile.Account{a})[0]
+	if !s.LoggedIn || !s.Live || s.Usage == nil || s.Usage.FiveHour == nil || s.Usage.FiveHour.Utilization != 50 {
+		t.Fatalf("defaultAgyRunner with custom HomeDir: %+v", s)
+	}
+
+	// Non-zero exit from agy records exit code error.
+	a2, r2, _ := setupAgy(t, "agy2", []byte("tok"), nil)
+	if err := os.WriteFile(filepath.Join(binDir, "agy"), []byte("#!/bin/sh\nexit 7\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	s2 := r2.Read([]profile.Account{a2})[0]
+	if !s2.LoggedIn || s2.Live || !strings.Contains(s2.Note, "exit 7") {
+		t.Errorf("exit error: %+v", s2)
+	}
+}
+
+func TestPick_MultipleAgyAccounts(t *testing.T) {
+	statuses := []Status{
+		{Name: "agy-busy", Harness: profile.HarnessAgy, LoggedIn: true, Usage: snap(60, 40, now)},
+		{Name: "agy-free", Harness: profile.HarnessAgy, LoggedIn: true, Usage: snap(15, 20, now)},
+		{Name: "agy-out", Harness: profile.HarnessAgy, LoggedIn: false, Usage: snap(0, 0, now)},
+	}
+	picked, _, err := Pick(statuses, now)
+	if err != nil || picked.Name != "agy-free" {
+		t.Errorf("picked = %+v, err = %v", picked, err)
+	}
+}
+

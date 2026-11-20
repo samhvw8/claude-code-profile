@@ -61,11 +61,14 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if accountSet && sessionAccount == "" {
 		return profile.ValidateAccountName("")
 	}
+	if err := refuseAgyAccountForEnvOrSession(paths, sessionAccount); err != nil {
+		return err
+	}
 	profileName, err = activationProfile(paths, profileName, sessionAccount)
 	if err != nil {
 		return err
 	}
-	account, err := chooseAccount(paths, profileName, sessionAccount, sessionRelink)
+	account, err := chooseAccount(paths, profileName, sessionAccount, sessionRelink, profile.HarnessClaude)
 	if err != nil {
 		return err
 	}

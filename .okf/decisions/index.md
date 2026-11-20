@@ -18,6 +18,7 @@ Settled choices with their rationale. Do not re-open one without a user request;
 
 # Other harnesses
 
+* [agy accounts use file token mode](agy-accounts-file-token-mode.md) - 2026-11-20: Account bindings gain harness = "agy"; each agy account runs with --app_data_dir and SSH_CLIENT, merged settings.json, and /usage quota reads.
 * [agy: converted copies, skill links, GEMINI.md](agy-copies-links-and-gemini-md.md) - Why ccp agy sync converts agents and rules, links skills and CLAUDE.md, writes the output style to GEMINI.md, and mirrors no hooks or commands.
 
 # omp integration (oldest first)

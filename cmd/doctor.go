@@ -557,10 +557,21 @@ func checkAccounts(paths *config.Paths) []string {
 	for _, a := range accounts {
 		switch {
 		case a.Err != nil:
-			problems = append(problems, fmt.Sprintf("account %s: %v; run 'ccp env <profile> --account %s --relink'", a.Name, a.Err, a.Name))
+			relinkCmd := fmt.Sprintf("ccp env <profile> --account %s --relink", a.Name)
+			if profile.IsAgyAccountDir(a.Name, a.Dir) {
+				relinkCmd = fmt.Sprintf("ccp run <profile> --account %s --relink -- agy", a.Name)
+			}
+			problems = append(problems, fmt.Sprintf("account %s: %v; run '%s'", a.Name, a.Err, relinkCmd))
 			continue
 		case !mgr.Exists(a.Profile):
-			problems = append(problems, fmt.Sprintf("account %s is linked to missing profile '%s'; run 'ccp env <profile> --account %s --relink'", a.Name, a.Profile, a.Name))
+			relinkCmd := fmt.Sprintf("ccp env <profile> --account %s --relink", a.Name)
+			if a.Harness == profile.HarnessAgy {
+				relinkCmd = fmt.Sprintf("ccp run <profile> --account %s --relink", a.Name)
+			}
+			problems = append(problems, fmt.Sprintf("account %s is linked to missing profile '%s'; run '%s'", a.Name, a.Profile, relinkCmd))
+			continue
+		}
+		if a.Harness == profile.HarnessAgy {
 			continue
 		}
 		entries, err := os.ReadDir(a.Dir)

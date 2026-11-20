@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -20,15 +21,18 @@ var runCmd = &cobra.Command{
 	Short:  "Run a command with a specific profile active",
 	Long: `Execute a command with CLAUDE_CONFIG_DIR set to the specified profile.
 
-With --account, CLAUDE_CONFIG_DIR is the account folder ~/.ccp/accounts/<name>,
-which keeps its own Claude login and links everything else to the profile.
-The profile may then be left out: a named account runs its own profile.
+With --account, a Claude account uses ~/.ccp/accounts/<name> as CLAUDE_CONFIG_DIR
+and links everything else to the profile. An agy account (--harness agy) runs
+agy with --app_data_dir=antigravity-cli-ccp-<name> and SSH_CLIENT set while
+keeping CLAUDE_CONFIG_DIR set to the profile folder.
+The profile may be left out: a named account runs its own profile, and its
+default command is claude (or agy for agy accounts).
 --relink moves an account that is linked to another profile.
 
---account auto picks, among the accounts linked to the profile (the current
-one when none is named), the one with the most plan limit left: Claude's usage
-endpoint, read at most every 5 minutes per account, else the account started
-least recently. The command defaults to claude.
+--account auto picks, among the accounts of the matching harness linked to the
+profile (the current one when none is named), the one with the most plan limit
+left: cached at most every 5 minutes per account, else the account started
+least recently.
 
 --or-profile (with --account auto) never fails for lack of an account: a
 session already on an account keeps it, and a pool with no account logged in
@@ -36,7 +40,9 @@ runs on the profile itself. The shim from 'ccp use --accounts' passes it.
 
 Examples:
   ccp run --account work1                  # claude, account work1's profile
-  ccp run --account auto -- claude -c      # continue on the freest account
+  ccp run --account agy1                   # agy, account agy1's profile
+  ccp run --account auto -- claude -c      # continue on the freest Claude account
+  ccp run --account auto -- agy            # start on the freest agy account
   ccp run companyA --account auto
   ccp run minimal -- claude "fix this bug"
   ccp run dev -- npm test`,
@@ -56,7 +62,6 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 	if ra.help {
 		return cmd.Help()
 	}
-	profileName, cmdArgs := ra.profile, ra.command
 	// Past argument parsing an error is about profiles or accounts, not usage.
 	cmd.SilenceUsage = true
 
@@ -72,51 +77,145 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 	if ra.accountSet && ra.account == "" {
 		return profile.ValidateAccountName("")
 	}
-	configDir, err := runConfigDir(paths, profileName, ra)
+	execCmd, err := prepareRunCmd(paths, ra)
 	if err != nil {
 		return err
 	}
-
-	// Execute command with CLAUDE_CONFIG_DIR set
-	execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 	execCmd.Stdin = os.Stdin
 	execCmd.Stdout = os.Stdout
 	execCmd.Stderr = os.Stderr
-	execCmd.Env = append(os.Environ(), fmt.Sprintf("CLAUDE_CONFIG_DIR=%s", configDir))
-
 	return execCmd.Run()
 }
 
-// runConfigDir resolves the CLAUDE_CONFIG_DIR that run starts the command in.
-// With --or-profile (what the 'ccp use --accounts' shim passes), a session
-// already on an account keeps it, and a pool with no usable account falls back
-// to the profile folder instead of failing.
-func runConfigDir(paths *config.Paths, profileName string, ra runArgs) (string, error) {
-	if ra.orProfile {
-		if dir := currentAccountDir(paths); dir != "" {
-			return dir, nil
+func commandHarness(cmd0 string) string {
+	if filepath.Base(cmd0) == profile.HarnessAgy {
+		return profile.HarnessAgy
+	}
+	return profile.HarnessClaude
+}
+
+func hasAppDataDirFlag(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		if a == "--app_data_dir" || a == "-app_data_dir" ||
+			strings.HasPrefix(a, "--app_data_dir=") || strings.HasPrefix(a, "-app_data_dir=") {
+			return true
 		}
 	}
-	profileName, err := activationProfile(paths, profileName, ra.account)
-	if err != nil {
-		return "", err
+	return false
+}
+
+// prepareRunCmd resolves the profile, account, and harness, returning the ready
+// exec.Cmd with environment and flags applied.
+func prepareRunCmd(paths *config.Paths, ra runArgs) (*exec.Cmd, error) {
+	cmdArgs := slices.Clone(ra.command)
+	harness := ""
+	if ra.account != "" && ra.account != profile.AutoAccount {
+		if err := profile.ValidateAccountName(ra.account); err != nil {
+			return nil, err
+		}
+		_, acctHarness, bindErr := profile.AccountInfo(paths.AccountDir(ra.account))
+		switch {
+		case bindErr == nil:
+			if !ra.commandExplicit && acctHarness == profile.HarnessAgy {
+				cmdArgs = []string{profile.HarnessAgy}
+			}
+			if cmdH := commandHarness(cmdArgs[0]); cmdH != acctHarness {
+				return nil, fmt.Errorf("account %q uses harness %s; cannot run %q", ra.account, acctHarness, filepath.Base(cmdArgs[0]))
+			}
+			harness = acctHarness
+		case errors.Is(bindErr, os.ErrNotExist):
+			if commandHarness(cmdArgs[0]) == profile.HarnessAgy {
+				profHint := "<profile>"
+				if ra.profile != "" {
+					profHint = ra.profile
+				}
+				return nil, fmt.Errorf("agy account %q does not exist yet; create it with 'ccp account add %s %s --harness agy'", ra.account, ra.account, profHint)
+			}
+			harness = profile.HarnessClaude
+		default:
+			if !ra.relink {
+				return nil, fmt.Errorf("%w; fix the file or rerun with --relink", bindErr)
+			}
+			if profile.IsAgyAccountDir(ra.account, paths.AccountDir(ra.account)) || commandHarness(cmdArgs[0]) == profile.HarnessAgy {
+				if !ra.commandExplicit {
+					cmdArgs = []string{profile.HarnessAgy}
+				}
+				if commandHarness(cmdArgs[0]) != profile.HarnessAgy {
+					return nil, fmt.Errorf("account %q uses harness %s; cannot run %q", ra.account, profile.HarnessAgy, filepath.Base(cmdArgs[0]))
+				}
+				harness = profile.HarnessAgy
+			} else {
+				harness = profile.HarnessClaude
+			}
+		}
+	} else if ra.account == profile.AutoAccount {
+		harness = commandHarness(cmdArgs[0])
 	}
-	account, err := chooseAccount(paths, profileName, ra.account, ra.relink)
+
+	if ra.orProfile {
+		if dir := currentAccountDir(paths); dir != "" {
+			if h, err := profile.AccountHarness(dir); err == nil && h == harness && h == profile.HarnessClaude {
+				execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+				execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+dir)
+				return execCmd, nil
+			}
+		}
+	}
+
+	profileName, err := activationProfile(paths, ra.profile, ra.account)
+	if err != nil {
+		return nil, err
+	}
+	account, err := chooseAccount(paths, profileName, ra.account, ra.relink, harness)
 	if ra.orProfile && errors.Is(err, errNoUsableAccount) {
 		fmt.Fprintf(os.Stderr, "ccp: no account of profile %s is logged in; running on the profile\n", profileName)
-		return paths.ProfileDir(profileName), nil
+		execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+paths.ProfileDir(profileName))
+		return execCmd, nil
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+
+	if account != "" && harness == profile.HarnessAgy {
+		if hasAppDataDirFlag(cmdArgs[1:]) {
+			return nil, fmt.Errorf("do not pass --app_data_dir with --account; ccp sets it for account %q", account)
+		}
+		exe, err := exec.LookPath(cmdArgs[0])
+		if err != nil {
+			return nil, fmt.Errorf("agy not found on PATH; install Antigravity CLI (agy) first: %w", err)
+		}
+		if _, err := profile.RelinkAgyAccount(paths, account, profileName, ra.relink); err != nil {
+			return nil, err
+		}
+		if err := profile.SyncAgyAccountSettings(account); err != nil {
+			return nil, err
+		}
+		markAccountUsed(paths.AccountDir(account))
+		profileDir := paths.ProfileDir(profileName)
+		if abs, err := filepath.Abs(profileDir); err == nil {
+			profileDir = abs
+		}
+		flagArg, envEntry := profile.AgyLaunch(account)
+		launchArgs := append([]string{flagArg}, cmdArgs[1:]...)
+		execCmd := exec.Command(exe, launchArgs...)
+		execCmd.Env = profile.WithEnv(os.Environ(), envEntry, "CLAUDE_CONFIG_DIR="+profileDir)
+		return execCmd, nil
+	}
+
 	configDir, err := activationDir(paths, profileName, account, ra.accountSet, ra.relink)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if account != "" {
 		markAccountUsed(configDir)
 	}
-	return configDir, nil
+	execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+configDir)
+	return execCmd, nil
 }
 
 type runArgs struct {
@@ -124,17 +223,20 @@ type runArgs struct {
 	accountSet, relink bool
 	orProfile          bool
 	help               bool
+	commandExplicit    bool
 	command            []string
 }
 
 // parseRunArgs reads "[<profile>] [--account <name>] [--relink] [-- <command>]".
 // Flag parsing is off for run so the command's own flags pass through; only
-// the arguments before "--" belong to ccp. Without "--" the command is claude.
+// the arguments before "--" belong to ccp. Without "--" the command is claude
+// (or agy when the named account uses harness agy).
 func parseRunArgs(args []string) (runArgs, error) {
 	var ra runArgs
 	own, command := args, []string{"claude"}
 	if sep := slices.Index(args, "--"); sep >= 0 {
 		own, command = args[:sep], args[sep+1:]
+		ra.commandExplicit = true
 	}
 	// Flag parsing is off, so cobra never sees a help flag: handle it here.
 	if slices.Contains(own, "-h") || slices.Contains(own, "--help") {

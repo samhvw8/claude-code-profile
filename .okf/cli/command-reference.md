@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command reference
 description: Every ccp command group with a one-line description and an example; hidden commands are marked.
 tags: [cli, reference, commands]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T10:00:00Z }
+generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T08:05:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, CLI Command Reference (removed 2026-09-14 by the OKF migration)"
@@ -36,9 +36,9 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
 | `ccp which [--path]` | Show the active profile (and account), or its directory | `ccp which --path` |
-| `ccp account [list] [--json]` | List accounts with profile, email, 5-hour and weekly use and last use; with none, how to add one | `ccp account` |
-| `ccp account add <name> [<profile>]` | Create an account for a profile (default: the current one); it starts logged out, so log in with `ccp run --account <name>` and `/login` | `ccp account add gt1 companyA` |
-| `ccp status` | Status and health; with accounts, each one's profile, email, 5-hour and 7-day use and last use | `ccp status` |
+| `ccp account [list] [--json]` | List accounts with harness, profile, email, 5-hour and weekly use and last use; with none, how to add one | `ccp account` |
+| `ccp account add <name> [<profile>] [--harness claude\|agy]` | Create an account for a profile (default: the current one); Claude accounts log in via `ccp run --account <name>` and `/login`, `--harness agy` accounts sign in via `ccp run --account <name>` | `ccp account add gt1 companyA` |
+| `ccp status` | Status and health; with accounts, each one's harness, profile, email, 5-hour and 7-day use and last use | `ccp status` |
 | `ccp doctor` | Diagnose (including accounts with a missing profile or broken links), and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
 | `ccp env [<profile>]` | Configure a project env for a profile, optionally under an account (`auto`: shell format only) (hidden) | `ccp env default --account work1 --format=mise` |
