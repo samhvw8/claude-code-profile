@@ -4,7 +4,7 @@ title: "agy (Antigravity CLI) integration"
 description: "Mirroring a profile into Antigravity CLI's ~/.gemini/config: context link, GEMINI.md style, converted rules and agents, skill links, ownership, and following."
 resource: internal/profile/agy.go
 tags: [feature, integration, agy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-12T12:00:00Z }
+generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T08:05:00Z }
 sources:
   - id: agy-loader-tests
     resource: "Hands-on tests of agy v1.5.6's global config loading (orchestrator session, 2026-11-12)"
@@ -77,5 +77,17 @@ The first `ccp agy sync` opts in (the state file exists). After that `followHarn
 alongside opencode and pi on `ccp use -g`, link/unlink, `profile edit`/`profile sync` of the active
 profile, hub-changing commands, and `ccp bootstrap`. `ccp agy` is hidden
 ([command surface](/decisions/command-surface.md)).
+
+# Multi-account support (`--harness agy`)
+
+`ccp account add <name> [<profile>] --harness agy` creates an account bound to a profile with
+`harness = "agy"` in `.ccp-account.toml` (`~/.ccp/accounts/<name>/`, no symlinks) and an isolated
+agy data folder `~/.gemini/antigravity-cli-ccp-<name>/`. `ccp run --account <name>` (or
+`ccp run <profile> --account auto -- agy`) runs `agy` with `--app_data_dir=antigravity-cli-ccp-<name>`
+and `SSH_CLIENT="ccp 0 0"` so `agy` uses file-based token storage instead of the shared Keychain,
+refreshes `~/.gemini/antigravity-cli-ccp-<name>/settings.json` from main while keeping extra list
+items (`permissions.{allow,deny,ask}`, `trustedWorkspaces`), and leaves `CLAUDE_CONFIG_DIR` on the
+profile folder. Quota is read via `agy -p /usage --output-format json`. Rationale and limits:
+[agy accounts decision](/decisions/agy-accounts-file-token-mode.md).
 
 [^agy-loader-tests]: agy v1.5.6 loads `AGENTS.md`/`GEMINI.md` always-on without frontmatter, `rules/*.md` only with `trigger` frontmatter, `skills/<name>/SKILL.md` with a non-empty description, and `agents/<name>.md` with `name`, `description`, `tools`, `subagent`, `mainAgent`, `model`.

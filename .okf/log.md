@@ -1,5 +1,8 @@
 # Update Log
 
+## 2026-11-20
+* **Decision**: [agy accounts use file token mode](/decisions/agy-accounts-file-token-mode.md) — accounts gain `harness = "agy"` in `.ccp-account.toml` (`--harness agy` on `ccp account add`). Each agy account stores its login in `~/.gemini/antigravity-cli-ccp-<name>/` (no symlinks), launched via `ccp run` with `--app_data_dir=...` and `SSH_CLIENT="ccp 0 0"`, merged `settings.json`, and quota read via `agy -p /usage --output-format json`. `ccp env`, `ccp session`, and `ccp use --accounts` stay Claude-only; `ccp account` and `ccp status` show a `HARNESS` column and `"harness"` in JSON. Updated [activation](/architecture/activation.md), [agy integration](/features/agy.md), [command reference](/cli/command-reference.md), [command flags](/cli/command-flags.md), [decisions index](/decisions/index.md), and `skills/ccp/SKILL.md`.
+
 ## 2026-11-18
 * **Update**: Released v0.55.1: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: `skills/ccp/SKILL.md` gets an "Accounts and pools" playbook: the pool model (profile = scope), adding accounts, `ccp use --accounts`, a new pool per client, picking by hand, how auto picks, moving and removing an account, `migrate --accounts` caveats and troubleshooting; its description now triggers on account and pool requests.

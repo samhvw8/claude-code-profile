@@ -23,7 +23,7 @@ func readAccountStatuses(paths *config.Paths) []accountusage.Status {
 	if err != nil {
 		out := make([]accountusage.Status, len(accounts))
 		for i, a := range accounts {
-			out[i] = accountusage.Status{Name: a.Name, Profile: a.Profile, Dir: a.Dir, Note: err.Error()}
+			out[i] = accountusage.Status{Name: a.Name, Profile: a.Profile, Harness: a.Harness, Dir: a.Dir, Note: err.Error()}
 		}
 		return out
 	}
@@ -41,8 +41,9 @@ func printAccounts(statuses []accountusage.Status) {
 	now := time.Now()
 	fmt.Println("--- Accounts ---")
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "  ACCOUNT\tPROFILE\tEMAIL\t5H\t7D\tMODEL WEEK\tAS OF\tLAST USED")
+	fmt.Fprintln(w, "  ACCOUNT\tHARNESS\tPROFILE\tEMAIL\t5H\t7D\tMODEL WEEK\tAS OF\tLAST USED")
 	for _, s := range statuses {
+		harness := profile.DefaultHarness(s.Harness)
 		prof, email, five, week, scoped, asOf, last := s.Profile, s.Email, "-", "-", "-", "-", "never"
 		if prof == "" {
 			prof = "?"
@@ -67,7 +68,7 @@ func printAccounts(statuses []accountusage.Status) {
 		if !s.LastUsed.IsZero() {
 			last = accountusage.Ago(now, s.LastUsed)
 		}
-		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Name, prof, email, five, week, scoped, asOf, last)
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", s.Name, harness, prof, email, five, week, scoped, asOf, last)
 	}
 	w.Flush()
 	for _, s := range statuses {
@@ -80,6 +81,7 @@ func printAccounts(statuses []accountusage.Status) {
 
 type accountStatusJSON struct {
 	Name     string   `json:"name"`
+	Harness  string   `json:"harness"`
 	Profile  string   `json:"profile"`
 	Email    string   `json:"email,omitempty"`
 	LoggedIn bool     `json:"logged_in"`
@@ -94,7 +96,8 @@ func accountJSON(statuses []accountusage.Status) []accountStatusJSON {
 	now := time.Now()
 	out := make([]accountStatusJSON, len(statuses))
 	for i, s := range statuses {
-		j := accountStatusJSON{Name: s.Name, Profile: s.Profile, Email: s.Email, LoggedIn: s.LoggedIn, Note: s.Note}
+		harness := profile.DefaultHarness(s.Harness)
+		j := accountStatusJSON{Name: s.Name, Harness: harness, Profile: s.Profile, Email: s.Email, LoggedIn: s.LoggedIn, Note: s.Note}
 		if s.Usage != nil {
 			if v, ok := s.Usage.FiveHour.At(now); ok {
 				j.FiveHour = &v

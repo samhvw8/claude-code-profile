@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command flags
 description: Flags for ccp commands that take more than a positional argument.
 tags: [cli, reference, flags]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-17T10:00:00Z }
+generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T08:05:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, Command Flags (removed 2026-09-14 by the OKF migration)"
@@ -32,10 +32,11 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 | `use` | `--accounts` | Project mode: write `.ccp/bin/claude`, put `.ccp/bin` on PATH (`mise.toml` `_.path` or `.envrc` `PATH_add`), add `.ccp/` to `.git/info/exclude`; plain `claude` then picks the profile's account with the most limit left. Not with `-g` |
 | `which` | `--path` | Print only the profile directory (the account folder when an account is active) |
 | `env` | `--format=shell\|mise\|direnv` | Print an export (default), or update `mise.toml` / `.envrc` |
-| `run`, `session`, `env` | `--account <name>` | Use the account folder `~/.ccp/accounts/<name>` (own Claude login, links to the profile) as `CLAUDE_CONFIG_DIR` ([activation](/architecture/activation.md)). For `run`, put it before `--` |
-| `run`, `session`, `env` | `--account auto` | Pick, among the accounts linked to the profile (the current one when none is named), the one with the most plan limit left: Claude's usage endpoint cached 5 minutes, else least recently used. `env`: shell format only ([decision](/decisions/accounts-as-activation-option.md)) |
+| `account add` | `--harness claude\|agy` | Account harness: `claude` (default) or `agy` (file-mode token storage under `~/.gemini/antigravity-cli-ccp-<name>/`, no symlinks) |
+| `run`, `session`, `env` | `--account <name>` | Use an account folder `~/.ccp/accounts/<name>`: Claude accounts set `CLAUDE_CONFIG_DIR` to the account folder; `agy` accounts work only with `run` (inserting `--app_data_dir=...` and `SSH_CLIENT`) and are refused by `session` and `env` ([activation](/architecture/activation.md)). For `run`, put it before `--` |
+| `run`, `session`, `env` | `--account auto` | Pick, among the accounts linked to the profile (the current one when none is named), the one with the most plan limit left: usage cached 5 minutes, else least recently used. On `run`, the harness comes from the command basename (`agy` vs everything else). `env`: shell format only, Claude-only ([decision](/decisions/accounts-as-activation-option.md)) |
 | `run` | `--or-profile` | With `--account auto`: keep `CLAUDE_CONFIG_DIR` when it already names an account, and run on the profile when no account of the pool is logged in, instead of failing. The `use --accounts` shim passes it |
-| `run`, `session`, `env` | `--relink` | With `--account`: link an account that is linked to another profile. Close its Claude sessions first |
+| `run`, `session`, `env` | `--relink` | With `--account`: link an account that is linked to another profile. Close its sessions first |
 | `auto` | `--path` | Print the profile path instead of its name |
 
 # Profiles

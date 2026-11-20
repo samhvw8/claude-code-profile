@@ -120,7 +120,11 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 	if all, err := profile.ListAccounts(paths); err == nil {
 		for _, a := range all {
 			if a.Err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: account %s was not moved: %v; if it belongs to '%s', run 'ccp env %s --account %s --relink'\n", a.Name, a.Err, oldName, newName, a.Name)
+				relinkCmd := fmt.Sprintf("ccp env %s --account %s --relink", newName, a.Name)
+				if profile.IsAgyAccountDir(a.Name, a.Dir) {
+					relinkCmd = fmt.Sprintf("ccp run %s --account %s --relink -- agy", newName, a.Name)
+				}
+				fmt.Fprintf(os.Stderr, "Warning: account %s was not moved: %v; if it belongs to '%s', run '%s'\n", a.Name, a.Err, oldName, relinkCmd)
 			}
 		}
 	}
@@ -132,7 +136,7 @@ func runProfileRename(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "Warning: %s\n", w)
 	}
 	if err != nil {
-		return fmt.Errorf("profile renamed but accounts were not all moved: %w\nRun 'ccp env %s --account <name> --relink' for each", err, newName)
+		return fmt.Errorf("profile renamed but accounts were not all moved: %w\nRun 'ccp env %s --account <name> --relink' (or 'ccp run %s --account <name> --relink -- agy' for agy) for each", err, newName, newName)
 	}
 
 	fmt.Printf("Renamed profile '%s' to '%s'\n", oldName, newName)

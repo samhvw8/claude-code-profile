@@ -120,11 +120,15 @@ func refuseBoundAccounts(paths *config.Paths, profileName string) error {
 	var unreadable []string
 	for _, a := range all {
 		if a.Err != nil {
-			unreadable = append(unreadable, fmt.Sprintf("  %s: %v", a.Name, a.Err))
+			hint := fmt.Sprintf("ccp env <profile> --account %s --relink", a.Name)
+			if profile.IsAgyAccountDir(a.Name, a.Dir) {
+				hint = fmt.Sprintf("ccp run <profile> --account %s --relink -- agy", a.Name)
+			}
+			unreadable = append(unreadable, fmt.Sprintf("  %s: %v (%s)", a.Name, a.Err, hint))
 		}
 	}
 	if len(unreadable) > 0 {
-		return fmt.Errorf("cannot delete profile '%s': the binding of these accounts cannot be read, so they may be linked to it\n%s\n\nFix each %s, or relink it: ccp env <profile> --account <name> --relink",
+		return fmt.Errorf("cannot delete profile '%s': the binding of these accounts cannot be read, so they may be linked to it\n%s\n\nFix each %s, or relink with --relink",
 			profileName, strings.Join(unreadable, "\n"), profile.AccountFile)
 	}
 	accounts, err := profile.AccountsBoundTo(paths, profileName)
@@ -135,9 +139,13 @@ func refuseBoundAccounts(paths *config.Paths, profileName string) error {
 		return nil
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "cannot delete profile '%s': %d account(s) are linked to it\n\nRelink each one to another profile first (close its Claude sessions):\n", profileName, len(accounts))
+	fmt.Fprintf(&b, "cannot delete profile '%s': %d account(s) are linked to it\n\nRelink each one to another profile first (close its sessions):\n", profileName, len(accounts))
 	for _, a := range accounts {
-		fmt.Fprintf(&b, "  ccp env <other-profile> --account %s --relink\n", a.Name)
+		if a.Harness == profile.HarnessAgy {
+			fmt.Fprintf(&b, "  ccp run <other-profile> --account %s --relink\n", a.Name)
+		} else {
+			fmt.Fprintf(&b, "  ccp env <other-profile> --account %s --relink\n", a.Name)
+		}
 	}
 	return errors.New(strings.TrimRight(b.String(), "\n"))
 }

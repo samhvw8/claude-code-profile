@@ -1205,3 +1205,16 @@ func TestAccountMigrator_RollbackRestoresMCPTokens(t *testing.T) {
 		t.Errorf("account credential after rollback = %s, want the MCP tokens back", got)
 	}
 }
+
+func TestAccountMigrator_RefusesAgyAccount(t *testing.T) {
+	e := newMigrateEnv(t, "p")
+	t.Setenv("HOME", filepath.Dir(e.paths.GlobalClaudeDir))
+	e.store.items[e.envService("p")] = fakeCred{secret: []byte(`{"claudeAiOauth":{"accessToken":"a"}}`), acct: "sam"}
+	if _, err := profile.CreateAgyAccount(e.paths, "p", "p"); err != nil {
+		t.Fatal(err)
+	}
+	r := only(t, must(e.migrator().Migrate(false)))
+	if r.Status != AccountRefused || !strings.Contains(r.Reason, "agy") {
+		t.Errorf("result = %+v, want refused agy account", r)
+	}
+}

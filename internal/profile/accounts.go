@@ -29,7 +29,33 @@ const (
 	// claudeCredentialsFile holds the OAuth token where there is no Keychain
 	// (Linux); linking it would share one login across accounts.
 	claudeCredentialsFile = ".credentials.json"
+
+	// HarnessClaude is the default account harness (Claude Code).
+	HarnessClaude = "claude"
+	// HarnessAgy is the Antigravity CLI account harness (file token mode).
+	HarnessAgy = "agy"
 )
+
+// DefaultHarness returns h, or HarnessClaude when h is empty.
+func DefaultHarness(h string) string {
+	if h == "" {
+		return HarnessClaude
+	}
+	return h
+}
+
+// NormalizeHarness returns the canonical harness name ("claude" or "agy"),
+// treating "" as "claude".
+func NormalizeHarness(h string) (string, error) {
+	switch h {
+	case "", HarnessClaude:
+		return HarnessClaude, nil
+	case HarnessAgy:
+		return HarnessAgy, nil
+	default:
+		return "", fmt.Errorf("unknown harness %q (valid: %s, %s)", h, HarnessClaude, HarnessAgy)
+	}
+}
 
 var accountNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
@@ -60,6 +86,8 @@ func ValidateAccountName(name string) error {
 
 type accountBinding struct {
 	Profile string `toml:"profile"`
+	// Harness is "agy" for Antigravity CLI accounts; absent means "claude".
+	Harness string `toml:"harness,omitempty"`
 	// MigratedFrom is the login 'ccp migrate --accounts' moved into this
 	// account (a Keychain service or a credentials file). Only that login may
 	// be finished on a later run; any other is left alone.
@@ -76,6 +104,11 @@ func readBinding(accountDir string) (accountBinding, error) {
 	if err := toml.Unmarshal(data, &b); err != nil {
 		return b, fmt.Errorf("invalid %s: %w", path, err)
 	}
+	harness, err := NormalizeHarness(b.Harness)
+	if err != nil {
+		return b, fmt.Errorf("%s: %w", path, err)
+	}
+	b.Harness = harness
 	if b.Profile == "" {
 		return b, fmt.Errorf("%s names no profile", path)
 	}
@@ -85,12 +118,44 @@ func readBinding(accountDir string) (accountBinding, error) {
 	return b, nil
 }
 
+func writeAccountBinding(accountDir string, b accountBinding) error {
+	if b.Harness == HarnessClaude {
+		b.Harness = ""
+	}
+	data, err := toml.Marshal(b)
+	if err != nil {
+		return err
+	}
+	return writeFileAtomicMode(filepath.Join(accountDir, AccountFile), data, 0644)
+}
+
 // AccountProfile returns the profile an account folder is linked to. A
 // binding naming something that cannot be a profile ("shared", "../hub") is
 // an error, like an unreadable one.
 func AccountProfile(accountDir string) (string, error) {
 	b, err := readBinding(accountDir)
-	return b.Profile, err
+	if err != nil {
+		return "", err
+	}
+	return b.Profile, nil
+}
+
+// AccountHarness returns the account's harness ("claude" or "agy").
+func AccountHarness(accountDir string) (string, error) {
+	b, err := readBinding(accountDir)
+	if err != nil {
+		return "", err
+	}
+	return b.Harness, nil
+}
+
+// AccountInfo returns the bound profile and normalized harness ("claude" or "agy").
+func AccountInfo(accountDir string) (profileName, harness string, err error) {
+	b, err := readBinding(accountDir)
+	if err != nil {
+		return "", "", err
+	}
+	return b.Profile, b.Harness, nil
 }
 
 // AccountMigratedFrom returns the login recorded as moved into the account,
@@ -108,15 +173,7 @@ func SetAccountMigratedFrom(accountDir, key string) error {
 		return err
 	}
 	b.MigratedFrom = key
-	data, err := toml.Marshal(b)
-	if err != nil {
-		return err
-	}
-	tmp := filepath.Join(accountDir, AccountFile+".tmp")
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(accountDir, AccountFile))
+	return writeAccountBinding(accountDir, b)
 }
 
 // ValidateProfileName rejects a name that cannot be a profile folder: empty,
@@ -200,6 +257,7 @@ type Account struct {
 	Name    string
 	Dir     string // absolute, clean
 	Profile string // bound profile; "" when Err is set
+	Harness string // "claude" or "agy"; "" when Err is set
 	Err     error  // the binding could not be read
 }
 
@@ -218,7 +276,7 @@ func ListAccounts(paths *config.Paths) ([]Account, error) {
 			continue
 		}
 		a := Account{Name: e.Name(), Dir: absClean(paths.AccountDir(e.Name()))}
-		a.Profile, a.Err = AccountProfile(a.Dir)
+		a.Profile, a.Harness, a.Err = AccountInfo(a.Dir)
 		out = append(out, a)
 	}
 	return out, nil
@@ -265,6 +323,9 @@ func RelinkAccounts(paths *config.Paths, profileName, newName string) (warnings 
 	}
 	var errs []error
 	for _, a := range accounts {
+		if a.Harness == HarnessAgy && newName == "" {
+			continue
+		}
 		_, w, err := LinkAccount(paths, a.Name, target, rebind)
 		warnings = append(warnings, w...)
 		if err != nil {
@@ -319,7 +380,12 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 	// Every check runs before the first write, so a refusal or a corrupt
 	// state file leaves no folder behind.
 	writeBinding := false
-	bound, err := AccountProfile(dir)
+	existing, err := readBinding(dir)
+	if existing.Harness == HarnessAgy || (err != nil && !errors.Is(err, os.ErrNotExist) && IsAgyAccountDir(account, dir)) {
+		d, relinkErr := relinkAgyAccountDir(dir, account, profileName, existing, err, relink)
+		return d, nil, relinkErr
+	}
+	bound := existing.Profile
 	switch {
 	case err == nil && bound == profileName:
 		// already linked to this profile
@@ -342,11 +408,7 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 		return "", nil, fmt.Errorf("failed to create account folder: %w", err)
 	}
 	if writeBinding {
-		data, err := toml.Marshal(accountBinding{Profile: profileName})
-		if err != nil {
-			return "", nil, err
-		}
-		if err := os.WriteFile(filepath.Join(dir, AccountFile), data, 0644); err != nil {
+		if err := writeAccountBinding(dir, accountBinding{Profile: profileName}); err != nil {
 			return "", nil, fmt.Errorf("failed to record account binding: %w", err)
 		}
 	}
@@ -519,6 +581,9 @@ func writeSeed(dst string, data []byte) error {
 // from before a relink), and links to entries an account must own itself
 // (such as backups/, linked by older versions). Real files are never touched.
 func pruneAccountLinks(paths *config.Paths, dir, profileDir string) error {
+	if h, err := AccountHarness(dir); err == nil && h == HarnessAgy {
+		return nil
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err

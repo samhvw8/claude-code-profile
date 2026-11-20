@@ -538,23 +538,33 @@ func ompWriteRulesFile(p *Profile, rulesPath string, result *OmpLinkResult) erro
 
 // writeFileAtomic replaces a file through a temporary sibling.
 func writeFileAtomic(path, content string) error {
+	return writeFileAtomicMode(path, []byte(content), 0644)
+}
+
+// writeFileAtomicMode replaces a file atomically with the given permissions.
+func writeFileAtomicMode(path string, data []byte, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".ccp-rules-*.tmp")
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".ccp-*.tmp")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name())
 
-	if _, err := tmp.WriteString(content); err != nil {
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), 0644); err != nil {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)

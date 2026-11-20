@@ -260,12 +260,16 @@ ccp status           # also lists accounts
 ### Add accounts to a pool
 
 ```bash
-ccp account add gt4 growtrics    # create it (logged out); profile defaults to the current one
-ccp run --account gt4            # Claude Code on gt4: type /login once
-ccp account                      # check: gt4 shows its own email
+ccp account add gt4 growtrics                  # Claude account (default); profile defaults to current
+ccp run --account gt4                          # Claude Code on gt4: type /login once
+ccp account add agy1 growtrics --harness agy   # agy account (file token storage in ~/.gemini/antigravity-cli-ccp-agy1)
+ccp run --account agy1                         # agy on agy1: sign in once
+ccp run growtrics --account auto -- agy        # auto-pick among the profile's agy accounts
+ccp account                                    # check: shows HARNESS, profile, email, and usage
 ```
 
-Pick short names that say the pool (`gt1`, `acme1`). `auto` is reserved.
+Pick short names that say the pool (`gt1`, `acme1`). `auto` is reserved. `ccp env`, `ccp session`,
+and `ccp use --accounts` are Claude-only; start `agy` accounts with `ccp run`.
 
 ### Make a folder use its pool (`claude` picks the account)
 
@@ -312,7 +316,7 @@ Everything after `--` is the command; name `claude` before its flags.
 
 ### How auto picks
 
-1. Usage comes from Claude's usage endpoint, read with each account's token, cached 5 minutes
+1. Usage comes from Claude's usage endpoint (or `agy -p /usage` for `agy` accounts), cached 5 minutes
    in `<account>/.ccp-usage.json` (failures are cached too). ccp never refreshes a token.
 2. Order: accounts under 80% of the 5-hour and 95% of the weekly limit, lowest 5-hour use first
    then lowest weekly; then accounts with unknown usage; then busy ones; then exhausted ones.
@@ -336,9 +340,13 @@ There is no remove command yet. Confirm with the user first, close its sessions,
 its login and its folder:
 
 ```bash
+# Claude account:
 d=$HOME/.ccp/accounts/gt4
 security delete-generic-password -s "Claude Code-credentials-$(printf %s "$d" | shasum -a 256 | cut -c1-8)"  # macOS only
 rm -rf "$d"
+
+# agy account:
+rm -rf "$HOME/.ccp/accounts/agy1" "$HOME/.gemini/antigravity-cli-ccp-agy1"
 ```
 
 ### Move existing logins into accounts

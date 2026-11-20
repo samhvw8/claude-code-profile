@@ -411,3 +411,93 @@ func TestHarnessProfile_AccountSessionOnOtherProfile(t *testing.T) {
 		t.Errorf("harnesses do not follow the global profile a: %v", p)
 	}
 }
+
+func TestAgyAccount_GuardsDoctorRenameDeleteAndReset(t *testing.T) {
+	paths := accountCmdEnv(t, "a", "gone")
+	if _, err := profile.CreateAgyAccount(paths, "agy1", "a"); err != nil {
+		t.Fatal(err)
+	}
+	// checkAccounts skips broken-link checks on agy accounts (even if a broken link is dropped in).
+	os.Symlink(filepath.Join(paths.ProfileDir("a"), "missing"), filepath.Join(paths.AccountDir("agy1"), "missing"))
+	if problems := checkAccounts(paths); len(problems) != 0 {
+		t.Errorf("checkAccounts reported agy broken link: %v", problems)
+	}
+
+	// profile delete refuses while agy1 is bound and hints 'ccp run ... --relink'.
+	t.Cleanup(func() { deleteForce = false })
+	if err := runCcp(t, "profile", "delete", "a", "--force"); err == nil || !strings.Contains(err.Error(), "ccp run <other-profile> --account agy1 --relink") {
+		t.Errorf("delete err = %v", err)
+	}
+
+	// profile rename rewrites agy1's binding without creating symlinks.
+	os.WriteFile(filepath.Join(paths.ProfileDir("a"), "CLAUDE.md"), []byte("x"), 0644)
+	if err := runCcp(t, "profile", "rename", "a", "b"); err != nil {
+		t.Fatal(err)
+	}
+	bound, harness, err := profile.AccountInfo(paths.AccountDir("agy1"))
+	if err != nil || bound != "b" || harness != profile.HarnessAgy {
+		t.Errorf("after rename: %q %q %v", bound, harness, err)
+	}
+	if _, err := os.Lstat(filepath.Join(paths.AccountDir("agy1"), "CLAUDE.md")); err == nil {
+		t.Error("rename created CLAUDE.md symlink in agy account")
+	}
+
+	// reset plan notes agy token lives outside ~/.ccp (including when binding is corrupt).
+	resetText := strings.Join(accountResetLines(paths, "darwin"), "\n")
+	if !strings.Contains(resetText, "antigravity-cli-ccp-agy1") || !strings.Contains(resetText, "outside ~/.ccp") {
+		t.Errorf("reset plan:\n%s", resetText)
+	}
+	origBinding, _ := os.ReadFile(filepath.Join(paths.AccountDir("agy1"), profile.AccountFile))
+	os.WriteFile(filepath.Join(paths.AccountDir("agy1"), profile.AccountFile), []byte("profile = [\n"), 0644)
+	corruptResetText := strings.Join(accountResetLines(paths, "darwin"), "\n")
+	if !strings.Contains(corruptResetText, "antigravity-cli-ccp-agy1") || !strings.Contains(corruptResetText, "outside ~/.ccp") {
+		t.Errorf("corrupt agy reset plan:\n%s", corruptResetText)
+	}
+	os.WriteFile(filepath.Join(paths.AccountDir("agy1"), profile.AccountFile), origBinding, 0644)
+
+	// Missing profile on agy account reports ccp run --relink hint.
+	os.RemoveAll(paths.ProfileDir("b"))
+	if got := strings.Join(checkAccounts(paths), "\n"); !strings.Contains(got, "ccp run <profile> --account agy1 --relink") {
+		t.Errorf("missing profile checkAccounts:\n%s", got)
+	}
+}
+
+func TestEnvAndSession_AutoExcludesAgy(t *testing.T) {
+	paths := accountCmdEnv(t, "work")
+	if _, err := profile.CreateAgyAccount(paths, "agy1", "work"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := chooseAccount(paths, "work", profile.AutoAccount, false, profile.HarnessClaude); err == nil || !strings.Contains(err.Error(), "no account is linked") {
+		t.Errorf("chooseAccount(claude) on agy-only profile = %v", err)
+	}
+}
+
+func TestReset_AgyAccountKeepsGeminiDataDir(t *testing.T) {
+	paths := accountCmdEnv(t, "work")
+	if err := os.Symlink(paths.ProfileDir("work"), paths.GlobalClaudeDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := profile.CreateAgyAccount(paths, "agy1", "work"); err != nil {
+		t.Fatal(err)
+	}
+	dataDir, err := profile.AgyAccountDataDir("agy1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tokPath := filepath.Join(dataDir, "antigravity-oauth-token")
+	if err := os.WriteFile(tokPath, []byte("keep-token"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	resetForce = true
+	t.Cleanup(func() { resetForce = false })
+	if _, err := captureStdout(t, func() error { return runCcp(t, "reset", "--force") }); err != nil {
+		t.Fatalf("reset --force: %v", err)
+	}
+	if _, err := os.Stat(paths.CcpDir); !os.IsNotExist(err) {
+		t.Errorf("~/.ccp still exists after reset: %v", err)
+	}
+	got, err := os.ReadFile(tokPath)
+	if err != nil || string(got) != "keep-token" {
+		t.Errorf("agy token after reset = %q, %v", got, err)
+	}
+}

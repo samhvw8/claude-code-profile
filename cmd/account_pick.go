@@ -50,20 +50,31 @@ func activationProfile(paths *config.Paths, name, account string) (string, error
 }
 
 // chooseAccount resolves --account auto to the account linked to profileName
-// with the most plan limit left (see accountusage.Pick), and reports the pick
-// on stderr. Any other value is returned as is.
-func chooseAccount(paths *config.Paths, profileName, account string, relink bool) (string, error) {
+// with the matching harness and the most plan limit left (see
+// accountusage.Pick), and reports the pick on stderr. Any other value is
+// returned as is.
+func chooseAccount(paths *config.Paths, profileName, account string, relink bool, harness string) (string, error) {
 	if account != profile.AutoAccount {
 		return account, nil
 	}
 	if relink {
 		return "", fmt.Errorf("--relink needs a named account, not --account auto")
 	}
-	pool, err := profile.AccountsBoundTo(paths, profileName)
+	harness = profile.DefaultHarness(harness)
+	bound, err := profile.AccountsBoundTo(paths, profileName)
 	if err != nil {
 		return "", err
 	}
+	var pool []profile.Account
+	for _, a := range bound {
+		if profile.DefaultHarness(a.Harness) == harness {
+			pool = append(pool, a)
+		}
+	}
 	if len(pool) == 0 {
+		if harness == profile.HarnessAgy {
+			return "", fmt.Errorf("%w: no agy account is linked to profile %q; add one with 'ccp account add <name> %s --harness agy'", errNoUsableAccount, profileName, profileName)
+		}
 		return "", fmt.Errorf("%w: no account is linked to profile %q; add one with 'ccp account add <name> %s' and /login in it", errNoUsableAccount, profileName, profileName)
 	}
 	reader, err := accountusage.NewReader(Version)
@@ -72,10 +83,25 @@ func chooseAccount(paths *config.Paths, profileName, account string, relink bool
 	}
 	picked, reason, err := accountusage.Pick(reader.Read(pool), time.Now())
 	if err != nil {
+		if harness == profile.HarnessAgy {
+			return "", fmt.Errorf("%w: %w (profile %q); sign in once with 'ccp run --account <name>'", errNoUsableAccount, err, profileName)
+		}
 		return "", fmt.Errorf("%w: %w (profile %q); log in with 'ccp run --account <name>' and /login", errNoUsableAccount, err, profileName)
 	}
 	fmt.Fprintf(os.Stderr, "ccp: account %s (%s)\n", picked.Name, reason)
 	return picked.Name, nil
+}
+
+// refuseAgyAccountForEnvOrSession rejects agy accounts in commands that only
+// export CLAUDE_CONFIG_DIR (mise/direnv/shell cannot pass --app_data_dir).
+func refuseAgyAccountForEnvOrSession(paths *config.Paths, account string) error {
+	if account == "" || account == profile.AutoAccount {
+		return nil
+	}
+	if profile.IsAgyAccountDir(account, paths.AccountDir(account)) {
+		return fmt.Errorf("agy accounts need a command-line flag; start them with ccp run --account %s -- agy ...", account)
+	}
+	return nil
 }
 
 // errNoUsableAccount marks the --account auto failures where the pool has no
