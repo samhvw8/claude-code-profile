@@ -4,11 +4,21 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"context"
+
+	"github.com/samhvw8/claude-code-profile/internal/accountusage"
+	"github.com/samhvw8/claude-code-profile/internal/config"
+	"github.com/samhvw8/claude-code-profile/internal/migration"
 	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
 
@@ -170,4 +180,188 @@ func TestAccountAdd_RejectsInvalidHarness(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unknown harness") {
 		t.Errorf("err = %v, want unknown harness", err)
 	}
+}
+
+type fakeAccountStore struct {
+	mu       sync.Mutex
+	secrets  map[string][]byte
+	services map[[2]string]bool
+}
+
+func (f *fakeAccountStore) Get(key string) ([]byte, string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	v, ok := f.secrets[key]
+	return v, "", ok, nil
+}
+func (f *fakeAccountStore) Set(string, string, []byte) error       { return nil }
+func (f *fakeAccountStore) Delete(string, string) (string, error) { return "", nil }
+func (f *fakeAccountStore) Exists(service, acct string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.services[[2]string{service, acct}], nil
+}
+func (f *fakeAccountStore) ListServices(string) ([]string, error) { return nil, nil }
+
+func installFakeAccountReader(t *testing.T, paths *config.Paths, store *fakeAccountStore, agyCalls *int32) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte(`{"five_hour":{"utilization":12},"seven_day":{"utilization":34}}`))
+	}))
+	t.Cleanup(srv.Close)
+	home := filepath.Dir(paths.GlobalClaudeDir)
+	orig := newAccountUsageReader
+	newAccountUsageReader = func() (*accountusage.Reader, error) {
+		return &accountusage.Reader{
+			Store:      store,
+			Keychain:   store,
+			GOOS:       "darwin",
+			URL:        srv.URL,
+			HTTP:       srv.Client(),
+			UserAgent:  "ccp/test",
+			Now:        time.Now,
+			FreshFor:   accountusage.FreshFor,
+			HomeDir:    home,
+			AgyTimeout: time.Second,
+			Env:        []string{"PATH=/usr/bin"},
+			RunAgy: func(context.Context, string, []string, []string) ([]byte, error) {
+				if agyCalls != nil {
+					atomic.AddInt32(agyCalls, 1)
+				}
+				return []byte(`{"status":"SUCCESS","command":{"name":"usage","data":{"groups":[{"name":"Gemini Models","buckets":[{"window":"5h","remaining_fraction":0.8},{"window":"weekly","remaining_fraction":0.6}]}]}}}`), nil
+			},
+		}, nil
+	}
+	t.Cleanup(func() { newAccountUsageReader = orig })
+}
+
+func testCredBytes(expires time.Time) []byte {
+	b, _ := json.Marshal(map[string]any{"claudeAiOauth": map[string]any{
+		"accessToken": "tok", "refreshToken": "ref", "expiresAt": expires.UnixMilli(),
+	}})
+	return b
+}
+
+func TestAccountList_OtherLoginsAndBoundaries(t *testing.T) {
+	paths := accountCmdEnv(t, "default", "work")
+	if _, _, err := profile.LinkAccount(paths, "gt1", "work", false); err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Dir(paths.GlobalClaudeDir)
+	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"personal@example.invalid"}}`), 0600)
+	os.WriteFile(filepath.Join(paths.ProfileDir("default"), ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"def@example.invalid"}}`), 0600)
+
+	defAbs, _ := filepath.Abs(paths.ProfileDir("default"))
+	store := &fakeAccountStore{
+		secrets: map[string][]byte{
+			"Claude Code-credentials":                                     testCredBytes(time.Now().Add(time.Hour)),
+			"Claude Code-credentials-" + migration.ConfigDirHash(filepath.Clean(defAbs)): testCredBytes(time.Now().Add(time.Hour)),
+		},
+		services: map[[2]string]bool{
+			{"gemini", "antigravity"}: true,
+		},
+	}
+	var agyCalls int32
+	installFakeAccountReader(t, paths, store, &agyCalls)
+
+	out, err := captureStdout(t, func() error { return runCcp(t, "account") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"--- Accounts ---",
+		"--- Other logins (not accounts) ---",
+		"KIND", "WHERE", "EMAIL", "5H", "7D", "AS OF",
+		"claude global", "~/.claude", "personal@example.invalid",
+		"claude profile", "profile default", "def@example.invalid",
+		"agy plain", "~/.gemini/antigravity-cli",
+		"12%", "34%", "20%", "40%",
+		"ccp migrate --accounts --dry-run previews moving profile logins into accounts (it moves every profile, including the global login)",
+		"add more agy logins with: ccp account add <name> --harness agy",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("ccp account missing %q:\n%s", want, out)
+		}
+	}
+
+	// ccp account --json keeps managed-only []accountStatusJSON array.
+	accountListJSON = true
+	t.Cleanup(func() { accountListJSON = false })
+	jsonOut, err := captureStdout(t, func() error { return runCcp(t, "account", "--json") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list []accountStatusJSON
+	if err := json.Unmarshal([]byte(jsonOut), &list); err != nil {
+		t.Fatalf("json: %v\n%s", err, jsonOut)
+	}
+	if len(list) != 1 || list[0].Name != "gt1" {
+		t.Errorf("json list = %+v, want only gt1", list)
+	}
+	accountListJSON = false
+
+	// ccp status never prints Other logins and never triggers agy plain probe.
+	callsBeforeStatus := atomic.LoadInt32(&agyCalls)
+	statusOut, err := captureStdout(t, func() error { return runCcp(t, "status") })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(statusOut, "Other logins") || atomic.LoadInt32(&agyCalls) != callsBeforeStatus {
+		t.Errorf("ccp status leaked other logins (agyCalls %d -> %d):\n%s", callsBeforeStatus, agyCalls, statusOut)
+	}
+
+	// --account auto pools never include unmanaged logins.
+	if _, err := chooseAccount(paths, "default", profile.AutoAccount, false, profile.HarnessClaude); err == nil || !strings.Contains(err.Error(), "no account is linked") {
+		t.Errorf("chooseAccount(default) = %v, want no account linked", err)
+	}
+}
+
+func TestAccountList_OtherLoginsFooterHintsByKind(t *testing.T) {
+	t.Run("global and agy without profile logins", func(t *testing.T) {
+		paths := accountCmdEnv(t, "default")
+		store := &fakeAccountStore{
+			secrets: map[string][]byte{
+				"Claude Code-credentials": testCredBytes(time.Now().Add(time.Hour)),
+			},
+			services: map[[2]string]bool{
+				{"gemini", "antigravity"}: true,
+			},
+		}
+		installFakeAccountReader(t, paths, store, nil)
+		out, err := captureStdout(t, func() error { return runCcp(t, "account") })
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, "No accounts yet") || !strings.Contains(out, "Other logins (not accounts)") {
+			t.Errorf("missing empty-accounts + other logins:\n%s", out)
+		}
+		if strings.Contains(out, "ccp migrate --accounts") {
+			t.Errorf("unexpected migrate hint when no profile login exists:\n%s", out)
+		}
+		if !strings.Contains(out, "add more agy logins with: ccp account add <name> --harness agy") {
+			t.Errorf("missing agy hint:\n%s", out)
+		}
+	})
+
+	t.Run("profile login only without agy", func(t *testing.T) {
+		paths := accountCmdEnv(t, "work")
+		workAbs, _ := filepath.Abs(paths.ProfileDir("work"))
+		store := &fakeAccountStore{
+			secrets: map[string][]byte{
+				"Claude Code-credentials-" + migration.ConfigDirHash(filepath.Clean(workAbs)): testCredBytes(time.Now().Add(time.Hour)),
+			},
+			services: map[[2]string]bool{},
+		}
+		installFakeAccountReader(t, paths, store, nil)
+		out, err := captureStdout(t, func() error { return runCcp(t, "account") })
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, "ccp migrate --accounts --dry-run") {
+			t.Errorf("missing migrate --dry-run hint:\n%s", out)
+		}
+		if strings.Contains(out, "--harness agy") {
+			t.Errorf("unexpected agy hint:\n%s", out)
+		}
+	})
 }

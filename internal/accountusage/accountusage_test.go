@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/samhvw8/claude-code-profile/internal/config"
 	"github.com/samhvw8/claude-code-profile/internal/migration"
 	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
@@ -509,4 +511,261 @@ func TestPick_MultipleAgyAccounts(t *testing.T) {
 		t.Errorf("picked = %+v, err = %v", picked, err)
 	}
 }
+
+type fakeCredKeychain struct {
+	mu       sync.Mutex
+	secrets  map[string][]byte
+	services map[[2]string]bool
+	existsFn func(service, acct string) (bool, error)
+}
+
+func (f *fakeCredKeychain) Get(key string) ([]byte, string, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	v, ok := f.secrets[key]
+	return v, "", ok, nil
+}
+
+func (f *fakeCredKeychain) Set(string, string, []byte) error       { return nil }
+func (f *fakeCredKeychain) Delete(string, string) (string, error) { return "", nil }
+
+func (f *fakeCredKeychain) Exists(service, acct string) (bool, error) {
+	if f.existsFn != nil {
+		return f.existsFn(service, acct)
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.services[[2]string{service, acct}], nil
+}
+
+func (f *fakeCredKeychain) ListServices(string) ([]string, error) { return nil, nil }
+
+func otherTestPaths(t *testing.T) (*config.Paths, string) {
+	t.Helper()
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	ccpDir := filepath.Join(root, "ccp")
+	os.MkdirAll(home, 0755)
+	paths := &config.Paths{
+		CcpDir:          ccpDir,
+		ClaudeDir:       filepath.Join(home, ".claude"),
+		GlobalClaudeDir: filepath.Join(home, ".claude"),
+		HubDir:          filepath.Join(ccpDir, "hub"),
+		ProfilesDir:     filepath.Join(ccpDir, "profiles"),
+		SharedDir:       filepath.Join(ccpDir, "profiles", "shared"),
+		StoreDir:        filepath.Join(ccpDir, "store"),
+	}
+	os.MkdirAll(paths.HubDir, 0755)
+	os.MkdirAll(paths.SharedDir, 0755)
+	return paths, home
+}
+
+func TestReader_ReadOtherLogins_ClaudeDarwinAndCache(t *testing.T) {
+	paths, home := otherTestPaths(t)
+	defDir := paths.ProfileDir("default")
+	gtDir := paths.ProfileDir("companyA")
+	emptyDir := paths.ProfileDir("empty")
+	for _, d := range []string{defDir, gtDir, emptyDir} {
+		os.MkdirAll(d, 0755)
+	}
+	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"global@example.invalid"}}`), 0600)
+	os.WriteFile(filepath.Join(defDir, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"default@example.invalid"}}`), 0600)
+
+	absDef, _ := filepath.Abs(defDir)
+	absGt, _ := filepath.Abs(gtDir)
+	store := &fakeCredKeychain{
+		secrets: map[string][]byte{
+			migration.KeychainServiceFor("", true):       cred(now.Add(time.Hour)),
+			migration.LoginKey("darwin", filepath.Clean(absDef)): cred(now.Add(time.Hour)),
+			migration.LoginKey("darwin", filepath.Clean(absGt)):  []byte(`{"mcpOAuth":{"s":{"accessToken":"x"}}}`),
+		},
+	}
+
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.Write([]byte(`{"five_hour":{"utilization":15},"seven_day":{"utilization":40}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cur := now
+	r := &Reader{
+		Store:     store,
+		Keychain:  store,
+		GOOS:      "darwin",
+		URL:       srv.URL,
+		HTTP:      srv.Client(),
+		UserAgent: "ccp/test",
+		Now:       func() time.Time { return cur },
+		FreshFor:  FreshFor,
+		HomeDir:   home,
+		Env:       []string{"PATH=/usr/bin"},
+	}
+
+	got := r.ReadOtherLogins(paths)
+	if len(got) != 2 {
+		t.Fatalf("got %d other logins, want 2: %+v", len(got), got)
+	}
+	if got[0].Kind != OtherKindClaudeGlobal || got[0].Email != "global@example.invalid" || !got[0].Live {
+		t.Errorf("got[0] = %+v", got[0])
+	}
+	if got[1].Kind != OtherKindClaudeProfile || got[1].Profile != "default" || got[1].Email != "default@example.invalid" || !got[1].Live {
+		t.Errorf("got[1] = %+v", got[1])
+	}
+	if atomic.LoadInt32(&calls) != 2 {
+		t.Errorf("HTTP calls = %d, want 2", calls)
+	}
+
+	// Cache files live in ~/.ccp/state/usage/<key>.json (0600), never in profile folders.
+	for _, key := range []string{"claude-global", "claude-profile-default"} {
+		p := filepath.Join(paths.CcpDir, "state", "usage", key+".json")
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatalf("missing cache %s: %v", p, err)
+		}
+		if info.Mode().Perm() != 0600 {
+			t.Errorf("%s mode = %o, want 0600", p, info.Mode().Perm())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(defDir, UsageFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("wrote usage file inside profile dir: %v", err)
+	}
+
+	// Within 5m fresh window, no extra HTTP requests are made.
+	got = r.ReadOtherLogins(paths)
+	if atomic.LoadInt32(&calls) != 2 || got[0].Live || got[1].Live {
+		t.Errorf("fresh cache failed: calls=%d got=%+v", calls, got)
+	}
+
+	// After 5m, a 429 is cached for FreshFor as well.
+	cur = cur.Add(6 * time.Minute)
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	got = r.ReadOtherLogins(paths)
+	if atomic.LoadInt32(&calls) != 4 || !strings.Contains(got[0].Note, "429") {
+		t.Errorf("429 refresh: calls=%d got=%+v", calls, got)
+	}
+	got = r.ReadOtherLogins(paths)
+	if atomic.LoadInt32(&calls) != 4 || !strings.Contains(got[0].Note, "429") {
+		t.Errorf("cached failure retried early: calls=%d got=%+v", calls, got)
+	}
+}
+
+func TestReader_ReadOtherLogins_LinuxDeduplicatesGlobalSymlink(t *testing.T) {
+	paths, home := otherTestPaths(t)
+	defDir := paths.ProfileDir("default")
+	workDir := paths.ProfileDir("work")
+	os.MkdirAll(defDir, 0755)
+	os.MkdirAll(workDir, 0755)
+	if err := os.Symlink(defDir, paths.GlobalClaudeDir); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(defDir, ".credentials.json"), cred(now.Add(-time.Minute)), 0600)
+	os.WriteFile(filepath.Join(workDir, ".credentials.json"), cred(now.Add(-time.Minute)), 0600)
+	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"g@example.invalid"}}`), 0600)
+	os.WriteFile(filepath.Join(workDir, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"w@example.invalid"}}`), 0600)
+
+	r := &Reader{
+		Store:    migration.FileStore{},
+		GOOS:     "linux",
+		Now:      func() time.Time { return now },
+		FreshFor: FreshFor,
+		HomeDir:  home,
+	}
+	got := r.ReadOtherLogins(paths)
+	if len(got) != 2 {
+		t.Fatalf("got %d logins, want 2 (global + work, no duplicate default): %+v", len(got), got)
+	}
+	if got[0].Kind != OtherKindClaudeGlobal || got[1].Profile != "work" {
+		t.Errorf("got = %+v", got)
+	}
+}
+
+func TestReader_ReadOtherLogins_AgyPlainAndGuards(t *testing.T) {
+	paths, home := otherTestPaths(t)
+	store := &fakeCredKeychain{
+		secrets:  map[string][]byte{},
+		services: map[[2]string]bool{},
+	}
+
+	var calls int32
+	var gotArgs, gotEnv []string
+	runner := func(_ context.Context, _ string, args, env []string) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		gotArgs, gotEnv = args, env
+		return []byte(agyAcctCSample), nil
+	}
+
+	cur := now
+	r := &Reader{
+		Store:      store,
+		Keychain:   store,
+		GOOS:       "darwin",
+		Now:        func() time.Time { return cur },
+		FreshFor:   FreshFor,
+		HomeDir:    home,
+		RunAgy:     runner,
+		AgyTimeout: time.Second,
+		Env:        []string{"PATH=/usr/bin", "SSH_CLIENT=ccp 0 0"},
+	}
+
+	// Not signed in (no gemini/antigravity in Keychain): omitted, runner never called.
+	if got := r.ReadOtherLogins(paths); len(got) != 0 || calls != 0 {
+		t.Fatalf("signed-out agy: got=%+v calls=%d", got, calls)
+	}
+
+	// Signed in in Keychain, with SSH_CLIENT=ccp 0 0 stripped before spawning plain agy.
+	store.services[[2]string{"gemini", "antigravity"}] = true
+	got := r.ReadOtherLogins(paths)
+	if len(got) != 1 || got[0].Kind != OtherKindAgyPlain || got[0].Email != "" || !got[0].Live || calls != 1 {
+		t.Fatalf("agy plain = %+v, calls=%d", got, calls)
+	}
+	wantArgs := []string{"-p", "/usage", "--output-format", "json"}
+	if !slices.Equal(gotArgs, wantArgs) {
+		t.Errorf("args = %v, want %v (no --app_data_dir)", gotArgs, wantArgs)
+	}
+	for _, e := range gotEnv {
+		if strings.HasPrefix(e, "SSH_CLIENT=") {
+			t.Errorf("SSH_CLIENT=ccp 0 0 leaked into child env: %v", gotEnv)
+		}
+	}
+
+	// Real SSH without ~/.gemini/antigravity-cli/antigravity-oauth-token skips spawn and shows note.
+	cur = cur.Add(6 * time.Minute)
+	for _, sshEnv := range [][]string{
+		{"PATH=/usr/bin", "SSH_CLIENT=10.0.0.1 12345 22"},
+		{"PATH=/usr/bin", "SSH_CONNECTION=10.0.0.1 12345 10.0.0.2 22"},
+		{"PATH=/usr/bin", "SSH_TTY=/dev/pts/0"},
+		{"PATH=/usr/bin", "SSH_CLIENT=ccp 0 0", "SSH_TTY=/dev/pts/0"},
+	} {
+		r.Env = sshEnv
+		got = r.ReadOtherLogins(paths)
+		if len(got) != 1 || calls != 1 || got[0].Usage != nil || !strings.Contains(got[0].Note, "SSH") {
+			t.Errorf("env %v: got=%+v calls=%d", sshEnv, got, calls)
+		}
+	}
+
+	// Real SSH WITH non-empty file token runs plain agy and caches to agy-global.json (0600).
+	tokPath := filepath.Join(home, ".gemini", "antigravity-cli", "antigravity-oauth-token")
+	os.MkdirAll(filepath.Dir(tokPath), 0755)
+	os.WriteFile(tokPath, []byte("tok"), 0600)
+	r.Env = []string{"PATH=/usr/bin", "SSH_TTY=/dev/pts/0"}
+	got = r.ReadOtherLogins(paths)
+	if len(got) != 1 || calls != 2 || !got[0].Live || got[0].Usage == nil {
+		t.Fatalf("SSH with file token: got=%+v calls=%d", got, calls)
+	}
+	info, err := os.Stat(filepath.Join(paths.CcpDir, "state", "usage", "agy-global.json"))
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Errorf("agy-global.json stat: err=%v mode=%v", err, info)
+	}
+
+	// Non-darwin skips agy plain Keychain lookup.
+	r.GOOS = "linux"
+	if got := r.ReadOtherLogins(paths); len(got) != 0 {
+		t.Errorf("linux agy plain = %+v, want empty", got)
+	}
+}
+
 
