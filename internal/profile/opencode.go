@@ -96,20 +96,29 @@ func syncCopies(dir string, state *copyState, desired map[string][]byte, frozen 
 		}
 		content := desired[rel]
 		path := filepath.Join(dir, rel)
-		onDisk, err := os.ReadFile(path)
-		switch {
-		case os.IsNotExist(err):
-		case err != nil:
+		info, err := os.Lstat(path)
+		if err == nil {
+			if !info.Mode().IsRegular() {
+				r.Occupied = append(r.Occupied, rel)
+				continue
+			}
+			onDisk, readErr := os.ReadFile(path)
+			switch {
+			case os.IsNotExist(readErr):
+			case readErr != nil:
+				return r, readErr
+			case string(onDisk) == string(content):
+				state.Files[rel] = hashOf(content) // already right, possibly adopted
+				continue
+			case state.Files[rel] == "":
+				r.Occupied = append(r.Occupied, rel)
+				continue
+			case state.Files[rel] != hashOf(onDisk):
+				r.Edited = append(r.Edited, rel)
+				continue
+			}
+		} else if !os.IsNotExist(err) {
 			return r, err
-		case string(onDisk) == string(content):
-			state.Files[rel] = hashOf(content) // already right, possibly adopted
-			continue
-		case state.Files[rel] == "":
-			r.Occupied = append(r.Occupied, rel)
-			continue
-		case state.Files[rel] != hashOf(onDisk):
-			r.Edited = append(r.Edited, rel)
-			continue
 		}
 		if err := writeFileAtomic(path, string(content)); err != nil {
 			return r, err
@@ -123,6 +132,19 @@ func syncCopies(dir string, state *copyState, desired map[string][]byte, frozen 
 			continue
 		}
 		path := filepath.Join(dir, rel)
+		info, err := os.Lstat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				delete(state.Files, rel)
+				continue
+			}
+			return r, err
+		}
+		if !info.Mode().IsRegular() {
+			r.Edited = append(r.Edited, rel)
+			delete(state.Files, rel)
+			continue
+		}
 		onDisk, err := os.ReadFile(path)
 		switch {
 		case os.IsNotExist(err):

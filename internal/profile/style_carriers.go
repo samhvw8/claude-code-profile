@@ -271,9 +271,16 @@ func syncStyleCarriers(paths *config.Paths, p *Profile, group, path string) (lin
 				continue
 			}
 			rec, recorded := ledger.Carriers[target]
-			action, err := carrierPlan(target, want, rec, recorded)
-			if err != nil {
-				return err
+			foreignOwner := recorded && rec.Group != "" && rec.Group != group
+			var action carrierAction
+			if foreignOwner {
+				action = carrierOccupied
+			} else {
+				var err error
+				action, err = carrierPlan(target, want, rec, recorded)
+				if err != nil {
+					return err
+				}
 			}
 			switch action {
 			case carrierWrite:
@@ -303,13 +310,20 @@ func syncStyleCarriers(paths *config.Paths, p *Profile, group, path string) (lin
 				delete(ledger.Carriers, target) // edited by hand: no longer ccp's
 				lines = append(lines, fmt.Sprintf("%s: left alone — edited by hand since ccp wrote it; remove it to let ccp manage it", label))
 			case carrierOccupied:
-				delete(ledger.Carriers, target)
+				if !foreignOwner {
+					delete(ledger.Carriers, target)
+				}
 				if want != "" {
-					lines = append(lines, fmt.Sprintf("%s: occupied by a file ccp did not write (or wrote before its ledger was lost) — output style '%s' not carried", label, sel.Style.Name))
+					if foreignOwner {
+						lines = append(lines, fmt.Sprintf("%s: occupied by another harness (%s) — output style '%s' not carried", label, rec.Group, sel.Style.Name))
+					} else {
+						lines = append(lines, fmt.Sprintf("%s: occupied by a file ccp did not write (or wrote before its ledger was lost) — output style '%s' not carried", label, sel.Style.Name))
+					}
 				}
 			}
 		}
-		_, owned = ledger.Carriers[path]
+		rec, ok := ledger.Carriers[path]
+		owned = ok && rec.Group == group
 		return nil
 	})
 	lines = append(notes, lines...)
@@ -381,8 +395,10 @@ func OwnedStyleCarriers(paths *config.Paths, prefix string) ([]StyleCarrier, err
 		if !strings.HasPrefix(rec.Group, prefix) {
 			continue
 		}
-		if data, err := os.ReadFile(path); err == nil && hashOf(data) == rec.Hash {
-			owned = append(owned, StyleCarrier{Path: path, hash: rec.Hash})
+		if info, err := os.Lstat(path); err == nil && info.Mode().IsRegular() {
+			if data, err := os.ReadFile(path); err == nil && hashOf(data) == rec.Hash {
+				owned = append(owned, StyleCarrier{Path: path, hash: rec.Hash})
+			}
 		}
 	}
 	return owned, nil
@@ -394,10 +410,18 @@ func OwnedStyleCarriers(paths *config.Paths, prefix string) ([]StyleCarrier, err
 // returns the paths removed; a file changed since it was listed is kept.
 func RemoveStyleCarriers(carriers []StyleCarrier) (removed, kept []string) {
 	for _, c := range carriers {
-		data, err := os.ReadFile(c.Path)
+		info, err := os.Lstat(c.Path)
 		switch {
 		case os.IsNotExist(err):
 			continue // already gone, e.g. a directory omp and pi share
+		case err != nil || !info.Mode().IsRegular():
+			kept = append(kept, c.Path)
+			continue
+		}
+		data, err := os.ReadFile(c.Path)
+		switch {
+		case os.IsNotExist(err):
+			continue
 		case err != nil || hashOf(data) != c.hash:
 			kept = append(kept, c.Path)
 		case os.Remove(c.Path) == nil:
@@ -408,6 +432,65 @@ func RemoveStyleCarriers(carriers []StyleCarrier) (removed, kept []string) {
 	}
 	sort.Strings(removed)
 	return removed, kept
+}
+
+// retireStyleCarrierGroup removes or forgets every ledger entry belonging to
+// group whose path is not keepPath. checkSafe, when non-nil, returns a
+// non-empty note if the path must not be touched (e.g. symlinked parent dir);
+// unsafe entries are left on disk and reported without modifying them.
+// Unmodified regular files are deleted; hand-edited or non-regular entries are
+// forgotten from the ledger and reported in edited so they never permanently
+// block other harnesses.
+func retireStyleCarrierGroup(paths *config.Paths, group, keepPath string, checkSafe func(path string) string) (removed, edited, notes []string, err error) {
+	_, err = updateCarrierLedger(paths, func(ledger *carrierLedger) error {
+		for _, target := range sortedKeys(ledger.Carriers) {
+			rec := ledger.Carriers[target]
+			if rec.Group != group {
+				continue
+			}
+			if keepPath != "" && SamePath(target, keepPath) {
+				continue
+			}
+			if checkSafe != nil {
+				if note := checkSafe(target); note != "" {
+					notes = append(notes, note)
+					delete(ledger.Carriers, target)
+					continue
+				}
+			}
+			info, statErr := os.Lstat(target)
+			switch {
+			case os.IsNotExist(statErr):
+				delete(ledger.Carriers, target)
+			case statErr != nil:
+				return statErr
+			case !info.Mode().IsRegular():
+				edited = append(edited, target)
+				delete(ledger.Carriers, target)
+			default:
+				data, readErr := os.ReadFile(target)
+				if os.IsNotExist(readErr) {
+					delete(ledger.Carriers, target)
+					continue
+				}
+				if readErr != nil {
+					return readErr
+				}
+				if hashOf(data) != rec.Hash {
+					edited = append(edited, target)
+					delete(ledger.Carriers, target)
+					continue
+				}
+				if rmErr := os.Remove(target); rmErr != nil && !os.IsNotExist(rmErr) {
+					return rmErr
+				}
+				removed = append(removed, target)
+				delete(ledger.Carriers, target)
+			}
+		}
+		return nil
+	})
+	return removed, edited, notes, err
 }
 
 // forgetStyleCarriers drops ledger entries for paths that no longer exist.

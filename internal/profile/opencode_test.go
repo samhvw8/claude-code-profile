@@ -3,6 +3,7 @@ package profile
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -108,5 +109,74 @@ func TestOpencodeSync_Ownership(t *testing.T) {
 	}
 	if len(r.Removed) != 1 || len(r.Edited) != 1 {
 		t.Errorf("second sync = %+v", r)
+	}
+}
+
+func TestSyncCopies_LeafSymlinkSafety(t *testing.T) {
+	dir := t.TempDir()
+	outside := t.TempDir()
+	content := []byte("matching content\n")
+	outsideFile := filepath.Join(outside, "user.md")
+	mustWrite(t, outsideFile, string(content))
+
+	// Write loop: user symlink whose target content matches desired (and a broken
+	// symlink) must both be reported Occupied, never adopted or overwritten.
+	matchLink := filepath.Join(dir, "match.md")
+	if err := os.Symlink(outsideFile, matchLink); err != nil {
+		t.Fatal(err)
+	}
+	brokenLink := filepath.Join(dir, "broken.md")
+	if err := os.Symlink(filepath.Join(outside, "missing.md"), brokenLink); err != nil {
+		t.Fatal(err)
+	}
+
+	state := &copyState{Files: map[string]string{}}
+	r, err := syncCopies(dir, state, map[string][]byte{
+		"match.md":  content,
+		"broken.md": []byte("new\n"),
+	}, nil)
+	if err != nil {
+		t.Fatalf("write syncCopies: %v", err)
+	}
+	if !slices.Contains(r.Occupied, "match.md") || !slices.Contains(r.Occupied, "broken.md") || len(r.Written) != 0 {
+		t.Fatalf("unexpected report: %+v", r)
+	}
+	if _, adopted := state.Files["match.md"]; adopted {
+		t.Fatal("user symlink was adopted into state.Files")
+	}
+	for _, p := range []string{matchLink, brokenLink} {
+		if info, err := os.Lstat(p); err != nil || info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("%s is no longer a symlink: info=%v err=%v", p, info, err)
+		}
+	}
+
+	// Remove loop: a tracked path replaced by a symlink must never be deleted;
+	// it is reported as Edited and dropped from state.Files.
+	if r, err := syncCopies(dir, state, map[string][]byte{"tracked.md": content}, nil); err != nil || !slices.Contains(r.Written, "tracked.md") {
+		t.Fatalf("seed tracked.md: r=%+v err=%v", r, err)
+	}
+	trackedPath := filepath.Join(dir, "tracked.md")
+	if err := os.Remove(trackedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideFile, trackedPath); err != nil {
+		t.Fatal(err)
+	}
+
+	r, err = syncCopies(dir, state, nil, nil)
+	if err != nil {
+		t.Fatalf("remove syncCopies: %v", err)
+	}
+	if !slices.Contains(r.Edited, "tracked.md") || len(r.Removed) != 0 {
+		t.Fatalf("expected symlink reported Edited and not Removed: %+v", r)
+	}
+	if _, ok := state.Files["tracked.md"]; ok {
+		t.Fatal("symlink entry was not deleted from state.Files")
+	}
+	if info, err := os.Lstat(trackedPath); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("tracked symlink was deleted or replaced: info=%v err=%v", info, err)
+	}
+	if got, _ := os.ReadFile(outsideFile); string(got) != string(content) {
+		t.Fatalf("outside target modified: %q", got)
 	}
 }
