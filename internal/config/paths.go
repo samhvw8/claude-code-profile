@@ -157,6 +157,16 @@ func (p *Paths) AccountDir(name string) string {
 	return filepath.Join(p.AccountsDir(), name)
 }
 
+// HarnessesDir returns the directory holding custom harness plugins (~/.ccp/harnesses).
+func (p *Paths) HarnessesDir() string {
+	return filepath.Join(p.CcpDir, "harnesses")
+}
+
+// HarnessStateDir returns the directory holding per-harness sync state (~/.ccp/state/harnesses).
+func (p *Paths) HarnessStateDir() string {
+	return filepath.Join(p.CcpDir, "state", "harnesses")
+}
+
 // HubItemDir returns the directory for a specific hub item type
 func (p *Paths) HubItemDir(itemType HubItemType) string {
 	return filepath.Join(p.HubDir, string(itemType))

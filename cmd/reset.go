@@ -84,6 +84,10 @@ func runReset(cmd *cobra.Command, args []string) error {
 	if len(agyLinks) > 0 {
 		fmt.Printf("  Will remove: %d ccp link(s) in %s\n", len(agyLinks), profile.AgyConfigDir())
 	}
+	customHarnessLinks := profile.HarnessManagedLinks(paths)
+	for _, root := range sortedHarnessRoots(customHarnessLinks) {
+		fmt.Printf("  Will remove: %d ccp link(s) in %s\n", len(customHarnessLinks[root]), root)
+	}
 	// Output-style carriers in omp, pi, opencode and agy are listed now, while the
 	// ledger that proves ccp wrote them still exists; left behind, nothing would
 	// keep them current.
@@ -142,6 +146,23 @@ func runReset(cmd *cobra.Command, args []string) error {
 	}
 	if agyRemoved > 0 {
 		fmt.Printf("Removed %d ccp link(s) from %s\n", agyRemoved, profile.AgyConfigDir())
+	}
+
+	for _, root := range sortedHarnessRoots(customHarnessLinks) {
+		n := 0
+		for _, link := range customHarnessLinks[root] {
+			if !profile.HarnessLinkUnchanged(link) {
+				continue
+			}
+			if err := os.Remove(link.Path); err != nil && !os.IsNotExist(err) {
+				fmt.Printf("Warning: could not remove %s: %v\n", link.Path, err)
+				continue
+			}
+			n++
+		}
+		if n > 0 {
+			fmt.Printf("Removed %d ccp link(s) from %s\n", n, root)
+		}
 	}
 
 	removed, kept := profile.RemoveStyleCarriers(styleCarriers)

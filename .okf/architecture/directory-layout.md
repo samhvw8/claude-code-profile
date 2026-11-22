@@ -51,7 +51,9 @@ sources:
 │   ├── .ccp-usage.json         # Last plan-usage read (and last failed try), for --account auto
 │   ├── .ccp-last-used          # Touched when ccp starts the account (least-recently-used fallback)
 │   └── <entry> → profiles/<profile>/<entry>   # Absolute symlinks to every other profile entry
+├── harnesses/                  # Custom harness plugins (<id>.toml manifests or <id> executables)
 ├── state/
+│   ├── harnesses/<id>.json     # Copy/link ownership ledger and opt-in marker per custom harness
 │   ├── settings/<profile>.json  # What ccp last wrote to each settings.json; machine-local
 │   └── usage/<key>.json         # Cached usage of unmanaged logins (0600, 5m window); machine-local
 └── ccp.toml                    # Config + installed sources

@@ -38,6 +38,7 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 | `run` | `--or-profile` | With `--account auto`: keep `CLAUDE_CONFIG_DIR` when it already names an account, and run on the profile when no account of the pool is logged in, instead of failing. The `use --accounts` shim passes it |
 | `run`, `session`, `env` | `--relink` | With `--account`: link an account that is linked to another profile. Close its sessions first |
 | `auto` | `--path` | Print the profile path instead of its name |
+| `harness list` | `-j, --json` | Output discovered custom harness plugins as JSON |
 
 # Profiles
 

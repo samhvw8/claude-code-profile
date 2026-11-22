@@ -20,7 +20,7 @@ sources:
 # Visibility
 
 Power-user commands are hidden from `--help` but still work ([decision](/decisions/command-surface.md)).
-Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `hub outdated`, `hub prune`, `hub protect`,
+Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `harness`, `hub outdated`, `hub prune`, `hub protect`,
 `hub unprotect`, `hub rename`, `agy`, `omp`, `opencode`, `pi`, `profile check`, `profile clone`, `profile diff`, `run`,
 `session`, `usage`. Flags: [command flags](/cli/command-flags.md).
 
@@ -150,5 +150,16 @@ Behavior: [agy integration](/features/agy.md).
 | `ccp pi sync [profile]` | Write a profile's output style into pi's `APPEND_SYSTEM.md` (default: active profile); opts in to following | `ccp pi sync` |
 
 Behavior: [output styles](/features/output-styles.md).
+
+# harness (hidden)
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `ccp harness list [--json]` | List custom harness plugins in `~/.ccp/harnesses/` and on `PATH` (`ccp-harness-<id>`) | `ccp harness list` |
+| `ccp harness check [id] [profile]` | Validate plugin(s) and preview their sync plan without writing | `ccp harness check codex` |
+| `ccp harness sync <id> [profile]` | Mirror a profile into a custom harness (default: active profile); opts in to following | `ccp harness sync codex` |
+| `ccp harness remove <id>` | Remove ccp-owned copies, links, style carrier and opt out of following | `ccp harness remove codex` |
+
+Design: [custom harness plugins](/decisions/harness-plugins-toml-and-exec.md).
 
 [^hidden-cmds]: Hidden command declarations

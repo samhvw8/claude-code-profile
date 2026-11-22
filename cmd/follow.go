@@ -39,6 +39,7 @@ func followHarnesses(paths *config.Paths, profileName string) {
 
 	followOpencode(paths, profileName)
 	followAgy(paths, profileName)
+	followCustomHarnesses(paths, profileName)
 
 	active := harnessProfile(paths, profileName)
 	if active == nil {

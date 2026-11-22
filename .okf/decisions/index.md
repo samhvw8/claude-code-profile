@@ -18,6 +18,7 @@ Settled choices with their rationale. Do not re-open one without a user request;
 
 # Other harnesses
 
+* [Custom harness plugins use TOML manifests or JSON exec plugins](harness-plugins-toml-and-exec.md) - 2026-11-22: Hybrid non-JS harness extensibility via `~/.ccp/harnesses/<id>.toml` or `ccp-harness-<id>` executables producing a validated `HarnessPlan` applied by ccp's shared copy/link/style ledgers.
 * [agy accounts use file token mode](agy-accounts-file-token-mode.md) - 2026-11-20: Account bindings gain harness = "agy"; each agy account runs with --app_data_dir and SSH_CLIENT, merged settings.json, and /usage quota reads.
 * [agy: converted copies, skill links, GEMINI.md](agy-copies-links-and-gemini-md.md) - Why ccp agy sync converts agents and rules, links skills and CLAUDE.md, writes the output style to GEMINI.md, and mirrors no hooks or commands.
 

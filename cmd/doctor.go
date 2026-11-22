@@ -278,6 +278,29 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Check 7b: custom harness plugins (only shown when any exist)
+	if plugins, err := profile.DiscoverHarnesses(paths); err != nil {
+		fmt.Println("Checking custom harnesses... FAIL")
+		fmt.Printf("  → %v\n", err)
+		issues++
+	} else if len(plugins) > 0 {
+		var bad []string
+		for _, pl := range plugins {
+			if pl.Err != nil {
+				bad = append(bad, fmt.Sprintf("%s: %v", pl.ID, pl.Err))
+			}
+		}
+		if len(bad) > 0 {
+			fmt.Printf("Checking custom harnesses... FAIL (%d invalid)\n", len(bad))
+			for _, b := range bad {
+				fmt.Printf("  → %s\n", b)
+			}
+			issues += len(bad)
+		} else {
+			fmt.Printf("Checking custom harnesses... OK (%d)\n", len(plugins))
+		}
+	}
+
 	// Summary
 	fmt.Println()
 	if issues == 0 && fixed == 0 {

@@ -1,5 +1,8 @@
 # Update Log
 
+## 2026-11-22
+* **Decision**: [Custom harness plugins use TOML manifests or JSON exec plugins](/decisions/harness-plugins-toml-and-exec.md) — added hidden `ccp harness` (`list`, `check`, `sync`, `remove`) supporting declarative `~/.ccp/harnesses/<id>.toml` manifests and stdin/stdout JSON executables (`~/.ccp/harnesses/<id>` or `ccp-harness-<id>` on `PATH`). Both produce a validated `HarnessPlan` executed through ccp's shared copy ledger (`~/.ccp/state/harnesses/<id>.json`), symlink guards, and output-style carrier ledger; integrated into `followHarnesses`, `ccp reset`, and `ccp doctor`. Updated [decisions index](/decisions/index.md), [command reference](/cli/command-reference.md), [command flags](/cli/command-flags.md), and [directory layout](/architecture/directory-layout.md).
+
 ## 2026-11-20
 * **Update**: Released v0.56.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: `ccp account` text output now shows unmanaged logins (`Other logins (not accounts)`: Claude global, Claude profile logins, and macOS plain `agy`) read-only with per-kind footer hints and `~/.ccp/state/usage/<key>.json` (`0600`) caching; `ccp status`, `--account auto`, and `ccp account --json` stay managed-only. `ccp doctor` (macOS) warns on orphan `Claude Code-credentials-<8 hex>` Keychain items (attribute-only, never `--fix`). Updated [account concept](/decisions/account-concept.md), [command reference](/cli/command-reference.md), [directory layout](/architecture/directory-layout.md), and `skills/ccp/SKILL.md`.
