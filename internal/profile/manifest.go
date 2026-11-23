@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/pelletier/go-toml/v2"
@@ -104,6 +105,14 @@ func (m *Manifest) validateItemNames() error {
 			if err := hub.ValidateItemName(name); err != nil {
 				return fmt.Errorf("%s: %w", itemType, err)
 			}
+		}
+	}
+	for _, name := range m.Hub.Bundles {
+		if err := hub.ValidateItemName(name); err != nil {
+			return fmt.Errorf("%s: %w", config.HubBundles, err)
+		}
+		if strings.ContainsAny(name, `/\`) {
+			return fmt.Errorf("%s: %w: %q must be a single bundle directory name", config.HubBundles, hub.ErrInvalidItemName, name)
 		}
 	}
 	return nil

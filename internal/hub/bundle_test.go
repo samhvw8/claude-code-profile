@@ -88,6 +88,26 @@ func TestLoadBundleRejectsEscapingMemberName(t *testing.T) {
 	}
 }
 
+func TestLoadBundle_RejectsTraversingBundleName(t *testing.T) {
+	tmpDir := t.TempDir()
+	bundlesDir := filepath.Join(tmpDir, "hub", "bundles")
+	outsideDir := filepath.Join(tmpDir, "outside")
+	if err := os.MkdirAll(bundlesDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outsideDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideDir, BundleManifestFile), []byte("name: outside\nmembers:\n  hooks:\n    - evil\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadBundle(bundlesDir, "../../outside")
+	if !errors.Is(err, ErrInvalidItemName) {
+		t.Fatalf("LoadBundle(../../outside) error = %v, want ErrInvalidItemName", err)
+	}
+}
+
 func TestValidateItemName(t *testing.T) {
 	// Nested names are legitimate: rules are flattened into `group/tone.md`.
 	for _, name := range []string{"skill", "skill.md", "group-name_1", "a.b.c", "group/tone.md"} {

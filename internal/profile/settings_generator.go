@@ -3,6 +3,7 @@ package profile
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,17 +20,27 @@ import (
 func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Manifest) (map[config.HookType][]config.SettingsHookEntry, error) {
 	hooks := make(map[config.HookType][]config.SettingsHookEntry)
 	profileHooksDir := filepath.Join(profileDir, "hooks")
+	seen := make(map[string]bool)
 
 	for _, hookName := range manifest.Hub.Hooks {
+		if seen[hookName] {
+			continue
+		}
+		seen[hookName] = true
 		hookDir := filepath.Join(profileHooksDir, hookName)
 
 		// Try hooks.json first (official format): prefer the profile's linked
-		// dir, falling back to the hub source so settings generation still
-		// resolves ${CLAUDE_PLUGIN_ROOT} and keeps every event when symlinks
-		// have not been created yet (e.g. `ccp use -g` before `ccp bootstrap`).
+		// dir, falling back to the hub source only when missing so settings
+		// generation still resolves ${CLAUDE_PLUGIN_ROOT} and keeps every event
+		// when symlinks have not been created yet (e.g. `ccp use -g` before
+		// `ccp bootstrap`). Malformed JSON surfaces as an error instead of
+		// silently dropping hooks.
 		hooksJSON, err := hub.GetHooksJSON(hookDir)
-		if err != nil || hooksJSON == nil {
+		if errors.Is(err, os.ErrNotExist) {
 			hooksJSON, err = hub.GetHooksJSON(paths.HubItemPath(config.HubHooks, hookName))
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("failed to read hooks.json for hook %s: %w", hookName, err)
 		}
 		if err == nil && hooksJSON != nil {
 			processHooksJSON(hooksJSON, hookDir, hooks)
@@ -55,19 +66,26 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 
 	// Bundle hooks: bundle members are tracked only by bundle name (never in
 	// Hub.Hooks), so resolve each linked bundle and process its hook members.
-	// The members are symlinked into profile/hooks/<member>, so the same
-	// hooks.json path resolution applies (falling back to the bundle dir if
-	// the profile symlink is missing).
+	// Direct hub hooks take precedence over same-named bundle hooks (matching
+	// SyncLinks). Fall back to the bundle dir only when the profile symlink is
+	// missing; surface malformed JSON as an error.
 	for _, bundleName := range manifest.Hub.Bundles {
 		bundle, err := hub.LoadBundle(paths.BundlesDir(), bundleName)
 		if err != nil {
 			continue
 		}
 		for _, hookName := range bundle.Members.Hooks {
+			if seen[hookName] {
+				continue
+			}
+			seen[hookName] = true
 			hookDir := filepath.Join(profileHooksDir, hookName)
 			hooksJSON, err := hub.GetHooksJSON(hookDir)
-			if err != nil || hooksJSON == nil {
+			if errors.Is(err, os.ErrNotExist) {
 				hooksJSON, err = hub.GetHooksJSON(filepath.Join(paths.BundleDir(bundleName), "hooks", hookName))
+			}
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
+				return nil, fmt.Errorf("failed to read hooks.json for bundle hook %s/%s: %w", bundleName, hookName, err)
 			}
 			if err == nil && hooksJSON != nil {
 				processHooksJSON(hooksJSON, hookDir, hooks)

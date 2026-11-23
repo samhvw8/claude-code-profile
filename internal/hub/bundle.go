@@ -55,6 +55,12 @@ func ValidateItemName(name string) error {
 
 // LoadBundle reads bundle.yaml from hub/bundles/<name>/.
 func LoadBundle(bundlesDir, name string) (*Bundle, error) {
+	if err := ValidateItemName(name); err != nil {
+		return nil, err
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return nil, fmt.Errorf("%w: %q must be a single bundle directory name", ErrInvalidItemName, name)
+	}
 	path := filepath.Join(bundlesDir, name, BundleManifestFile)
 	data, err := os.ReadFile(path)
 	if err != nil {

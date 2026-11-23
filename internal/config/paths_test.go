@@ -200,6 +200,11 @@ func TestToPortablePath(t *testing.T) {
 			path: home,
 			want: "$HOME",
 		},
+		{
+			name: "sibling dir sharing home prefix",
+			path: home + "2/.ccp/profiles/default/hooks/myhook",
+			want: home + "2/.ccp/profiles/default/hooks/myhook",
+		},
 	}
 
 	for _, tt := range tests {

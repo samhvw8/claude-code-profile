@@ -281,7 +281,14 @@ func ToPortablePath(absPath string) string {
 	if err != nil || home == "" {
 		return absPath
 	}
-	if strings.HasPrefix(absPath, home) {
+	home = filepath.Clean(home)
+	if home == string(filepath.Separator) {
+		return absPath
+	}
+	if absPath == home {
+		return "$HOME"
+	}
+	if strings.HasPrefix(absPath, home+string(filepath.Separator)) {
 		return "$HOME" + absPath[len(home):]
 	}
 	return absPath

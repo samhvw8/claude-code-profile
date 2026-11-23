@@ -2,8 +2,10 @@ package profile
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/samhvw8/claude-code-profile/internal/config"
@@ -602,9 +604,14 @@ func TestGenerateSettingsHooks_HubFallbackWithoutProfileSymlink(t *testing.T) {
 	tmpDir := t.TempDir()
 	hubDir := filepath.Join(tmpDir, "hub")
 	profileDir := filepath.Join(tmpDir, "profiles", "default")
-	os.MkdirAll(profileDir, 0755)
-	// Intentionally do NOT create profileDir/hooks/<name> symlinks, simulating
-	// `ccp use -g` or `SyncHooks` running before `ccp profile fix` / `ccp bootstrap`.
+	if err := os.MkdirAll(filepath.Join(profileDir, "hooks"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Create a dangling symlink for impeccable and leave bundle-hook absent,
+	// simulating `ccp use -g` or `SyncHooks` before `ccp profile fix` / `ccp bootstrap`.
+	if err := os.Symlink(filepath.Join(tmpDir, "nonexistent-target"), filepath.Join(profileDir, "hooks", "impeccable")); err != nil {
+		t.Fatal(err)
+	}
 
 	// 1. Multi-event hub hook with ${CLAUDE_PLUGIN_ROOT}
 	hubHookDir := filepath.Join(hubDir, "hooks", "impeccable")
@@ -689,20 +696,33 @@ func TestGenerateSettingsHooks_HubFallbackWithoutProfileSymlink(t *testing.T) {
 	}
 
 	wantHookRoot := config.ToPortablePath(filepath.Join(profileDir, "hooks", "impeccable"))
-	wantByEvent := map[config.HookType]string{
-		config.HookSessionStart: "bash " + wantHookRoot + "/scripts/start.sh",
-		config.HookPostToolUse:  "bash " + wantHookRoot + "/scripts/post.sh",
-		config.HookStop:         "bash " + wantHookRoot + "/scripts/stop.sh",
+	type wantSpec struct {
+		cmd     string
+		matcher string
+		timeout int
 	}
-	for event, wantCmd := range wantByEvent {
+	wantByEvent := map[config.HookType]wantSpec{
+		config.HookSessionStart: {cmd: "bash " + wantHookRoot + "/scripts/start.sh", matcher: "", timeout: 15},
+		config.HookPostToolUse:  {cmd: "bash " + wantHookRoot + "/scripts/post.sh", matcher: "Edit|Write", timeout: 20},
+		config.HookStop:         {cmd: "bash " + wantHookRoot + "/scripts/stop.sh", matcher: "", timeout: 25},
+	}
+	for event, want := range wantByEvent {
 		entries := hooks[event]
 		if len(entries) != 1 {
 			t.Errorf("%s: got %d entries, want 1", event, len(entries))
 			continue
 		}
-		gotCmd := entries[0].Hooks[0].Command
-		if gotCmd != wantCmd {
-			t.Errorf("%s command = %q, want %q", event, gotCmd, wantCmd)
+		if entries[0].Matcher != want.matcher {
+			t.Errorf("%s matcher = %q, want %q", event, entries[0].Matcher, want.matcher)
+		}
+		if got := entries[0].Hooks[0].Command; got != want.cmd {
+			t.Errorf("%s command = %q, want %q", event, got, want.cmd)
+		}
+		if got := entries[0].Hooks[0].Timeout; got != want.timeout {
+			t.Errorf("%s timeout = %d, want %d", event, got, want.timeout)
+		}
+		if got := entries[0].Hooks[0].Type; got != "command" {
+			t.Errorf("%s type = %q, want %q", event, got, "command")
 		}
 	}
 
@@ -712,7 +732,110 @@ func TestGenerateSettingsHooks_HubFallbackWithoutProfileSymlink(t *testing.T) {
 	if len(preEntries) != 1 {
 		t.Fatalf("PreToolUse (bundle hook): got %d entries, want 1", len(preEntries))
 	}
+	if preEntries[0].Matcher != "Bash" {
+		t.Errorf("PreToolUse matcher = %q, want %q", preEntries[0].Matcher, "Bash")
+	}
 	if got := preEntries[0].Hooks[0].Command; got != wantBundleCmd {
 		t.Errorf("PreToolUse command = %q, want %q", got, wantBundleCmd)
+	}
+	if got := preEntries[0].Hooks[0].Timeout; got != 10 {
+		t.Errorf("PreToolUse timeout = %d, want 10", got)
+	}
+
+	// End-to-end SyncHooks without profile symlinks writes clean settings.json
+	if err := SyncHooks(paths, profileDir, manifest); err != nil {
+		t.Fatalf("SyncHooks() error = %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(profileDir, "settings.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(settings.json) error = %v", err)
+	}
+	if strings.Contains(string(raw), "${CLAUDE_PLUGIN_ROOT}") {
+		t.Errorf("settings.json still contains unresolved ${CLAUDE_PLUGIN_ROOT}: %s", raw)
+	}
+}
+
+func TestGenerateSettingsHooks_DeduplicatesHubAndBundleHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profiles", "default")
+	if err := os.MkdirAll(profileDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Direct hub hook "shared-hook"
+	hubHookDir := filepath.Join(hubDir, "hooks", "shared-hook")
+	if err := os.MkdirAll(hubHookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	directJSON := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash ${CLAUDE_PLUGIN_ROOT}/direct.sh","timeout":15}]}]}}`
+	if err := os.WriteFile(filepath.Join(hubHookDir, "hooks.json"), []byte(directJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Bundle with same-named hook "shared-hook"
+	bundleDir := filepath.Join(hubDir, "bundles", "b1")
+	bundleHookDir := filepath.Join(bundleDir, "hooks", "shared-hook")
+	if err := os.MkdirAll(bundleHookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "bundle.yaml"), []byte("name: b1\nmembers:\n  hooks:\n    - shared-hook\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	bundleJSON := `{"hooks":{"SessionStart":[{"hooks":[{"type":"command","command":"bash ${CLAUDE_PLUGIN_ROOT}/bundle.sh","timeout":15}]}]}}`
+	if err := os.WriteFile(filepath.Join(bundleHookDir, "hooks.json"), []byte(bundleJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		Hub: HubLinks{
+			Hooks:   []string{"shared-hook"},
+			Bundles: []string{"b1"},
+		},
+	}
+
+	hooks, err := GenerateSettingsHooks(paths, profileDir, manifest)
+	if err != nil {
+		t.Fatalf("GenerateSettingsHooks() error = %v", err)
+	}
+	entries := hooks[config.HookSessionStart]
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 deduplicated entry (direct hub hook wins), got %d: %+v", len(entries), entries)
+	}
+	if !strings.HasSuffix(entries[0].Hooks[0].Command, "/direct.sh") {
+		t.Errorf("expected direct hub hook to win, got %q", entries[0].Hooks[0].Command)
+	}
+}
+
+func TestGenerateSettingsHooks_MalformedHooksJSONReturnsError(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profiles", "default")
+	hookDir := filepath.Join(hubDir, "hooks", "broken-json")
+	if err := os.MkdirAll(hookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hookDir, "hooks.json"), []byte("{not valid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{Hub: HubLinks{Hooks: []string{"broken-json"}}}
+
+	if _, err := GenerateSettingsHooks(paths, profileDir, manifest); err == nil {
+		t.Fatal("GenerateSettingsHooks() error = nil for malformed hooks.json, want error")
+	}
+}
+
+func TestManifest_RejectsTraversingBundleName(t *testing.T) {
+	dir := t.TempDir()
+	content := "version = 2\nname = \"evil\"\n[hub]\nbundles = [\"../../outside\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "profile.toml"), []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadManifest(filepath.Join(dir, "profile.toml"))
+	if !errors.Is(err, hub.ErrInvalidItemName) {
+		t.Fatalf("LoadManifest() error = %v, want hub.ErrInvalidItemName", err)
 	}
 }
