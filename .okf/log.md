@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-23
+* **Update**: Released v0.59.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: `ccp --help` ends with an "Other harnesses" footer naming the hidden harness commands (`agy`, `harness`, `omp`, `opencode`, `pi`), built from a `ccp-harness` annotation, so they are findable without unhiding them. [Command surface](/decisions/command-surface.md) updated. Test: `TestRootHelpNamesHiddenHarnesses`.
 * **Decision**: [Shared MCP servers](/decisions/profile-mcp-file.md) — `profiles/<name>/mcp.json` reaches every account: `ccp run` passes `--mcp-config=<file>` to Claude (= form; the spaced form swallowed subcommands); a clash resolves to the file. ccp only reads `.claude.json`: `run` and `doctor` report servers on one account, `doctor --fix` creates a missing `mcp.json` (0600) from the profile's servers. Rejected: merging into `.claude.json`, a plugin (renames tools). Updated [directory layout](/architecture/directory-layout.md), [command reference](/cli/command-reference.md), [accounts decision](/decisions/accounts-as-activation-option.md), [decisions index](/decisions/index.md), `skills/ccp/SKILL.md`.
 * **Update**: Released v0.58.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
