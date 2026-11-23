@@ -597,3 +597,122 @@ func TestWriteJSONFile_EmptyMap(t *testing.T) {
 		t.Errorf("expected empty map, got %v", parsed)
 	}
 }
+
+func TestGenerateSettingsHooks_HubFallbackWithoutProfileSymlink(t *testing.T) {
+	tmpDir := t.TempDir()
+	hubDir := filepath.Join(tmpDir, "hub")
+	profileDir := filepath.Join(tmpDir, "profiles", "default")
+	os.MkdirAll(profileDir, 0755)
+	// Intentionally do NOT create profileDir/hooks/<name> symlinks, simulating
+	// `ccp use -g` or `SyncHooks` running before `ccp profile fix` / `ccp bootstrap`.
+
+	// 1. Multi-event hub hook with ${CLAUDE_PLUGIN_ROOT}
+	hubHookDir := filepath.Join(hubDir, "hooks", "impeccable")
+	if err := os.MkdirAll(hubHookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	hooksJSON := config.HooksJSON{
+		Hooks: map[config.HookType][]config.HookEntry{
+			config.HookSessionStart: {
+				{
+					Hooks: []config.HookCommand{
+						{Type: "command", Command: "bash ${CLAUDE_PLUGIN_ROOT}/scripts/start.sh", Timeout: 15},
+					},
+				},
+			},
+			config.HookPostToolUse: {
+				{
+					Matcher: "Edit|Write",
+					Hooks: []config.HookCommand{
+						{Type: "command", Command: "bash ${CLAUDE_PLUGIN_ROOT}/scripts/post.sh", Timeout: 20},
+					},
+				},
+			},
+			config.HookStop: {
+				{
+					Hooks: []config.HookCommand{
+						{Type: "command", Command: "bash ${CLAUDE_PLUGIN_ROOT}/scripts/stop.sh", Timeout: 25},
+					},
+				},
+			},
+		},
+	}
+	data, err := json.Marshal(hooksJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hubHookDir, "hooks.json"), data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2. Bundle hook whose symlink is also missing from profileDir/hooks/
+	bundleDir := filepath.Join(hubDir, "bundles", "demo-bundle")
+	bundleHookDir := filepath.Join(bundleDir, "hooks", "bundle-hook")
+	if err := os.MkdirAll(bundleHookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	bundleYAML := "name: demo-bundle\nmembers:\n  hooks:\n    - bundle-hook\n"
+	if err := os.WriteFile(filepath.Join(bundleDir, "bundle.yaml"), []byte(bundleYAML), 0644); err != nil {
+		t.Fatal(err)
+	}
+	bundleHooksJSON := config.HooksJSON{
+		Hooks: map[config.HookType][]config.HookEntry{
+			config.HookPreToolUse: {
+				{
+					Matcher: "Bash",
+					Hooks: []config.HookCommand{
+						{Type: "command", Command: "sh ${CLAUDE_PLUGIN_ROOT}/scripts/check.sh", Timeout: 10},
+					},
+				},
+			},
+		},
+	}
+	bundleData, err := json.Marshal(bundleHooksJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleHookDir, "hooks.json"), bundleData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	paths := &config.Paths{CcpDir: tmpDir, HubDir: hubDir}
+	manifest := &Manifest{
+		Hub: HubLinks{
+			Hooks:   []string{"impeccable"},
+			Bundles: []string{"demo-bundle"},
+		},
+	}
+
+	hooks, err := GenerateSettingsHooks(paths, profileDir, manifest)
+	if err != nil {
+		t.Fatalf("GenerateSettingsHooks() error = %v", err)
+	}
+
+	wantHookRoot := config.ToPortablePath(filepath.Join(profileDir, "hooks", "impeccable"))
+	wantByEvent := map[config.HookType]string{
+		config.HookSessionStart: "bash " + wantHookRoot + "/scripts/start.sh",
+		config.HookPostToolUse:  "bash " + wantHookRoot + "/scripts/post.sh",
+		config.HookStop:         "bash " + wantHookRoot + "/scripts/stop.sh",
+	}
+	for event, wantCmd := range wantByEvent {
+		entries := hooks[event]
+		if len(entries) != 1 {
+			t.Errorf("%s: got %d entries, want 1", event, len(entries))
+			continue
+		}
+		gotCmd := entries[0].Hooks[0].Command
+		if gotCmd != wantCmd {
+			t.Errorf("%s command = %q, want %q", event, gotCmd, wantCmd)
+		}
+	}
+
+	wantBundleRoot := config.ToPortablePath(filepath.Join(profileDir, "hooks", "bundle-hook"))
+	wantBundleCmd := "sh " + wantBundleRoot + "/scripts/check.sh"
+	preEntries := hooks[config.HookPreToolUse]
+	if len(preEntries) != 1 {
+		t.Fatalf("PreToolUse (bundle hook): got %d entries, want 1", len(preEntries))
+	}
+	if got := preEntries[0].Hooks[0].Command; got != wantBundleCmd {
+		t.Errorf("PreToolUse command = %q, want %q", got, wantBundleCmd)
+	}
+}

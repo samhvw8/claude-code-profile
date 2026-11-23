@@ -23,8 +23,14 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 	for _, hookName := range manifest.Hub.Hooks {
 		hookDir := filepath.Join(profileHooksDir, hookName)
 
-		// Try hooks.json first (official format)
+		// Try hooks.json first (official format): prefer the profile's linked
+		// dir, falling back to the hub source so settings generation still
+		// resolves ${CLAUDE_PLUGIN_ROOT} and keeps every event when symlinks
+		// have not been created yet (e.g. `ccp use -g` before `ccp bootstrap`).
 		hooksJSON, err := hub.GetHooksJSON(hookDir)
+		if err != nil || hooksJSON == nil {
+			hooksJSON, err = hub.GetHooksJSON(paths.HubItemPath(config.HubHooks, hookName))
+		}
 		if err == nil && hooksJSON != nil {
 			processHooksJSON(hooksJSON, hookDir, hooks)
 			continue
@@ -50,7 +56,8 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 	// Bundle hooks: bundle members are tracked only by bundle name (never in
 	// Hub.Hooks), so resolve each linked bundle and process its hook members.
 	// The members are symlinked into profile/hooks/<member>, so the same
-	// hooks.json path resolution applies.
+	// hooks.json path resolution applies (falling back to the bundle dir if
+	// the profile symlink is missing).
 	for _, bundleName := range manifest.Hub.Bundles {
 		bundle, err := hub.LoadBundle(paths.BundlesDir(), bundleName)
 		if err != nil {
@@ -58,7 +65,11 @@ func GenerateSettingsHooks(paths *config.Paths, profileDir string, manifest *Man
 		}
 		for _, hookName := range bundle.Members.Hooks {
 			hookDir := filepath.Join(profileHooksDir, hookName)
-			if hooksJSON, err := hub.GetHooksJSON(hookDir); err == nil && hooksJSON != nil {
+			hooksJSON, err := hub.GetHooksJSON(hookDir)
+			if err != nil || hooksJSON == nil {
+				hooksJSON, err = hub.GetHooksJSON(filepath.Join(paths.BundleDir(bundleName), "hooks", hookName))
+			}
+			if err == nil && hooksJSON != nil {
 				processHooksJSON(hooksJSON, hookDir, hooks)
 			}
 		}
