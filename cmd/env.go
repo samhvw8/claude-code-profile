@@ -39,7 +39,10 @@ Examples:
   eval "$(ccp env --account auto)"   # this terminal: the freest account
 
 With a named account the profile may be left out. --account auto (shell
-format only) picks the account with the most plan limit left once, now.`,
+format only) picks the account with the most plan limit left once, now.
+--account auto:<pool> picks among the pool's accounts already linked to the
+profile; env never relinks across profiles (ccp run does).
+  eval "$(ccp env companyA --account auto:company)"`,
 	Args: cobra.RangeArgs(0, 1),
 	RunE: runEnv,
 }
@@ -75,8 +78,12 @@ func runEnv(cmd *cobra.Command, args []string) error {
 	if accountSet && envAccount == "" {
 		return profile.ValidateAccountName("")
 	}
-	if envAccount == profile.AutoAccount && envFormat != "shell" {
-		return fmt.Errorf("--account auto picks once, so it cannot go into %s; use 'ccp run --account auto' to pick at each start", envFormat)
+	isAuto, _, err := profile.ParseAutoAccount(envAccount)
+	if err != nil {
+		return err
+	}
+	if isAuto && envFormat != "shell" {
+		return fmt.Errorf("--account %s picks once, so it cannot go into %s; use 'ccp run --account %s' to pick at each start", envAccount, envFormat, envAccount)
 	}
 	if err := refuseAgyAccountForEnvOrSession(paths, envAccount); err != nil {
 		return err
@@ -89,10 +96,11 @@ func runEnv(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	profilePath, err := activationDir(paths, profileName, account, accountSet, envRelink)
+	profilePath, release, err := lockedActivationDir(paths, profileName, account, accountSet, envRelink)
 	if err != nil {
 		return err
 	}
+	release()
 	if account != "" && envFormat == "shell" {
 		markAccountUsed(profilePath)
 	}

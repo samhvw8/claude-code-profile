@@ -4,7 +4,7 @@ title: "agy accounts use file-based token storage with --app_data_dir and SSH_CL
 description: "2026-11-20: Account bindings gain harness = \"agy\" (default claude). Each agy account runs in ~/.gemini/antigravity-cli-ccp-<name>/ with SSH_CLIENT set, merged settings.json, and quota read via agy -p /usage."
 tags: [decision, agy, accounts, activation]
 decided: 2026-11-20
-generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T08:05:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T07:00:00Z }
 sources:
   - id: agy-auth-re
     resource: research/261119-agy-accounts/agy-auth-re.md
@@ -24,8 +24,9 @@ Account bindings in `.ccp-account.toml` gain `harness = "agy"`; absent means `"c
 - `ccp account add <name> [<profile>] --harness agy` creates both folders and writes the merged
   `settings.json`.
 - `ccp run --account <name>` defaults to `agy`, inserts `--app_data_dir=...` immediately after the
-  executable, sets `SSH_CLIENT=ccp 0 0`, keeps `CLAUDE_CONFIG_DIR` on the bound profile folder,
-  refreshes `settings.json`, and touches `.ccp-last-used`. `--account auto` derives the pool's
+  executable, sets `SSH_CLIENT=ccp 0 0`, keeps `CLAUDE_CONFIG_DIR` on the profile folder (the one
+  named, else the bound one),
+  refreshes `settings.json`, and touches `.ccp-last-used`. `--account auto` derives the candidates'
   harness from the command basename (`agy` vs everything else).
 - `ccp env` and `ccp session` refuse `agy` accounts because shell/mise/direnv exports cannot pass
   `--app_data_dir`. `ccp use --accounts` stays Claude-only.
@@ -36,6 +37,17 @@ Account bindings in `.ccp-account.toml` gain `harness = "agy"`; absent means `"c
   (without reading it) and runs `agy --app_data_dir=... -p /usage --output-format json` in `$HOME`
   under a 30s hard timeout, mapping `"Gemini Models"` to `five_hour`/`seven_day` (`(1 - remaining_fraction) * 100`)
   and other groups' weekly buckets to model-scoped entries.
+
+# Any profile (2026-11-23)
+
+An agy account shares nothing with the profile folder (no links, its own data dir), so it runs on
+**any** profile. Running it with a profile other than its bound one needs no `--relink` and does
+not rewrite the binding; the binding's profile is only the **default** used when no profile is
+named (a missing default falls back to the current profile, an error when there is none).
+`--relink` still rebinds explicitly. `ccp profile delete` no longer refuses for agy accounts
+bound to the profile and prints a note instead. A binding still needs a non-empty profile. Pooled
+picks (`--account auto:<pool> -- agy`) take agy members from every profile
+([account pools](/decisions/account-pools.md)).
 
 # Verified facts (agy 1.5.13)[^agy-auth-re]
 

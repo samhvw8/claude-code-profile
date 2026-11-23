@@ -1218,3 +1218,34 @@ func TestAccountMigrator_RefusesAgyAccount(t *testing.T) {
 		t.Errorf("result = %+v, want refused agy account", r)
 	}
 }
+
+// An npm install starts through its shebang: right after exec the argv is
+// [/usr/bin/env, node, .../claude]. env (with its options and assignments)
+// in front of a JS runtime or claude still counts as Claude Code.
+func TestIsClaudeProcess_EnvShebang(t *testing.T) {
+	for _, tt := range []struct {
+		argv []string
+		want bool
+	}{
+		{[]string{"/usr/bin/env", "node", "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js"}, true},
+		{[]string{"/usr/bin/env", "node", "/usr/local/bin/claude", "-c"}, true},
+		{[]string{"/usr/bin/env", "-S", "FOO=1", "node", "/opt/bin/claude"}, true},
+		{[]string{"/usr/bin/env", "claude"}, true},
+		// Options that take an argument, and -S as one shebang token.
+		{[]string{"/usr/bin/env", "-u", "FOO", "claude"}, true},
+		{[]string{"/usr/bin/env", "-C", "/srv", "node", "/usr/local/bin/claude"}, true},
+		{[]string{"/usr/bin/env", "-S node --no-warnings", "/opt/lib/node_modules/@anthropic-ai/claude-code/cli.js"}, true},
+		{[]string{"/usr/bin/env", "--split-string=node --x", "/usr/local/bin/claude"}, true},
+		{[]string{"/usr/bin/env", "node", "/srv/app.js"}, false},
+		// Every tail after env is checked, so this counts: a false match
+		// only fails closed (the folder counts as busy).
+		{[]string{"/usr/bin/env", "bash", "-c", "claude"}, true},
+		{[]string{"/usr/bin/env"}, false},
+		// A long run of env words is not exponential (the test would hang).
+		{append([]string{"/usr/bin/env"}, slices.Repeat([]string{"/usr/bin/env"}, 60)...), false},
+	} {
+		if got := isClaudeProcess("", tt.argv); got != tt.want {
+			t.Errorf("isClaudeProcess(%q) = %v, want %v", tt.argv, got, tt.want)
+		}
+	}
+}

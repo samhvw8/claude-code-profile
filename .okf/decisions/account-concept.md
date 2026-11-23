@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: "Account is the sixth concept; the budget is seven for now"
-description: "2026-11-18: the user-facing concept budget rises from five to seven, and Account becomes the sixth concept with a visible ccp account command (list, add). Extended 2026-11-20 with read-only display of unmanaged other logins."
+description: "2026-11-18: the user-facing concept budget rises from five to seven, and Account becomes the sixth concept with a visible ccp account command (list and add; pool added 2026-11-23). Extended 2026-11-20 with read-only display of unmanaged other logins."
 tags: [decision, concepts, accounts, command-surface]
 decided: 2026-11-18
-generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T10:50:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T08:00:00Z }
 ---
 
 # Decision
@@ -18,7 +18,8 @@ Account gets a visible command:
 | Command | What |
 |---|---|
 | `ccp account` / `ccp account list [--json]` | Every account with its profile, email, 5-hour and weekly use, model-scoped weeks, age of the read and last use. With none, it prints how to add one. |
-| `ccp account add <name> [<profile>]` | Creates the account folder for a profile (default: the current one). It starts logged out; `ccp run --account <name>` then `/login` logs it in once. An existing account is refused. |
+| `ccp account add <name> [<profile>] [--pool <p>]` | Creates the account folder for a profile (default: the current one). It starts logged out; `ccp run --account <name>` then `/login` logs it in once. An existing account is refused. |
+| `ccp account pool <name> <pool>\|--clear` (2026-11-23) | Sets or clears an existing account's pool ([account pools](/decisions/account-pools.md)). A subcommand, not a flag on `add`, because `add` refuses an account that already exists. |
 
 Everything else in [accounts are an option of Activation](/decisions/accounts-as-activation-option.md)
 stands: the account folder layout, `--account <name>|auto` on `run`, `session` and `env`, the
@@ -57,9 +58,9 @@ Linux), Claude profile-dir logins (`Claude Code-credentials-<sha256(profileDir)[
 `<profile>/.credentials.json`), and plain `agy` on macOS (only when an attribute-only Keychain
 lookup finds `gemini`/`antigravity`).
 
-- **Read-only, never in pools, `status`, or `--json`.** Adding unmanaged logins to `ccp status`
+- **Read-only, never picked by `--account auto`, never in `status` or `--json`.** Adding unmanaged logins to `ccp status`
   would add ~3s cold `agy` latency and extra `/api/oauth/usage` calls to a quick health check.
-  Putting shared/global logins into `--account auto` would burn personal quota from profile pools
+  Putting shared/global logins into `--account auto` would burn personal quota from a profile's accounts
   and race with plain sessions. Keeping `ccp account --json` as the managed-only array preserves
   callers that pass `.name` to `--account`.
 - **Cached in `~/.ccp/state/usage/<key>.json` (`0600`).** Reads reuse the 5-minute fresh window and

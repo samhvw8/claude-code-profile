@@ -123,8 +123,9 @@ ccp project add skills/coding agents/reviewer
 | `ccp use <profile> [-g]` | Switch profile (project or global) |
 | `ccp which` | Show current active profile |
 | `ccp status` | Show ccp status and health, and each account's plan usage |
-| `ccp account [list]` | List accounts with their profile and plan usage |
-| `ccp account add <name> [<profile>]` | Create an account for a profile |
+| `ccp account [list]` | List accounts with their profile, pool and plan usage |
+| `ccp account add <name> [<profile>] [--pool <p>]` | Create an account for a profile, optionally in a pool |
+| `ccp account pool <name> <pool>\|--clear` | Put an account in a pool (for `--account auto:<pool>`), or take it out |
 | `ccp doctor [--fix]` | Diagnose and fix common issues |
 | `ccp bootstrap` | New machine: sync sources from `ccp.toml`, then fix all profiles |
 | `ccp config shell` | Print the `ccp-use` shell function |
@@ -294,6 +295,16 @@ claude                    # runs on work's account with the most limit left
 ```
 
 With no account logged in yet, `claude` there runs on the profile itself.
+
+Seats used from several profiles can share a **pool**:
+
+```bash
+ccp account pool work1 company           # work1 joins pool company (any profile)
+ccp run client --account auto:company    # the pool's freest account, relinked to client if no session runs on it
+ccp use client --accounts --pool company # the folder's claude picks from the pool
+```
+
+`ccp run` relinks a Claude account only while no Claude Code process runs on it; `ccp env` and `ccp session` never relink and only take pool members already linked to the profile.
 
 `--account auto` picks among the accounts linked to the profile, once, when the command starts. It reads each account's plan usage from Claude's usage endpoint (cached 5 minutes) and prefers an account under 80% of its 5-hour limit and 95% of its weekly limit. When usage is unknown or equal, it picks the account used least recently. ccp never refreshes a token and never switches accounts in a running session: to move off a busy account, start Claude Code again.
 

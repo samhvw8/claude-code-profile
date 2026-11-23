@@ -4,7 +4,7 @@ title: "Accounts are an option of Activation"
 description: "One profile can run under several Claude logins through account folders, chosen with --account (or --account auto, the one with the most plan limit left); ccp migrate --accounts moves existing logins. Supersedes the per-profile API key decision."
 tags: [decision, activation, accounts]
 decided: 2026-11-17
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-18T14:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T07:00:00Z }
 ---
 
 # Decision
@@ -33,8 +33,9 @@ need three copies of the same profile and would have to keep them in sync by han
 
 `profile.LinkAccount` prepares the folder each time it is used:
 
-- `.ccp-account.toml` records the profile the account is linked to. Linking it to another
-  profile fails unless `--relink` is given: a running Claude session would see its files change
+- `.ccp-account.toml` records the profile the account is linked to (and its optional pool). Linking it to another
+  profile fails unless `--relink` is given (or a pooled `ccp run` finds no session on it, see
+  [account pools](/decisions/account-pools.md)): a running Claude session would see its files change
   under it. Crashing beats corrupting.
 - The bound profile must be a single path segment, not `shared` and not empty.
 - `.claude.json` is the account's own. It is seeded once from the profile's state (`~/.claude.json`
@@ -52,7 +53,7 @@ need three copies of the same profile and would have to keep them in sync by han
     write lock;
   - `daemon*`, `jobs/` and any `*.lock` (per-folder runtime state);
   - `.ccp-*`: ccp's own per-folder files (`.ccp-account.toml`, `.ccp-usage.json`,
-    `.ccp-last-used`).
+    `.ccp-last-used`, `.ccp-relink.lock`).
 
   Linking any of them would share one login's data across accounts, or make Claude write the
   account's backups into the profile.
@@ -81,9 +82,10 @@ slash in `CLAUDE_CONFIG_DIR`).
   `followHarnesses`, once per command.
 - **Profile delete** refuses while the profile is the `~/.claude` target **or** this shell's
   current profile (`CLAUDE_CONFIG_DIR`, a profile or account folder): either way deleting it
-  breaks a live configuration. It also refuses while an account is bound to it (listing
+  breaks a live configuration. It also refuses while a Claude account is bound to it (listing
   `ccp env <other> --account <a> --relink` for each), and while **any** account's binding cannot
-  be read, since that account may be bound to it.
+  be read, since that account may be bound to it. agy accounts bound to it do not block (they run
+  on any profile); a note says they now default to the current profile.
 - **Profile rename** validates the new name first (one path segment, not `shared`, not an
   existing profile), moves every bound account to it, and warns about each account whose
   binding cannot be read. It refuses when this shell's `CLAUDE_CONFIG_DIR` is the profile folder
@@ -121,7 +123,7 @@ already true for `CLAUDE_CONFIG_DIR=<profile folder>`; both are handled the same
 
 # Picking an account: `--account auto`
 
-For a pool of accounts on one profile (three company logins on `companyA`, say), `--account
+For several accounts on one profile (three company logins on `companyA`, say), `--account
 auto` on `run`, `session` and `env` (shell format only: mise and direnv would freeze one pick)
 picks among the accounts linked to the profile. With no profile named it uses the current one:
 `CLAUDE_CONFIG_DIR` (a project's `mise.toml`, or the account folder of the running session),
@@ -160,12 +162,20 @@ Ties go to the account ccp started least recently (`.ccp-last-used`, touched by 
 weeks, the age of the read and the last use, plus the reason a logged-in account has no live
 read.
 
-**One workspace, one pool.** `ccp use <profile> --accounts` (since 0.55.0) sets a project folder up
+**Pools across profiles (2026-11-23).** An account may name one pool;
+`--account auto:<pool>` picks among the pool's accounts whatever profile they are linked to, and
+`ccp run` relinks a free Claude account to the requested profile (never one a Claude Code process
+runs on). For a pooled Claude account the binding's profile therefore means "the profile it was
+last linked to": plain `auto`, `AccountsBoundTo`, the PROFILE column, profile delete and profile
+rename see it move. `ccp account` shows a POOL column and `"pool"` in JSON. See
+[account pools](/decisions/account-pools.md).
+
+**One workspace, the profile's accounts.** `ccp use <profile> --accounts` (since 0.55.0) sets a project folder up
 so plain `claude` there picks the profile's account: it writes `.ccp/bin/claude`, puts `.ccp/bin`
 on PATH through `mise.toml` `_.path` (or `PATH_add` in `.envrc`) and adds `.ccp/` to
 `.git/info/exclude`. The shim names no profile and runs `ccp run --account auto --or-profile --
 <real claude> "$@"`. `--or-profile` keeps `CLAUDE_CONFIG_DIR` when it already names an account (a
-session's child) and runs on the profile while no account of the pool is logged in, instead of
+session's child) and runs on the profile while none of the profile's accounts is logged in, instead of
 failing. The real claude comes from `mise which claude`, never a mise shim
 ([anti-pattern](/anti-patterns/mise-shim-in-claude-wrapper.md)). Plain `claude` elsewhere keeps the
 personal login.

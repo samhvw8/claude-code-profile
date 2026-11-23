@@ -20,6 +20,8 @@ func accountCmdEnv(t *testing.T, profiles ...string) *config.Paths {
 	t.Setenv("CCP_DIR", filepath.Join(root, "ccp"))
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	os.MkdirAll(filepath.Join(root, "home"), 0755)
+	// Never scan this machine's real Claude sessions from a test.
+	installFakeLister(t, &fakeLister{})
 	paths := must(config.ResolvePaths())
 	for _, it := range config.AllHubItemTypes() {
 		os.MkdirAll(paths.HubItemDir(it), 0755)
@@ -423,11 +425,20 @@ func TestAgyAccount_GuardsDoctorRenameDeleteAndReset(t *testing.T) {
 		t.Errorf("checkAccounts reported agy broken link: %v", problems)
 	}
 
-	// profile delete refuses while agy1 is bound and hints 'ccp run ... --relink'.
-	t.Cleanup(func() { deleteForce = false })
-	if err := runCcp(t, "profile", "delete", "a", "--force"); err == nil || !strings.Contains(err.Error(), "ccp run <other-profile> --account agy1 --relink") {
-		t.Errorf("delete err = %v", err)
+	// profile delete is not blocked by an agy account (it runs on any
+	// profile); it notes the account's default and leaves its binding.
+	if _, err := profile.CreateAgyAccount(paths, "agy2", "gone"); err != nil {
+		t.Fatal(err)
 	}
+	t.Cleanup(func() { deleteForce = false })
+	out, err := captureStdout(t, func() error { return runCcp(t, "profile", "delete", "gone", "--force") })
+	if err != nil || !strings.Contains(out, "agy account(s) agy2 defaulted to 'gone'") {
+		t.Errorf("delete with agy account: %v\n%s", err, out)
+	}
+	if bound, _, err := profile.AccountInfo(paths.AccountDir("agy2")); err != nil || bound != "gone" {
+		t.Errorf("delete rewrote agy2's binding: %q %v", bound, err)
+	}
+	os.RemoveAll(paths.AccountDir("agy2"))
 
 	// profile rename rewrites agy1's binding without creating symlinks.
 	os.WriteFile(filepath.Join(paths.ProfileDir("a"), "CLAUDE.md"), []byte("x"), 0644)
@@ -455,10 +466,14 @@ func TestAgyAccount_GuardsDoctorRenameDeleteAndReset(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(paths.AccountDir("agy1"), profile.AccountFile), origBinding, 0644)
 
-	// Missing profile on agy account reports ccp run --relink hint.
+	// A missing default profile on an agy account is a note with the
+	// --relink hint, not a problem.
 	os.RemoveAll(paths.ProfileDir("b"))
-	if got := strings.Join(checkAccounts(paths), "\n"); !strings.Contains(got, "ccp run <profile> --account agy1 --relink") {
-		t.Errorf("missing profile checkAccounts:\n%s", got)
+	if got := checkAccounts(paths); len(got) != 0 {
+		t.Errorf("missing default profile reported as a problem: %v", got)
+	}
+	if got := strings.Join(accountNotes(paths), "\n"); !strings.Contains(got, "ccp run <profile> --account agy1 --relink") {
+		t.Errorf("missing default profile note:\n%s", got)
 	}
 }
 

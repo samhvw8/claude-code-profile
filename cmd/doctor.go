@@ -94,6 +94,9 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	} else if accounts, _ := profile.ListAccounts(paths); len(accounts) > 0 {
 		fmt.Printf("Checking accounts... OK (%d)\n", len(accounts))
 	}
+	for _, n := range accountNotes(paths) {
+		fmt.Printf("  info: %s\n", n)
+	}
 
 	// Check 3: Hub structure
 	fmt.Print("Checking hub structure... ")
@@ -592,6 +595,23 @@ func checkGlobalSymlink(paths *config.Paths) (target string, problems []string) 
 
 // checkAccounts reports accounts whose binding is unreadable, whose profile is
 // gone, or that hold broken links.
+// accountNotes returns informational lines about accounts: agy accounts
+// whose default profile no longer exists (they run on the current profile).
+func accountNotes(paths *config.Paths) []string {
+	accounts, err := profile.ListAccounts(paths)
+	if err != nil {
+		return nil
+	}
+	mgr := profile.NewManager(paths)
+	var notes []string
+	for _, a := range accounts {
+		if a.Err == nil && a.Harness == profile.HarnessAgy && !mgr.Exists(a.Profile) {
+			notes = append(notes, fmt.Sprintf("agy account %s defaults to missing profile '%s'; it runs on the current profile (or the one named), and 'ccp run <profile> --account %s --relink' sets a new default", a.Name, a.Profile, a.Name))
+		}
+	}
+	return notes
+}
+
 func checkAccounts(paths *config.Paths) []string {
 	accounts, err := profile.ListAccounts(paths)
 	if err != nil {
@@ -603,17 +623,19 @@ func checkAccounts(paths *config.Paths) []string {
 		switch {
 		case a.Err != nil:
 			relinkCmd := fmt.Sprintf("ccp env <profile> --account %s --relink", a.Name)
-			if profile.IsAgyAccountDir(a.Name, a.Dir) {
+			if profile.OnlyPoolInvalid(a.Dir) {
+				relinkCmd = fmt.Sprintf("ccp account pool %s --clear", a.Name)
+			} else if profile.IsAgyAccountDir(a.Name, a.Dir) {
 				relinkCmd = fmt.Sprintf("ccp run <profile> --account %s --relink -- agy", a.Name)
 			}
 			problems = append(problems, fmt.Sprintf("account %s: %v; run '%s'", a.Name, a.Err, relinkCmd))
 			continue
 		case !mgr.Exists(a.Profile):
-			relinkCmd := fmt.Sprintf("ccp env <profile> --account %s --relink", a.Name)
-			if a.Harness == profile.HarnessAgy {
-				relinkCmd = fmt.Sprintf("ccp run <profile> --account %s --relink", a.Name)
+			// An agy account runs on any profile; a missing default is a
+			// note (accountNotes), not a problem.
+			if a.Harness != profile.HarnessAgy {
+				problems = append(problems, fmt.Sprintf("account %s is linked to missing profile '%s'; run 'ccp env <profile> --account %s --relink'", a.Name, a.Profile, a.Name))
 			}
-			problems = append(problems, fmt.Sprintf("account %s is linked to missing profile '%s'; run '%s'", a.Name, a.Profile, relinkCmd))
 			continue
 		}
 		if a.Harness == profile.HarnessAgy {

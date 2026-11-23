@@ -667,3 +667,131 @@ func TestSetAccountMigratedFrom(t *testing.T) {
 		t.Errorf("record lost on relink: %q", got)
 	}
 }
+
+func TestAccountPool_RoundTripAndKeptOnRelink(t *testing.T) {
+	paths := accountTestPaths(t, "a", "b")
+	t.Setenv("HOME", filepath.Dir(paths.GlobalClaudeDir))
+	if _, _, err := LinkAccount(paths, "c1", "a", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CreateAgyAccount(paths, "g1", "a"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"c1", "g1"} {
+		dir := paths.AccountDir(name)
+		if err := SetAccountPool(dir, "company"); err != nil {
+			t.Fatal(err)
+		}
+		if a := ReadAccount(paths, name); a.Err != nil || a.Pool != "company" || a.Profile != "a" {
+			t.Fatalf("%s after set: %+v", name, a)
+		}
+		if _, _, err := LinkAccount(paths, name, "b", true); err != nil {
+			t.Fatalf("relink %s: %v", name, err)
+		}
+		if a := ReadAccount(paths, name); a.Err != nil || a.Pool != "company" || a.Profile != "b" {
+			t.Errorf("%s: relink dropped the pool: %+v", name, a)
+		}
+	}
+	if _, err := RelinkAgyAccount(paths, "g1", "a", true); err != nil {
+		t.Fatal(err)
+	}
+	if a := ReadAccount(paths, "g1"); a.Pool != "company" || a.Profile != "a" {
+		t.Errorf("RelinkAgyAccount dropped the pool: %+v", a)
+	}
+	if err := SetAccountPool(paths.AccountDir("c1"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if a := ReadAccount(paths, "c1"); a.Pool != "" || a.Profile != "b" {
+		t.Errorf("clear: %+v", a)
+	}
+	if err := SetAccountPool(paths.AccountDir("c1"), "auto"); err == nil {
+		t.Error("pool auto accepted")
+	}
+	if err := SetAccountPool(paths.AccountDir("c1"), "a:b"); err == nil {
+		t.Error("pool with ':' accepted")
+	}
+}
+
+func TestParseAutoAccount(t *testing.T) {
+	tests := []struct {
+		in             string
+		isAuto, hasErr bool
+		pool           string
+	}{
+		{in: "auto", isAuto: true},
+		{in: "auto:company", isAuto: true, pool: "company"},
+		{in: "auto:", isAuto: true, hasErr: true},
+		{in: "auto:auto", isAuto: true, hasErr: true},
+		{in: "auto:a/b", isAuto: true, hasErr: true},
+		{in: "auto:-x", isAuto: true, hasErr: true},
+		{in: "work1"},
+		{in: ""},
+		{in: "autox"},
+	}
+	for _, tt := range tests {
+		isAuto, pool, err := ParseAutoAccount(tt.in)
+		if isAuto != tt.isAuto || pool != tt.pool || (err != nil) != tt.hasErr {
+			t.Errorf("ParseAutoAccount(%q) = %v, %q, %v", tt.in, isAuto, pool, err)
+		}
+	}
+}
+
+func TestAccountsInPoolAndInvalidPoolInFile(t *testing.T) {
+	paths := accountTestPaths(t, "a", "b")
+	for _, acc := range [][2]string{{"c1", "a"}, {"c2", "b"}, {"c3", "b"}} {
+		if _, _, err := LinkAccount(paths, acc[0], acc[1], false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	SetAccountPool(paths.AccountDir("c1"), "p")
+	SetAccountPool(paths.AccountDir("c2"), "p")
+	got, err := AccountsInPool(paths, "p")
+	if err != nil || len(got) != 2 || got[0].Name != "c1" || got[1].Name != "c2" {
+		t.Errorf("AccountsInPool = %+v, %v", got, err)
+	}
+	if got, _ := AccountsInPool(paths, ""); len(got) != 0 {
+		t.Errorf("empty pool matched %v", got)
+	}
+	// A pool that is not a valid name makes the binding unreadable; --relink
+	// repairs it and drops the pool.
+	writeFile(t, filepath.Join(paths.AccountDir("c3"), AccountFile), "profile = \"b\"\npool = \"auto\"\n")
+	if a := ReadAccount(paths, "c3"); a.Err == nil {
+		t.Error("pool auto in the file was accepted")
+	}
+	if _, _, err := LinkAccount(paths, "c3", "a", true); err != nil {
+		t.Fatal(err)
+	}
+	if a := ReadAccount(paths, "c3"); a.Err != nil || a.Pool != "" || a.Profile != "a" {
+		t.Errorf("after relink: %+v", a)
+	}
+}
+
+// A binding whose only fault is its pool value can be repaired by setting or
+// clearing the pool.
+func TestSetAccountPool_RepairsInvalidPool(t *testing.T) {
+	paths := accountTestPaths(t, "a")
+	if _, _, err := LinkAccount(paths, "c1", "a", false); err != nil {
+		t.Fatal(err)
+	}
+	dir := paths.AccountDir("c1")
+	for _, next := range []string{"", "good"} {
+		writeFile(t, filepath.Join(dir, AccountFile), "profile = \"a\"\nmigrated_from = \"svc\"\npool = \"bad pool\"\n")
+		if a := ReadAccount(paths, "c1"); a.Err == nil {
+			t.Fatal("invalid pool accepted")
+		}
+		if err := SetAccountPool(dir, next); err != nil {
+			t.Fatalf("SetAccountPool(%q) on an invalid pool: %v", next, err)
+		}
+		if a := ReadAccount(paths, "c1"); a.Err != nil || a.Pool != next || a.Profile != "a" {
+			t.Errorf("after SetAccountPool(%q): %+v", next, a)
+		}
+		if m, _ := AccountMigratedFrom(dir); m != "svc" {
+			t.Errorf("migrated_from lost: %q", m)
+		}
+	}
+	// Any other fault still refuses.
+	writeFile(t, filepath.Join(dir, AccountFile), "profile = \"../x\"\npool = \"bad pool\"\n")
+	if err := SetAccountPool(dir, ""); err == nil {
+		t.Error("SetAccountPool repaired a binding with a bad profile")
+	}
+}

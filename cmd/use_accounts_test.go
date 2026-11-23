@@ -128,7 +128,7 @@ func TestAccountShim_Exec(t *testing.T) {
 	for _, d := range []string{bin, fakeBin, miseShims} {
 		os.MkdirAll(d, 0o755)
 	}
-	os.WriteFile(filepath.Join(bin, "claude"), []byte(accountShim), 0o755)
+	os.WriteFile(filepath.Join(bin, "claude"), []byte(accountShimScript("")), 0o755)
 	os.WriteFile(filepath.Join(miseShims, "claude"), []byte("#!/bin/sh\necho WRONG mise shim\n"), 0o755)
 	os.WriteFile(filepath.Join(fakeBin, "claude"), []byte("#!/bin/sh\necho real\n"), 0o755)
 	// A fake ccp that prints what it was asked to run.
@@ -172,5 +172,34 @@ func TestRunOrProfile(t *testing.T) {
 	}
 	if _, err := parseRunArgs([]string{"dev", "--account", "w1", "--or-profile"}); err == nil {
 		t.Error("--or-profile with a named account was accepted")
+	}
+}
+
+func TestUseAccounts_Pool(t *testing.T) {
+	accountCmdEnv(t, "dev")
+	proj := t.TempDir()
+	t.Chdir(proj)
+	os.WriteFile("mise.toml", []byte("[tools]\n"), 0o644)
+	t.Cleanup(func() {
+		useAccountsPool = ""
+		useCmd.Flags().Lookup("pool").Changed = false
+	})
+	if err := useAccounts(t, "use", "dev", "--pool", "company"); err == nil || !strings.Contains(err.Error(), "--pool needs --accounts") {
+		t.Errorf("--pool without --accounts: %v", err)
+	}
+	useAccountsPool = ""
+	if err := useAccounts(t, "use", "dev", "--accounts", "--pool", "a:b"); err == nil {
+		t.Error("invalid pool accepted")
+	}
+	useAccountsPool = ""
+	if err := useAccounts(t, "use", "dev", "--accounts", "--pool", "company"); err != nil {
+		t.Fatal(err)
+	}
+	shim := readFile(t, filepath.Join(proj, ".ccp", "bin", "claude"))
+	if !strings.Contains(shim, `exec ccp run --account auto:company --or-profile -- "$real" "$@"`) || strings.Contains(shim, accountShimPlaceholder) {
+		t.Errorf("shim:\n%s", shim)
+	}
+	if plain := accountShimScript(""); !strings.Contains(plain, `exec ccp run --account auto --or-profile -- "$real" "$@"`) || strings.Contains(plain, "auto:") {
+		t.Errorf("no pool:\n%s", plain)
 	}
 }

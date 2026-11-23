@@ -84,6 +84,39 @@ func ValidateAccountName(name string) error {
 	return nil
 }
 
+// ValidatePoolName applies the account name rule to a pool name: one safe
+// segment, never "auto".
+func ValidatePoolName(name string) error {
+	if !accountNameRe.MatchString(name) {
+		return fmt.Errorf("invalid pool name %q: use letters, digits, '-' and '_', starting with a letter or digit", name)
+	}
+	if name == AutoAccount {
+		return fmt.Errorf("pool name %q is reserved", name)
+	}
+	return nil
+}
+
+// ParseAutoAccount reads an --account value: "auto" picks among the accounts
+// linked to the profile, "auto:<pool>" among the accounts of a pool whatever
+// profile they are linked to. Account names cannot hold ':', so any other
+// value is a plain account name (isAuto false).
+func ParseAutoAccount(v string) (isAuto bool, pool string, err error) {
+	if v == AutoAccount {
+		return true, "", nil
+	}
+	rest, ok := strings.CutPrefix(v, AutoAccount+":")
+	if !ok {
+		return false, "", nil
+	}
+	if rest == "" {
+		return true, "", fmt.Errorf("--account auto: needs a pool name, as in auto:<pool>")
+	}
+	if err := ValidatePoolName(rest); err != nil {
+		return true, "", err
+	}
+	return true, rest, nil
+}
+
 type accountBinding struct {
 	Profile string `toml:"profile"`
 	// Harness is "agy" for Antigravity CLI accounts; absent means "claude".
@@ -92,9 +125,19 @@ type accountBinding struct {
 	// account (a Keychain service or a credentials file). Only that login may
 	// be finished on a later run; any other is left alone.
 	MigratedFrom string `toml:"migrated_from,omitempty"`
+	// Pool groups accounts for --account auto:<pool>, across profiles; ""
+	// means none.
+	Pool string `toml:"pool,omitempty"`
 }
 
 func readBinding(accountDir string) (accountBinding, error) {
+	return readBindingPool(accountDir, true)
+}
+
+// readBindingPool reads a binding; with checkPool false an invalid pool value
+// is not an error, so SetAccountPool can repair a binding whose only fault is
+// its pool.
+func readBindingPool(accountDir string, checkPool bool) (accountBinding, error) {
 	var b accountBinding
 	path := filepath.Join(accountDir, AccountFile)
 	data, err := os.ReadFile(path)
@@ -115,7 +158,37 @@ func readBinding(accountDir string) (accountBinding, error) {
 	if err := validateBoundProfile(b.Profile); err != nil {
 		return b, fmt.Errorf("%s: %w", path, err)
 	}
+	if b.Pool != "" && checkPool {
+		if err := ValidatePoolName(b.Pool); err != nil {
+			return b, fmt.Errorf("%s: %w", path, err)
+		}
+	}
 	return b, nil
+}
+
+// OnlyPoolInvalid reports whether the binding in accountDir would read
+// cleanly but for its pool value ('ccp account pool <name> --clear' repairs
+// that one).
+func OnlyPoolInvalid(accountDir string) bool {
+	if _, err := readBinding(accountDir); err == nil {
+		return false
+	}
+	_, err := readBindingPool(accountDir, false)
+	return err == nil
+}
+
+// rebound returns the binding to write when an account is linked to
+// profileName: the existing one carried forward (pool, migrated_from) with
+// only the profile and harness changed. A pool that does not validate (from a
+// corrupt file being repaired with --relink) is dropped, or the rewritten
+// binding would be unreadable again.
+func rebound(existing accountBinding, profileName, harness string) accountBinding {
+	b := existing
+	b.Profile, b.Harness = profileName, harness
+	if b.Pool != "" && ValidatePoolName(b.Pool) != nil {
+		b.Pool = ""
+	}
+	return b
 }
 
 func writeAccountBinding(accountDir string, b accountBinding) error {
@@ -156,6 +229,23 @@ func AccountInfo(accountDir string) (profileName, harness string, err error) {
 		return "", "", err
 	}
 	return b.Profile, b.Harness, nil
+}
+
+// SetAccountPool records (or, with "", clears) the account's pool, keeping
+// the rest of its binding. It also repairs a binding whose only fault is an
+// invalid pool value. Callers serialize it with the account's relink lock.
+func SetAccountPool(accountDir, pool string) error {
+	if pool != "" {
+		if err := ValidatePoolName(pool); err != nil {
+			return err
+		}
+	}
+	b, err := readBindingPool(accountDir, false)
+	if err != nil {
+		return err
+	}
+	b.Pool = pool
+	return writeAccountBinding(accountDir, b)
 }
 
 // AccountMigratedFrom returns the login recorded as moved into the account,
@@ -258,7 +348,20 @@ type Account struct {
 	Dir     string // absolute, clean
 	Profile string // bound profile; "" when Err is set
 	Harness string // "claude" or "agy"; "" when Err is set
+	Pool    string // "" when none or when Err is set
 	Err     error  // the binding could not be read
+}
+
+// ReadAccount returns the account folder of that name with its binding.
+func ReadAccount(paths *config.Paths, name string) Account {
+	a := Account{Name: name, Dir: absClean(paths.AccountDir(name))}
+	b, err := readBinding(a.Dir)
+	if err != nil {
+		a.Err = err
+		return a
+	}
+	a.Profile, a.Harness, a.Pool = b.Profile, b.Harness, b.Pool
+	return a
 }
 
 // ListAccounts returns every account folder, sorted by name.
@@ -275,9 +378,7 @@ func ListAccounts(paths *config.Paths) ([]Account, error) {
 		if !e.IsDir() {
 			continue
 		}
-		a := Account{Name: e.Name(), Dir: absClean(paths.AccountDir(e.Name()))}
-		a.Profile, a.Harness, a.Err = AccountInfo(a.Dir)
-		out = append(out, a)
+		out = append(out, ReadAccount(paths, e.Name()))
 	}
 	return out, nil
 }
@@ -291,6 +392,22 @@ func AccountsBoundTo(paths *config.Paths, profileName string) ([]Account, error)
 	var out []Account
 	for _, a := range all {
 		if a.Err == nil && a.Profile == profileName {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+// AccountsInPool returns the readable accounts of a pool, whatever profile
+// they are linked to.
+func AccountsInPool(paths *config.Paths, pool string) ([]Account, error) {
+	all, err := ListAccounts(paths)
+	if err != nil {
+		return nil, err
+	}
+	var out []Account
+	for _, a := range all {
+		if a.Err == nil && pool != "" && a.Pool == pool {
 			out = append(out, a)
 		}
 	}
@@ -339,6 +456,17 @@ func RelinkAccounts(paths *config.Paths, profileName, newName string) (warnings 
 // absolute and clean (a relative CCP_DIR, a trailing slash).
 func SamePath(a, b string) bool {
 	return absClean(a) == absClean(b)
+}
+
+// SameDir reports whether two folder paths are the same: equal once absolute
+// and clean, or resolving to the same folder through symlinks.
+func SameDir(a, b string) bool {
+	if SamePath(a, b) {
+		return true
+	}
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && ra == rb
 }
 
 func absClean(p string) string {
@@ -408,7 +536,7 @@ func LinkAccount(paths *config.Paths, account, profileName string, relink bool) 
 		return "", nil, fmt.Errorf("failed to create account folder: %w", err)
 	}
 	if writeBinding {
-		if err := writeAccountBinding(dir, accountBinding{Profile: profileName}); err != nil {
+		if err := writeAccountBinding(dir, rebound(existing, profileName, HarnessClaude)); err != nil {
 			return "", nil, fmt.Errorf("failed to record account binding: %w", err)
 		}
 	}

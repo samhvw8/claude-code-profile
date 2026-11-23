@@ -3,7 +3,7 @@ type: Filesystem Layout
 title: The ~/.ccp directory layout
 description: What lives under ~/.ccp — hub, store, sources, profiles, shared data — and how each class of data is shared.
 tags: [architecture, filesystem, hub, profiles]
-generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T10:50:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T07:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md (removed 2026-09-14 by the OKF migration)"
@@ -46,10 +46,11 @@ sources:
 │       │   └── installed_plugins.json   # Per profile
 │       └── tasks/ todos/ … → shared/
 ├── accounts/<name>/            # Account folder: a CLAUDE_CONFIG_DIR with its own login (--account)
-│   ├── .ccp-account.toml       # profile = "<linked profile>"
+│   ├── .ccp-account.toml       # profile = "<linked profile>", optional harness, pool, migrated_from
 │   ├── .claude.json            # Own state and oauthAccount; seeded once, never overwritten
 │   ├── .ccp-usage.json         # Last plan-usage read (and last failed try), for --account auto
 │   ├── .ccp-last-used          # Touched when ccp starts the account (least-recently-used fallback)
+│   ├── .ccp-relink.lock        # flock held while ccp run/env/session or 'account pool' links the account (released once the process starts)
 │   └── <entry> → profiles/<profile>/<entry>   # Absolute symlinks to every other profile entry
 ├── harnesses/                  # Custom harness plugins (<id>.toml manifests or <id> executables)
 ├── state/

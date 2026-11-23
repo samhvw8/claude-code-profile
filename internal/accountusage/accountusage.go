@@ -85,6 +85,7 @@ type Scoped struct {
 // Status is what ccp knows about one account.
 type Status struct {
 	Name, Profile, Harness, Dir string
+	Pool                        string // "" when none
 	Email                       string
 	LoggedIn                    bool
 	Usage                       *Snapshot // nil: never read
@@ -101,7 +102,7 @@ const (
 )
 
 // OtherLogin is an unmanaged Claude Code or agy login outside ~/.ccp/accounts.
-// It is shown read-only in `ccp account` and never enters --account auto pools.
+// It is shown read-only in `ccp account` and is never picked by --account auto.
 type OtherLogin struct {
 	Kind     string
 	Where    string
@@ -169,7 +170,7 @@ func (r *Reader) Read(accounts []profile.Account) []Status {
 	out := make([]Status, len(accounts))
 	var wg sync.WaitGroup
 	for i, a := range accounts {
-		out[i] = Status{Name: a.Name, Profile: a.Profile, Harness: a.Harness, Dir: a.Dir}
+		out[i] = Status{Name: a.Name, Profile: a.Profile, Harness: a.Harness, Dir: a.Dir, Pool: a.Pool}
 		wg.Add(1)
 		go func(s *Status) {
 			defer wg.Done()
@@ -784,7 +785,7 @@ func Pick(statuses []Status, now time.Time) (Status, string, error) {
 		}
 	}
 	if len(pool) == 0 {
-		return Status{}, "", errors.New("no account in the pool is logged in")
+		return Status{}, "", errors.New("none of these accounts is logged in")
 	}
 	type ranked struct {
 		s          Status

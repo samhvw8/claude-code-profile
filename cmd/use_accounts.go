@@ -6,23 +6,28 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
 
 // accountShimDir is the project folder 'ccp use --accounts' puts on PATH.
 const accountShimDir = ".ccp/bin"
 
-// accountShim is the claude shim 'ccp use --accounts' writes. It names no
-// profile: 'ccp run --account auto' takes the folder's profile from
-// CLAUDE_CONFIG_DIR, so a later 'ccp use <other>' needs no rewrite.
+// accountShimTemplate is the claude shim 'ccp use --accounts' writes; its one
+// placeholder, @ACCOUNT@, is the --account value: auto (the profile's
+// accounts) or auto:<pool>. It names no profile: 'ccp run' takes the folder's
+// profile from CLAUDE_CONFIG_DIR, so a later 'ccp use <other>' needs no
+// rewrite.
 //
 // The real claude comes from 'mise which', never a mise shim: a mise shim
 // reapplies the folder's mise.toml and resets CLAUDE_CONFIG_DIR to the
 // profile, so the account would be dropped.
-const accountShim = `#!/bin/sh
+const accountShimTemplate = `#!/bin/sh
 # Written by 'ccp use <profile> --accounts'. Do not edit; run it again instead.
-# claude in this folder runs on the account of the folder's profile with the
-# most plan limit left ('ccp account' lists them). A session already on an
-# account keeps it; with no account logged in, claude runs on the profile.
+# claude in this folder runs on the account that 'ccp run --account
+# @ACCOUNT@' picks: the one with the most plan limit left ('ccp account'
+# lists them). A session already on an account keeps it; with no account
+# free and logged in, claude runs on the profile.
 here=$(cd "$(dirname "$0")" && pwd)
 real=$(mise which claude 2>/dev/null)
 if [ -z "$real" ]; then
@@ -34,18 +39,31 @@ if [ -z "$real" ]; then
 	echo "claude: not found on PATH (ccp shim in $here)" >&2
 	exit 127
 fi
-exec ccp run --account auto --or-profile -- "$real" "$@"
+exec ccp run --account @ACCOUNT@ --or-profile -- "$real" "$@"
 `
+
+// accountShimPlaceholder marks where accountShimScript puts the --account value.
+const accountShimPlaceholder = "@ACCOUNT@"
+
+// accountShimScript returns the shim: pool "" runs 'ccp run --account auto',
+// a pool runs 'ccp run --account auto:<pool>'.
+func accountShimScript(pool string) string {
+	value := profile.AutoAccount
+	if pool != "" {
+		value += ":" + pool
+	}
+	return strings.ReplaceAll(accountShimTemplate, accountShimPlaceholder, value)
+}
 
 // installAccountShim writes .ccp/bin/claude in the current folder, puts
 // .ccp/bin on PATH through mise.toml (or .envrc), and keeps .ccp/ out of git
 // through .git/info/exclude, which is local and never committed.
-func installAccountShim() error {
+func installAccountShim(pool string) error {
 	if err := os.MkdirAll(accountShimDir, 0o755); err != nil {
 		return err
 	}
 	shim := filepath.Join(accountShimDir, "claude")
-	if err := os.WriteFile(shim, []byte(accountShim), 0o755); err != nil {
+	if err := os.WriteFile(shim, []byte(accountShimScript(pool)), 0o755); err != nil {
 		return err
 	}
 	if err := os.Chmod(shim, 0o755); err != nil {
@@ -65,6 +83,10 @@ func installAccountShim() error {
 	}
 	if err := excludeFromGit(".ccp/"); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not add .ccp/ to .git/info/exclude: %v\n", err)
+	}
+	if pool != "" {
+		fmt.Printf("Wrote %s: claude here now picks the account of pool %s with the most limit left\n", shim, pool)
+		return nil
 	}
 	fmt.Printf("Wrote %s: claude here now picks the profile's account with the most limit left\n", shim)
 	fmt.Println("Add accounts with 'ccp account add <name>' and log in once with 'ccp run --account <name>'")

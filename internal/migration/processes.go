@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -26,6 +27,18 @@ type ProcessLister interface {
 	ClaudeProcesses() ([]ClaudeProcess, error)
 }
 
+// NewProcessLister returns this machine's process lister: sysctl on macOS,
+// /proc on Linux, nil elsewhere (callers must treat nil as "cannot tell").
+func NewProcessLister() ProcessLister {
+	switch runtime.GOOS {
+	case "darwin":
+		return newSysctlLister()
+	case "linux":
+		return procLister{root: "/proc"}
+	}
+	return nil
+}
+
 var jsRuntime = regexp.MustCompile(`^(node|nodejs|bun|deno)[0-9.]*$`)
 
 // isClaudeProcess reports whether a process is Claude Code: a native "claude"
@@ -35,6 +48,12 @@ var jsRuntime = regexp.MustCompile(`^(node|nodejs|bun|deno)[0-9.]*$`)
 // JS runtime running the npm package anywhere in its arguments (node
 // /usr/local/bin/claude, node --flag .../@anthropic-ai/claude-code/cli.js).
 // execPath may be "" when unknown.
+//
+// A script started through its "#!/usr/bin/env node" shebang shows argv
+// [/usr/bin/env, node, .../claude] right after exec: whatever follows env
+// (options, NAME=value assignments) is skipped and the rest is checked the
+// same way.
+// Other wrappers (bash -c, npx) are not seen through.
 func isClaudeProcess(execPath string, argv []string) bool {
 	if strings.Contains(execPath, "/claude/versions/") || strings.Contains(execPath, "/installs/claude/") {
 		return true
@@ -42,6 +61,31 @@ func isClaudeProcess(execPath string, argv []string) bool {
 	if len(argv) == 0 {
 		return false
 	}
+	if filepath.Base(argv[0]) == "env" {
+		// env's options differ by system and some take an argument (-u NAME,
+		// -C DIR, -S "node --flag" as one shebang token), so its grammar is
+		// not parsed: the arguments are split on spaces and every tail is
+		// checked. A false match only makes the folder count as busy.
+		var words []string
+		for _, a := range argv[1:] {
+			if v, ok := strings.CutPrefix(a, "--split-string="); ok {
+				a = v
+			}
+			words = append(words, strings.Fields(a)...)
+		}
+		for i := range words {
+			if isClaudeArgv(words[i:]) {
+				return true
+			}
+		}
+		return false
+	}
+	return isClaudeArgv(argv)
+}
+
+// isClaudeArgv is isClaudeProcess for an argv that is not started through
+// env: it never recurses, so a long run of env words stays quadratic.
+func isClaudeArgv(argv []string) bool {
 	if filepath.Base(argv[0]) == "claude" {
 		return true
 	}

@@ -21,7 +21,9 @@ Exit the shell to return to your previous environment.
 With --account, CLAUDE_CONFIG_DIR is the account folder ~/.ccp/accounts/<name>,
 which keeps its own Claude login and links everything else to the profile.
 With a named account the profile may be left out; --account auto picks the
-account with the most plan limit left (see 'ccp run --help').
+account with the most plan limit left (see 'ccp run --help'); auto:<pool>
+picks among the pool's accounts already linked to the profile (session never
+relinks across profiles).
 
 Examples:
   ccp session dev
@@ -72,10 +74,11 @@ func runSession(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	configDir, err := activationDir(paths, profileName, account, accountSet, sessionRelink)
+	configDir, release, err := lockedActivationDir(paths, profileName, account, accountSet, sessionRelink)
 	if err != nil {
 		return err
 	}
+	release()
 	if account != "" {
 		markAccountUsed(configDir)
 	}

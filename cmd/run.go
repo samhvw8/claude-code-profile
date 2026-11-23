@@ -16,7 +16,7 @@ import (
 )
 
 var runCmd = &cobra.Command{
-	Use:    "run [<profile>] [--account <name>|auto [--relink|--or-profile]] [-- <command> [args...]]",
+	Use:    "run [<profile>] [--account <name>|auto|auto:<pool> [--relink|--or-profile]] [-- <command> [args...]]",
 	Hidden: true,
 	Short:  "Run a command with a specific profile active",
 	Long: `Execute a command with CLAUDE_CONFIG_DIR set to the specified profile.
@@ -24,18 +24,27 @@ var runCmd = &cobra.Command{
 With --account, a Claude account uses ~/.ccp/accounts/<name> as CLAUDE_CONFIG_DIR
 and links everything else to the profile. An agy account (--harness agy) runs
 agy with --app_data_dir=antigravity-cli-ccp-<name> and SSH_CLIENT set while
-keeping CLAUDE_CONFIG_DIR set to the profile folder.
+keeping CLAUDE_CONFIG_DIR set to the profile folder; it runs on any profile,
+and its binding only names the profile used when none is given.
 The profile may be left out: a named account runs its own profile, and its
 default command is claude (or agy for agy accounts).
---relink moves an account that is linked to another profile.
+--relink moves an account that is linked to another profile (for agy, it
+changes the default profile).
 
 --account auto picks, among the accounts of the matching harness linked to the
 profile (the current one when none is named), the one with the most plan limit
 left: cached at most every 5 minutes per account, else the account started
 least recently.
 
---or-profile (with --account auto) never fails for lack of an account: a
-session already on an account keeps it, and a pool with no account logged in
+--account auto:<pool> picks the same way among the accounts of a pool ('ccp
+account pool <name> <pool>'), whatever profile they are linked to. An agy
+account runs on any profile as is. A Claude account linked to another profile
+is relinked to this one, but only while no Claude Code process runs on its
+folder (a process ccp cannot read counts as running there); busy accounts are
+skipped. The pick line names the pool and any relink.
+
+--or-profile (with --account auto or auto:<pool>) never fails for lack of an account: a
+session already on an account keeps it, and with no account free and logged in it
 runs on the profile itself. The shim from 'ccp use --accounts' passes it.
 
 Examples:
@@ -43,6 +52,7 @@ Examples:
   ccp run --account agy1                   # agy, account agy1's profile
   ccp run --account auto -- claude -c      # continue on the freest Claude account
   ccp run --account auto -- agy            # start on the freest agy account
+  ccp run companyA --account auto:company # freest account of pool company
   ccp run companyA --account auto
   ccp run minimal -- claude "fix this bug"
   ccp run dev -- npm test`,
@@ -77,14 +87,22 @@ func runRunCmd(cmd *cobra.Command, args []string) error {
 	if ra.accountSet && ra.account == "" {
 		return profile.ValidateAccountName("")
 	}
-	execCmd, err := prepareRunCmd(paths, ra)
+	execCmd, release, err := prepareRunCmd(paths, ra)
 	if err != nil {
 		return err
 	}
+	defer release()
 	execCmd.Stdin = os.Stdin
 	execCmd.Stdout = os.Stdout
 	execCmd.Stderr = os.Stderr
-	return execCmd.Run()
+	// A pooled pick holds its account's lock until the process exists, never
+	// for the session: start, release, then wait.
+	err = execCmd.Start()
+	release()
+	if err != nil {
+		return err
+	}
+	return execCmd.Wait()
 }
 
 func commandHarness(cmd0 string) string {
@@ -108,13 +126,27 @@ func hasAppDataDirFlag(args []string) bool {
 }
 
 // prepareRunCmd resolves the profile, account, and harness, returning the ready
-// exec.Cmd with environment and flags applied.
-func prepareRunCmd(paths *config.Paths, ra runArgs) (*exec.Cmd, error) {
+// exec.Cmd with environment and flags applied, and a release func (never nil,
+// safe to call twice) the caller must call right after starting the command:
+// a Claude account stays locked (its relink lock) from its binding check
+// until then. On an error the lock is already released.
+func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func(), err error) {
+	release = noRelease
+	defer func() {
+		if err != nil {
+			release()
+			release = noRelease
+		}
+	}()
 	cmdArgs := slices.Clone(ra.command)
 	harness := ""
-	if ra.account != "" && ra.account != profile.AutoAccount {
+	isAuto, pool, err := profile.ParseAutoAccount(ra.account)
+	if err != nil {
+		return nil, release, err
+	}
+	if ra.account != "" && !isAuto {
 		if err := profile.ValidateAccountName(ra.account); err != nil {
-			return nil, err
+			return nil, release, err
 		}
 		_, acctHarness, bindErr := profile.AccountInfo(paths.AccountDir(ra.account))
 		switch {
@@ -123,7 +155,7 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (*exec.Cmd, error) {
 				cmdArgs = []string{profile.HarnessAgy}
 			}
 			if cmdH := commandHarness(cmdArgs[0]); cmdH != acctHarness {
-				return nil, fmt.Errorf("account %q uses harness %s; cannot run %q", ra.account, acctHarness, filepath.Base(cmdArgs[0]))
+				return nil, release, fmt.Errorf("account %q uses harness %s; cannot run %q", ra.account, acctHarness, filepath.Base(cmdArgs[0]))
 			}
 			harness = acctHarness
 		case errors.Is(bindErr, os.ErrNotExist):
@@ -132,26 +164,26 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (*exec.Cmd, error) {
 				if ra.profile != "" {
 					profHint = ra.profile
 				}
-				return nil, fmt.Errorf("agy account %q does not exist yet; create it with 'ccp account add %s %s --harness agy'", ra.account, ra.account, profHint)
+				return nil, release, fmt.Errorf("agy account %q does not exist yet; create it with 'ccp account add %s %s --harness agy'", ra.account, ra.account, profHint)
 			}
 			harness = profile.HarnessClaude
 		default:
 			if !ra.relink {
-				return nil, fmt.Errorf("%w; fix the file or rerun with --relink", bindErr)
+				return nil, release, fmt.Errorf("%w; fix the file or rerun with --relink", bindErr)
 			}
 			if profile.IsAgyAccountDir(ra.account, paths.AccountDir(ra.account)) || commandHarness(cmdArgs[0]) == profile.HarnessAgy {
 				if !ra.commandExplicit {
 					cmdArgs = []string{profile.HarnessAgy}
 				}
 				if commandHarness(cmdArgs[0]) != profile.HarnessAgy {
-					return nil, fmt.Errorf("account %q uses harness %s; cannot run %q", ra.account, profile.HarnessAgy, filepath.Base(cmdArgs[0]))
+					return nil, release, fmt.Errorf("account %q uses harness %s; cannot run %q", ra.account, profile.HarnessAgy, filepath.Base(cmdArgs[0]))
 				}
 				harness = profile.HarnessAgy
 			} else {
 				harness = profile.HarnessClaude
 			}
 		}
-	} else if ra.account == profile.AutoAccount {
+	} else if isAuto {
 		harness = commandHarness(cmdArgs[0])
 	}
 
@@ -160,39 +192,52 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (*exec.Cmd, error) {
 			if h, err := profile.AccountHarness(dir); err == nil && h == harness && h == profile.HarnessClaude {
 				execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 				execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+dir)
-				return execCmd, nil
+				return execCmd, release, nil
 			}
 		}
 	}
 
 	profileName, err := activationProfile(paths, ra.profile, ra.account)
 	if err != nil {
-		return nil, err
+		return nil, release, err
 	}
-	account, err := chooseAccount(paths, profileName, ra.account, ra.relink, harness)
+	account, release, err := chooseRunAccount(paths, profileName, ra.account, ra.relink, harness)
+	pooledLock := pool != "" && harness == profile.HarnessClaude && err == nil
 	if ra.orProfile && errors.Is(err, errNoUsableAccount) {
-		fmt.Fprintf(os.Stderr, "ccp: no account of profile %s is logged in; running on the profile\n", profileName)
+		if pool != "" {
+			fmt.Fprintf(os.Stderr, "ccp: no account of pool %s is free and logged in; running on profile %s\n", pool, profileName)
+		} else {
+			fmt.Fprintf(os.Stderr, "ccp: no account of profile %s is logged in; running on the profile\n", profileName)
+		}
 		execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 		execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+paths.ProfileDir(profileName))
-		return execCmd, nil
+		return execCmd, release, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, release, err
 	}
 
 	if account != "" && harness == profile.HarnessAgy {
 		if hasAppDataDirFlag(cmdArgs[1:]) {
-			return nil, fmt.Errorf("do not pass --app_data_dir with --account; ccp sets it for account %q", account)
+			return nil, release, fmt.Errorf("do not pass --app_data_dir with --account; ccp sets it for account %q", account)
 		}
 		exe, err := exec.LookPath(cmdArgs[0])
 		if err != nil {
-			return nil, fmt.Errorf("agy not found on PATH; install Antigravity CLI (agy) first: %w", err)
+			return nil, release, fmt.Errorf("agy not found on PATH; install Antigravity CLI (agy) first: %w", err)
 		}
-		if _, err := profile.RelinkAgyAccount(paths, account, profileName, ra.relink); err != nil {
-			return nil, err
+		// An agy account runs on any profile; its binding only names the
+		// default one, and only --relink rewrites it.
+		if ra.relink {
+			if _, err := profile.RelinkAgyAccount(paths, account, profileName, true); err != nil {
+				return nil, release, err
+			}
+		} else if _, _, err := profile.AccountInfo(paths.AccountDir(account)); err != nil {
+			return nil, release, fmt.Errorf("%w; fix the file or rerun with --relink", err)
+		} else if !profile.NewManager(paths).Exists(profileName) {
+			return nil, release, fmt.Errorf("profile not found: %s", profileName)
 		}
 		if err := profile.SyncAgyAccountSettings(account); err != nil {
-			return nil, err
+			return nil, release, err
 		}
 		markAccountUsed(paths.AccountDir(account))
 		profileDir := paths.ProfileDir(profileName)
@@ -203,19 +248,25 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (*exec.Cmd, error) {
 		launchArgs := append([]string{flagArg}, cmdArgs[1:]...)
 		execCmd := exec.Command(exe, launchArgs...)
 		execCmd.Env = profile.WithEnv(os.Environ(), envEntry, "CLAUDE_CONFIG_DIR="+profileDir)
-		return execCmd, nil
+		return execCmd, release, nil
 	}
 
-	configDir, err := activationDir(paths, profileName, account, ra.accountSet, ra.relink)
+	var configDir string
+	if pooledLock {
+		// The pooled pick holds this account's lock and has linked it.
+		configDir, err = filepath.Abs(paths.AccountDir(account))
+	} else {
+		configDir, release, err = lockedActivationDir(paths, profileName, account, ra.accountSet, ra.relink)
+	}
 	if err != nil {
-		return nil, err
+		return nil, release, err
 	}
 	if account != "" {
 		markAccountUsed(configDir)
 	}
 	execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 	execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+configDir)
-	return execCmd, nil
+	return execCmd, release, nil
 }
 
 type runArgs struct {
@@ -281,8 +332,12 @@ func parseRunArgs(args []string) (runArgs, error) {
 	if ra.relink && ra.account == "" {
 		return ra, fmt.Errorf("--relink needs --account")
 	}
-	if ra.orProfile && ra.account != profile.AutoAccount {
-		return ra, fmt.Errorf("--or-profile needs --account auto")
+	isAuto, _, err := profile.ParseAutoAccount(ra.account)
+	if err != nil {
+		return ra, err
+	}
+	if ra.orProfile && !isAuto {
+		return ra, fmt.Errorf("--or-profile needs --account auto or auto:<pool>")
 	}
 	return ra, nil
 }
@@ -311,6 +366,6 @@ func activationDir(paths *config.Paths, profileName, account string, accountSet,
 // addAccountFlags registers --account and --relink on a command that sets
 // CLAUDE_CONFIG_DIR.
 func addAccountFlags(c *cobra.Command, account *string, relink *bool) {
-	c.Flags().StringVar(account, "account", "", "Run the profile under an account folder (~/.ccp/accounts/<name>) with its own Claude login")
+	c.Flags().StringVar(account, "account", "", "Run the profile under an account folder (~/.ccp/accounts/<name>) with its own Claude login; auto picks among the profile's accounts, auto:<pool> among a pool's")
 	c.Flags().BoolVar(relink, "relink", false, "With --account: link an account that is linked to another profile")
 }

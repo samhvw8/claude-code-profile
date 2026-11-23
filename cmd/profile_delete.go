@@ -68,7 +68,8 @@ func runProfileDelete(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("cannot delete active profile '%s'\n\nSwitch to another profile first: ccp use <other-profile>", profileName)
 		}
 	}
-	if err := refuseBoundAccounts(paths, profileName); err != nil {
+	agyAccounts, err := refuseBoundAccounts(paths, profileName)
+	if err != nil {
 		return err
 	}
 
@@ -105,17 +106,22 @@ func runProfileDelete(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Deleted profile: %s\n", profileName)
+	if len(agyAccounts) > 0 {
+		fmt.Printf("Note: agy account(s) %s defaulted to '%s'; they now run on the current profile (or the one named), and 'ccp run <profile> --account <name> --relink' sets a new default\n", strings.Join(agyAccounts, ", "), profileName)
+	}
 	return nil
 }
 
-// refuseBoundAccounts stops a delete that would leave accounts linked to a
-// missing profile: each one must be relinked to another profile first.
-func refuseBoundAccounts(paths *config.Paths, profileName string) error {
+// refuseBoundAccounts stops a delete that would leave Claude accounts linked
+// to a missing profile: each one must be relinked to another profile first.
+// agy accounts run on any profile (their binding only names the default
+// one), so they do not block; their names are returned for a note.
+func refuseBoundAccounts(paths *config.Paths, profileName string) ([]string, error) {
 	// An account whose binding cannot be read may be linked to this profile
 	// (and may be this shell's CLAUDE_CONFIG_DIR): unknown counts as bound.
 	all, err := profile.ListAccounts(paths)
 	if err != nil {
-		return fmt.Errorf("failed to list accounts: %w", err)
+		return nil, fmt.Errorf("failed to list accounts: %w", err)
 	}
 	var unreadable []string
 	for _, a := range all {
@@ -128,24 +134,29 @@ func refuseBoundAccounts(paths *config.Paths, profileName string) error {
 		}
 	}
 	if len(unreadable) > 0 {
-		return fmt.Errorf("cannot delete profile '%s': the binding of these accounts cannot be read, so they may be linked to it\n%s\n\nFix each %s, or relink with --relink",
+		return nil, fmt.Errorf("cannot delete profile '%s': the binding of these accounts cannot be read, so they may be linked to it\n%s\n\nFix each %s, or relink with --relink",
 			profileName, strings.Join(unreadable, "\n"), profile.AccountFile)
 	}
-	accounts, err := profile.AccountsBoundTo(paths, profileName)
+	bound, err := profile.AccountsBoundTo(paths, profileName)
 	if err != nil {
-		return fmt.Errorf("failed to list accounts: %w", err)
+		return nil, fmt.Errorf("failed to list accounts: %w", err)
+	}
+	var agy []string
+	var accounts []profile.Account
+	for _, a := range bound {
+		if a.Harness == profile.HarnessAgy {
+			agy = append(agy, a.Name)
+		} else {
+			accounts = append(accounts, a)
+		}
 	}
 	if len(accounts) == 0 {
-		return nil
+		return agy, nil
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "cannot delete profile '%s': %d account(s) are linked to it\n\nRelink each one to another profile first (close its sessions):\n", profileName, len(accounts))
 	for _, a := range accounts {
-		if a.Harness == profile.HarnessAgy {
-			fmt.Fprintf(&b, "  ccp run <other-profile> --account %s --relink\n", a.Name)
-		} else {
-			fmt.Fprintf(&b, "  ccp env <other-profile> --account %s --relink\n", a.Name)
-		}
+		fmt.Fprintf(&b, "  ccp env <other-profile> --account %s --relink\n", a.Name)
 	}
-	return errors.New(strings.TrimRight(b.String(), "\n"))
+	return nil, errors.New(strings.TrimRight(b.String(), "\n"))
 }

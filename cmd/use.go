@@ -17,6 +17,7 @@ var (
 	useShowFlag     bool
 	useGlobalFlag   bool
 	useAccountsFlag bool
+	useAccountsPool string
 )
 
 var useCmd = &cobra.Command{
@@ -41,11 +42,15 @@ Examples:
   ccp use -g               # Interactive picker (global symlink)
   ccp use --show           # Show current active profile
   ccp use work --accounts  # ...and claude here picks work's freest account
+  ccp use work --accounts --pool company  # ...or pool company's, relinked to work
 
 --accounts also writes .ccp/bin/claude, puts .ccp/bin on PATH through
 mise.toml (or .envrc) and adds .ccp/ to .git/info/exclude. claude in the
 folder then runs on the profile's account with the most plan limit left
-(ccp run --account auto), or on the profile while no account is logged in.`,
+(ccp run --account auto), or on the profile while no account is logged in.
+With --pool <name> the shim runs 'ccp run --account auto:<name>' instead: the
+pool's freest account, relinked to the profile when no session runs on it.
+Running --accounts again without --pool rewrites the shim without the pool.`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: completeProfileNames,
 	RunE:              runUse,
@@ -55,6 +60,7 @@ func init() {
 	useCmd.Flags().BoolVar(&useShowFlag, "show", false, "Show current active profile")
 	useCmd.Flags().BoolVarP(&useGlobalFlag, "global", "g", false, "Update global ~/.claude symlink")
 	useCmd.Flags().BoolVar(&useAccountsFlag, "accounts", false, "Project mode: claude here picks the profile's account with the most limit left")
+	useCmd.Flags().StringVar(&useAccountsPool, "pool", "", "With --accounts: pick from this account pool (auto:<pool>) instead")
 	rootCmd.AddCommand(useCmd)
 }
 
@@ -91,6 +97,14 @@ func runUse(cmd *cobra.Command, args []string) error {
 
 	if useAccountsFlag && useGlobalFlag {
 		return fmt.Errorf("--accounts sets up a project folder; it cannot be used with -g")
+	}
+	if useAccountsPool != "" {
+		if !useAccountsFlag {
+			return fmt.Errorf("--pool needs --accounts")
+		}
+		if err := profile.ValidatePoolName(useAccountsPool); err != nil {
+			return err
+		}
 	}
 
 	// Interactive mode (no args)
@@ -223,7 +237,7 @@ func switchToProfile(mgr *profile.Manager, paths *config.Paths, profileName stri
 		return err
 	}
 	if useAccountsFlag {
-		return installAccountShim()
+		return installAccountShim(useAccountsPool)
 	}
 	return nil
 }

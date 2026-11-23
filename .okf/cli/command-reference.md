@@ -3,7 +3,7 @@ type: CLI Reference
 title: Command reference
 description: Every ccp command group with a one-line description and an example; hidden commands are marked.
 tags: [cli, reference, commands]
-generated: { by: antigravity/gemini-4-hydrogen, at: 2026-11-20T10:50:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T08:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md, CLI Command Reference (removed 2026-09-14 by the OKF migration)"
@@ -32,13 +32,14 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `harness`, `hub outdated`,
 | `ccp migrate` | Run migrations from older ccp versions; `--accounts` (opt-in) moves each profile's Claude login into the account of the same name | `ccp migrate --accounts --dry-run` |
 | `ccp reset` | Undo ccp and restore `~/.claude`; the plan lists account folders and their orphaned logins | `ccp reset` |
 | `ccp use <name>` | Set the project profile (auto-detects mise.toml/.envrc) | `ccp use dev` |
-| `ccp use <name> --accounts` | Set the project profile, and make plain `claude` here pick the profile's account with the most limit left (`.ccp/bin/claude` shim) | `ccp use companyA --accounts` |
+| `ccp use <name> --accounts [--pool <p>]` | Set the project profile, and make plain `claude` here pick the profile's account with the most limit left (`.ccp/bin/claude` shim); with `--pool`, the pool's (`auto:<p>`) | `ccp use companyA --accounts --pool company` |
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
 | `ccp which [--path]` | Show the active profile (and account), or its directory | `ccp which --path` |
-| `ccp account [list] [--json]` | List accounts with harness, profile, email, 5-hour and weekly use and last use; text output also shows unmanaged logins read-only (`Other logins (not accounts)`) | `ccp account` |
-| `ccp account add <name> [<profile>] [--harness claude\|agy]` | Create an account for a profile (default: the current one); Claude accounts log in via `ccp run --account <name>` and `/login`, `--harness agy` accounts sign in via `ccp run --account <name>` | `ccp account add gt1 companyA` |
-| `ccp status` | Status and health; with accounts, each one's harness, profile, email, 5-hour and 7-day use and last use | `ccp status` |
+| `ccp account [list] [--json]` | List accounts with harness, profile, pool, email, 5-hour and weekly use and last use; text output also shows unmanaged logins read-only (`Other logins (not accounts)`) | `ccp account` |
+| `ccp account add <name> [<profile>] [--harness claude\|agy] [--pool <p>]` | Create an account for a profile (default: the current one), optionally in a pool; Claude accounts log in via `ccp run --account <name>` and `/login`, `--harness agy` accounts sign in via `ccp run --account <name>` | `ccp account add gt1 companyA` |
+| `ccp account pool <name> <pool>\|--clear` | Put an account in a pool for `--account auto:<pool>`, or take it out (rewrites only the pool) | `ccp account pool gt1 company` |
+| `ccp status` | Status and health; with accounts, each one's harness, profile, pool (POOL column), email, 5-hour and 7-day use and last use | `ccp status` |
 | `ccp doctor` | Diagnose (accounts with a missing profile or broken links; on macOS, warns on orphan Claude Keychain items), and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
 | `ccp env [<profile>]` | Configure a project env for a profile, optionally under an account (`auto`: shell format only) (hidden) | `ccp env default --account work1 --format=mise` |
@@ -54,7 +55,7 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `harness`, `hub outdated`,
 | `ccp profile list` | List profiles | `ccp profile list` |
 | `ccp profile check <name>` | Validate against the manifest (hidden) | `ccp profile check quickfix` |
 | `ccp profile fix [name]` | Reconcile to the manifest | `ccp profile fix quickfix --dry-run` |
-| `ccp profile delete <name>` | Delete; refused while an account is linked to it | `ccp profile delete quickfix` |
+| `ccp profile delete <name>` | Delete; refused while a Claude account is linked to it (agy accounts only get a note) | `ccp profile delete quickfix` |
 | `ccp profile rename <old> <new>` | Rename (the new name is validated); linked accounts move with it | `ccp profile rename dev development` |
 | `ccp profile clone <src> <new>` | Clone (hidden) | `ccp profile clone default dev` |
 | `ccp profile diff <a> [b]` | Compare two profiles (hidden) | `ccp profile diff dev prod` |
@@ -111,8 +112,8 @@ Workflow and discovery layouts: [source system](/features/source-system.md).
 | `ccp link [profile] [path]` | Link a hub item (interactive without args) | `ccp link quickfix skills/vue-dev` |
 | `ccp unlink <profile> <path>` | Unlink a hub item | `ccp unlink quickfix skills/vue-dev` |
 | `ccp auto [--path]` | Profile from `.ccp.yaml` (hidden) | `ccp auto --path` |
-| `ccp session [<profile>]` | Shell with the profile active, optionally under an account (`auto` picks) (hidden) | `ccp session --account work2` |
-| `ccp run [<profile>] [--account <name>\|auto] [-- <cmd>]` | Run a command (default `claude`) with the profile, optionally under an account; a named account brings its own profile, `auto` picks the freest (hidden) | `ccp run companyA --account auto` |
+| `ccp session [<profile>]` | Shell with the profile active, optionally under an account (`auto` picks among the profile's accounts; `auto:<pool>` among pool members already linked to the profile, never a relink) (hidden) | `ccp session --account work2` |
+| `ccp run [<profile>] [--account <name>\|auto\|auto:<pool>] [-- <cmd>]` | Run a command (default `claude`) with the profile, optionally under an account; a named account brings its own profile, `auto` picks the freest, `auto:<pool>` the pool's freest from any profile (hidden) | `ccp run companyA --account auto:company` |
 
 # omp (hidden)
 

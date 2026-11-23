@@ -31,10 +31,10 @@ func NewAccountMigrator(paths *config.Paths) (*AccountMigrator, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		m.store = NewKeychainStore()
-		m.procs = newSysctlLister()
+		m.procs = NewProcessLister()
 	case "linux":
 		m.store = FileStore{}
-		m.procs = procLister{root: "/proc"}
+		m.procs = NewProcessLister()
 	default:
 		return nil, fmt.Errorf("moving logins is not supported on %s", runtime.GOOS)
 	}
@@ -325,7 +325,7 @@ func (m *AccountMigrator) isGlobal(profileDir string) bool {
 // it: refusing is safer than moving a login under a running session.
 func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *loginSource, accountDir string) []string {
 	profileDir := m.paths.ProfileDir(name)
-	resolvesToProfile := func(dir string) bool { return sameDir(dir, profileDir) }
+	resolvesToProfile := func(dir string) bool { return profile.SameDir(dir, profileDir) }
 	var pids []string
 	for _, p := range procs {
 		match := false
@@ -333,11 +333,11 @@ func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *l
 		case !p.EnvKnown:
 			match = true
 		case src.global:
-			match = p.ConfigDir == "" || sameDir(p.ConfigDir, m.paths.GlobalClaudeDir) || resolvesToProfile(p.ConfigDir)
+			match = p.ConfigDir == "" || profile.SameDir(p.ConfigDir, m.paths.GlobalClaudeDir) || resolvesToProfile(p.ConfigDir)
 		default:
 			match = p.ConfigDir != "" && resolvesToProfile(p.ConfigDir)
 		}
-		if p.EnvKnown && p.ConfigDir != "" && sameDir(p.ConfigDir, accountDir) {
+		if p.EnvKnown && p.ConfigDir != "" && profile.SameDir(p.ConfigDir, accountDir) {
 			match = true
 		}
 		if match {
@@ -345,17 +345,6 @@ func (m *AccountMigrator) usingSource(procs []ClaudeProcess, name string, src *l
 		}
 	}
 	return pids
-}
-
-// sameDir reports whether two folder paths are the same: equal once absolute
-// and clean, or resolving to the same folder through symlinks.
-func sameDir(a, b string) bool {
-	if profile.SamePath(a, b) {
-		return true
-	}
-	ra, errA := filepath.EvalSymlinks(a)
-	rb, errB := filepath.EvalSymlinks(b)
-	return errA == nil && errB == nil && ra == rb
 }
 
 // move copies the login to target, verifies it, carries oauthAccount into the

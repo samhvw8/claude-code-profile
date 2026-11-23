@@ -27,8 +27,8 @@ Shows:
 - Hub item counts
 - Profile health (drift, broken symlinks)
 - Overall system health
-- Accounts, when any exist: each account's profile, 5-hour and weekly plan
-  usage (read at most every 5 minutes) and when it was last used`,
+- Accounts, when any exist: each account's harness, profile, pool, 5-hour and
+  weekly plan usage (read at most every 5 minutes) and when it was last used`,
 	RunE: runStatus,
 }
 

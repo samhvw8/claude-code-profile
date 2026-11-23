@@ -132,11 +132,7 @@ func relinkAgyAccountDir(dir, account, profileName string, existing accountBindi
 	case !relink:
 		return "", fmt.Errorf("account %q is linked to profile %q; close its agy sessions, then rerun with --relink", account, existing.Profile)
 	}
-	if err := writeAccountBinding(dir, accountBinding{
-		Profile:      profileName,
-		Harness:      HarnessAgy,
-		MigratedFrom: existing.MigratedFrom,
-	}); err != nil {
+	if err := writeAccountBinding(dir, rebound(existing, profileName, HarnessAgy)); err != nil {
 		return "", fmt.Errorf("failed to record account binding: %w", err)
 	}
 	return dir, nil

@@ -15,6 +15,8 @@ import (
 var (
 	accountListJSON   bool
 	accountAddHarness string
+	accountAddPool    string
+	accountPoolClear  bool
 )
 
 var accountCmd = &cobra.Command{
@@ -32,6 +34,8 @@ file-based token storage in ~/.gemini/antigravity-cli-ccp-<name>/.
   ccp run --account gt1                          # start Claude on it; type /login once
   ccp run --account agy1                         # start agy on it; sign in once
   ccp run companyA --account auto               # the account with the most limit left
+  ccp account pool gt1 company                   # put gt1 in pool "company"
+  ccp run --account auto:company                 # freest account of the pool, any profile
   eval "$(ccp env --account gt2)"                # this terminal only (Claude only)
 
 With no subcommand, ccp account lists the accounts.`,
@@ -42,8 +46,8 @@ With no subcommand, ccp account lists the accounts.`,
 var accountListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
-	Short:   "List accounts with their harness, profile, login and plan usage",
-	Long: `List every account with its harness (claude/agy), profile, email, 5-hour and
+	Short:   "List accounts with their harness, profile, pool, login and plan usage",
+	Long: `List every account with its harness (claude/agy), profile, pool, email, 5-hour and
 weekly plan usage, model-scoped weeks, the age of the usage read and when ccp
 last started it. Usage is read at most every 5 minutes per account.`,
 	Args: cobra.NoArgs,
@@ -64,16 +68,83 @@ settings and no symlinks: run 'ccp run --account <name>' to sign in once.
 
 The profile defaults to the current one (CLAUDE_CONFIG_DIR, else ~/.claude).
 An account that already exists is refused; move it to another profile with
---relink.`,
+--relink.
+
+--pool puts the new account in a pool for 'ccp run --account auto:<pool>':
+  ccp account add gt3 companyA --pool company`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runAccountAdd,
+}
+
+var accountPoolCmd = &cobra.Command{
+	Use:   "pool <name> (<pool>|--clear)",
+	Short: "Put an account in a pool, or take it out",
+	Long: `Set the pool of an existing account, or clear it with --clear. Only the pool
+in ~/.ccp/accounts/<name>/.ccp-account.toml changes.
+
+'ccp run --account auto:<pool>' picks the pool's account with the most plan
+limit left, whatever profile it is linked to. A Claude account linked to
+another profile is relinked to the requested one, but only while no Claude
+Code session runs on it. An account is in at most one pool.
+
+  ccp account pool gt1 company     # gt1 joins pool "company"
+  ccp account pool gt1 --clear     # gt1 leaves its pool`,
+	Args: cobra.RangeArgs(1, 2),
+	RunE: runAccountPool,
 }
 
 func init() {
 	accountCmd.PersistentFlags().BoolVarP(&accountListJSON, "json", "j", false, "Output as JSON")
 	accountAddCmd.Flags().StringVar(&accountAddHarness, "harness", profile.HarnessClaude, "Account harness: claude or agy")
-	accountCmd.AddCommand(accountListCmd, accountAddCmd)
+	accountAddCmd.Flags().StringVar(&accountAddPool, "pool", "", "Put the account in a pool (for --account auto:<pool>)")
+	accountPoolCmd.Flags().BoolVar(&accountPoolClear, "clear", false, "Take the account out of its pool")
+	accountCmd.AddCommand(accountListCmd, accountAddCmd, accountPoolCmd)
 	rootCmd.AddCommand(accountCmd)
+}
+
+func runAccountPool(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	pool := ""
+	switch {
+	case accountPoolClear && len(args) == 2:
+		return fmt.Errorf("give a pool or --clear, not both")
+	case !accountPoolClear && len(args) == 1:
+		return fmt.Errorf("give a pool name, or --clear to take %s out of its pool", name)
+	case len(args) == 2:
+		pool = args[1]
+		if pool == "" {
+			return fmt.Errorf("empty pool name; use --clear to take %s out of its pool", name)
+		}
+	}
+	cmd.SilenceUsage = true
+	if err := profile.ValidateAccountName(name); err != nil {
+		return err
+	}
+	if pool != "" {
+		if err := profile.ValidatePoolName(pool); err != nil {
+			return err
+		}
+	}
+	paths, err := config.ResolvePaths()
+	if err != nil {
+		return err
+	}
+	if !paths.IsInitialized() {
+		return fmt.Errorf("ccp not initialized: run 'ccp init' first")
+	}
+	dir := paths.AccountDir(name)
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("account %q does not exist; add it with 'ccp account add %s'", name, name)
+	}
+	if err := setPoolLocked(paths, name, pool); err != nil {
+		return err
+	}
+	if pool == "" {
+		fmt.Printf("Account %s is in no pool\n", name)
+	} else {
+		fmt.Printf("Account %s is in pool %s; pick from it with: ccp run --account auto:%s\n", name, pool, pool)
+	}
+	return nil
 }
 
 func runAccountList(cmd *cobra.Command, args []string) error {
@@ -127,6 +198,11 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if accountAddPool != "" {
+		if err := profile.ValidatePoolName(accountAddPool); err != nil {
+			return err
+		}
+	}
 	paths, err := config.ResolvePaths()
 	if err != nil {
 		return err
@@ -163,7 +239,11 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return err
 		}
+		if err := setNewAccountPool(dir); err != nil {
+			return err
+		}
 		fmt.Printf("Account %s (agy) created for profile %s: %s\n", name, profileName, dir)
+		printNewAccountPool()
 		fmt.Println("Sign in once with:")
 		fmt.Printf("  ccp run --account %s\n", name)
 		return nil
@@ -176,8 +256,32 @@ func runAccountAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := setNewAccountPool(dir); err != nil {
+		return err
+	}
 	fmt.Printf("Account %s created for profile %s: %s\n", name, profileName, dir)
+	printNewAccountPool()
 	fmt.Println("Log in once:")
 	fmt.Printf("  ccp run --account %s        # type /login in Claude Code\n", name)
 	return nil
+}
+
+// setNewAccountPool records --pool on a just-created account (the name was
+// validated before the folder was created).
+func setNewAccountPool(dir string) error {
+	if accountAddPool == "" {
+		return nil
+	}
+	if err := profile.SetAccountPool(dir, accountAddPool); err != nil {
+		return fmt.Errorf("account created, but its pool was not set: %w", err)
+	}
+	return nil
+}
+
+// printNewAccountPool names the pool of a just-created account, after the
+// line that says it was created.
+func printNewAccountPool() {
+	if accountAddPool != "" {
+		fmt.Printf("In pool %s (ccp run --account auto:%s)\n", accountAddPool, accountAddPool)
+	}
 }
