@@ -1,5 +1,8 @@
 # Update Log
 
+## 2026-11-23
+* **Update**: Released v0.57.1: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
+
 ## 2026-11-22
 * **Update**: Released v0.57.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Decision**: [Custom harness plugins use TOML manifests or JSON exec plugins](/decisions/harness-plugins-toml-and-exec.md) — added hidden `ccp harness` (`list`, `check`, `sync`, `remove`) supporting declarative `~/.ccp/harnesses/<id>.toml` manifests and stdin/stdout JSON executables (`~/.ccp/harnesses/<id>` or `ccp-harness-<id>` on `PATH`). Both produce a validated `HarnessPlan` executed through ccp's shared copy ledger (`~/.ccp/state/harnesses/<id>.json`), symlink guards, and output-style carrier ledger; integrated into `followHarnesses`, `ccp reset`, and `ccp doctor`. Updated [decisions index](/decisions/index.md), [command reference](/cli/command-reference.md), [command flags](/cli/command-flags.md), and [directory layout](/architecture/directory-layout.md).
