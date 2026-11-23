@@ -97,6 +97,9 @@ func runDoctor(cmd *cobra.Command, args []string) error {
 	for _, n := range accountNotes(paths) {
 		fmt.Printf("  info: %s\n", n)
 	}
+	for _, n := range mcpNotes(paths, doctorFix) {
+		fmt.Printf("  info: %s\n", n)
+	}
 
 	// Check 3: Hub structure
 	fmt.Print("Checking hub structure... ")
@@ -607,6 +610,54 @@ func accountNotes(paths *config.Paths) []string {
 	for _, a := range accounts {
 		if a.Err == nil && a.Harness == profile.HarnessAgy && !mgr.Exists(a.Profile) {
 			notes = append(notes, fmt.Sprintf("agy account %s defaults to missing profile '%s'; it runs on the current profile (or the one named), and 'ccp run <profile> --account %s --relink' sets a new default", a.Name, a.Profile, a.Name))
+		}
+	}
+	return notes
+}
+
+// mcpNotes reports, per profile with Claude accounts, MCP servers that stay on
+// one account: with no profile MCP file, that every 'claude mcp add' stays on
+// the account it ran on (with fix, the file is created from the profile's own
+// servers); with one, the servers an account has that the file lacks. It
+// never writes Claude Code's state.
+func mcpNotes(paths *config.Paths, fix bool) []string {
+	accounts, err := profile.ListAccounts(paths)
+	if err != nil {
+		return nil
+	}
+	byProfile := map[string][]profile.Account{}
+	var order []string
+	for _, a := range accounts {
+		if a.Err != nil || a.Harness != profile.HarnessClaude || !profile.NewManager(paths).Exists(a.Profile) {
+			continue
+		}
+		if _, seen := byProfile[a.Profile]; !seen {
+			order = append(order, a.Profile)
+		}
+		byProfile[a.Profile] = append(byProfile[a.Profile], a)
+	}
+	var notes []string
+	for _, p := range order {
+		file, ok := profile.ProfileMCPPath(paths, p)
+		if !ok {
+			if !fix {
+				notes = append(notes, fmt.Sprintf("profile %s has no %s: an MCP server added with 'claude mcp add' stays on the account it ran on; 'ccp doctor --fix' creates the file from the profile's servers", p, profile.MCPFile))
+				continue
+			}
+			names, err := profile.CreateProfileMCP(paths, p)
+			if err != nil {
+				notes = append(notes, fmt.Sprintf("could not create %s: %v", file, err))
+				continue
+			}
+			notes = append(notes, fmt.Sprintf("created %s (0600) with %d MCP servers of profile %s: %s; every 'ccp run' on %s now passes it", file, len(names), p, strings.Join(names, ", "), p))
+		}
+		for _, a := range byProfile[p] {
+			only, err := profile.AccountOnlyMCP(paths, p, a.Dir)
+			if err != nil {
+				notes = append(notes, fmt.Sprintf("account %s: cannot compare MCP servers: %v", a.Name, err))
+			} else if len(only) > 0 {
+				notes = append(notes, fmt.Sprintf("MCP servers only on account %s: %s; add them to %s to share them", a.Name, strings.Join(only, ", "), file))
+			}
 		}
 	}
 	return notes

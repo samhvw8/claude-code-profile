@@ -266,6 +266,8 @@ Keychain.
 
 **Known limits.**
 
+- **MCP servers.** `claude mcp add` writes the account's own `.claude.json`; shared servers go
+  in the profile's `mcp.json` ([decision](/decisions/profile-mcp-file.md)).
 - **Seeded caches.** The seed copies the profile's whole `.claude.json` except `oauthAccount`,
   so org-scoped caches of the other login come along; Claude Code refreshes them for the new
   login.

@@ -624,14 +624,7 @@ func accountSeed(paths *config.Paths, dir, profileDir string) ([]byte, string, e
 		return nil, "", err
 	}
 
-	// A profile activated globally (~/.claude -> profile) keeps its state in
-	// ~/.claude.json; one activated by CLAUDE_CONFIG_DIR keeps it inside.
-	src := filepath.Join(profileDir, claudeStateFile)
-	if global, err := filepath.EvalSymlinks(paths.GlobalClaudeDir); err == nil {
-		if real, err := filepath.EvalSymlinks(profileDir); err == nil && global == real {
-			src = filepath.Join(filepath.Dir(paths.GlobalClaudeDir), claudeStateFile)
-		}
-	}
+	src := ProfileStatePath(paths, profileDir)
 	// Claude Code 2.1 prefers a non-empty .config.json next to .claude.json;
 	// ccp does not read it, so the account starts without that state.
 	warning := ""

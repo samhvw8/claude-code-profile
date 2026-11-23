@@ -39,6 +39,7 @@ sources:
 │       ├── CLAUDE.md
 │       ├── settings.json       # Generated
 │       ├── settings-fragment.json   # Captured edits (ccp profile capture)
+│       ├── mcp.json            # Optional shared MCP servers; ccp run passes --mcp-config=<it> (0600, not in git)
 │       ├── skills/ agents/ hooks/ rules/ commands/  # Relative symlinks → hub
 │       ├── plugins/
 │       │   ├── marketplaces → store/plugins/marketplaces

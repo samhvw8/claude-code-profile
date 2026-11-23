@@ -5,6 +5,7 @@ Settled choices with their rationale. Do not re-open one without a user request;
 # Architecture and product
 
 * [Account pools: auto:<pool> picks across profiles](account-pools.md) - 2026-11-23: An account names at most one pool; --account auto:<pool> picks across profiles, ccp run relinks a free Claude account (process scan plus flock), env and session never relink.
+* [Shared MCP servers: a profile mcp.json passed with --mcp-config](profile-mcp-file.md) - 2026-11-23: profiles/<name>/mcp.json reaches every account through ccp run's --mcp-config=<file>; ccp never writes .claude.json and only reports servers added on one account.
 * [Account is the sixth concept; the budget is seven for now](account-concept.md) - 2026-11-18: The concept budget rises from five to seven and Account becomes a concept with a visible ccp account command (list, add, and since 2026-11-23 pool); the --account mechanism is unchanged.
 * [Accounts are an option of Activation](accounts-as-activation-option.md) - 2026-11-17: One profile runs under several Claude logins through account folders chosen with --account, or --account auto for the one with the most plan limit left; supersedes the per-profile API key decision.
 * [v0.28 simplification: flat profiles](v0-28-simplification.md) - Profiles are flat — no engine/context composition layers; the hub is the sharing mechanism.

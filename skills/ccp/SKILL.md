@@ -381,6 +381,7 @@ login moves, plain `claude` is logged out. Prefer `ccp account add` plus a fresh
 | `none of these accounts is logged in` | Log in one account (`ccp run --account <name>`, `/login`), or start through the `--accounts` shim, which falls back to the profile |
 | `every account of pool … is linked to another profile and …` | Each pooled seat runs a Claude session on another profile (or sessions cannot be checked). Close one, or use `--or-profile` / the shim, which falls back to the profile |
 | `Warning: mcp-needs-auth-cache.json is a real file …` | Claude Code replaced that link with a file. Harmless |
+| An MCP server is gone after switching account | `claude mcp add` writes only the account in use. Put shared servers in `~/.ccp/profiles/<profile>/mcp.json` (`ccp doctor --fix` creates it from the profile's servers); `ccp run` passes it to every account. `ccp run` and `ccp doctor` list servers that exist on one account only |
 | The status line shows another account's usage | The status line tool caches usage globally; trust `ccp account` |
 
 ## Tips

@@ -40,7 +40,7 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `harness`, `hub outdated`,
 | `ccp account add <name> [<profile>] [--harness claude\|agy] [--pool <p>]` | Create an account for a profile (default: the current one), optionally in a pool; Claude accounts log in via `ccp run --account <name>` and `/login`, `--harness agy` accounts sign in via `ccp run --account <name>` | `ccp account add gt1 companyA` |
 | `ccp account pool <name> <pool>\|--clear` | Put an account in a pool for `--account auto:<pool>`, or take it out (rewrites only the pool) | `ccp account pool gt1 company` |
 | `ccp status` | Status and health; with accounts, each one's harness, profile, pool (POOL column), email, 5-hour and 7-day use and last use | `ccp status` |
-| `ccp doctor` | Diagnose (accounts with a missing profile or broken links; on macOS, warns on orphan Claude Keychain items), and with `--fix` repair (including hub copies of source items → shadows) | `ccp doctor --fix` |
+| `ccp doctor` | Diagnose (accounts with a missing profile or broken links; MCP servers only on one account; on macOS, warns on orphan Claude Keychain items), and with `--fix` repair (including hub copies of source items → shadows, and a missing profile `mcp.json` created from the profile's servers) | `ccp doctor --fix` |
 | `ccp usage` | Hub item usage across profiles (hidden) | `ccp usage` |
 | `ccp env [<profile>]` | Configure a project env for a profile, optionally under an account (`auto`: shell format only) (hidden) | `ccp env default --account work1 --format=mise` |
 | `ccp config init` | Write a default `ccp.toml` | `ccp config init` |
@@ -113,7 +113,7 @@ Workflow and discovery layouts: [source system](/features/source-system.md).
 | `ccp unlink <profile> <path>` | Unlink a hub item | `ccp unlink quickfix skills/vue-dev` |
 | `ccp auto [--path]` | Profile from `.ccp.yaml` (hidden) | `ccp auto --path` |
 | `ccp session [<profile>]` | Shell with the profile active, optionally under an account (`auto` picks among the profile's accounts; `auto:<pool>` among pool members already linked to the profile, never a relink) (hidden) | `ccp session --account work2` |
-| `ccp run [<profile>] [--account <name>\|auto\|auto:<pool>] [-- <cmd>]` | Run a command (default `claude`) with the profile, optionally under an account; a named account brings its own profile, `auto` picks the freest, `auto:<pool>` the pool's freest from any profile (hidden) | `ccp run companyA --account auto:company` |
+| `ccp run [<profile>] [--account <name>\|auto\|auto:<pool>] [-- <cmd>]` | Run a command (default `claude`) with the profile, optionally under an account; a named account brings its own profile, `auto` picks the freest, `auto:<pool>` the pool's freest from any profile; Claude gets `--mcp-config=<profile>/mcp.json` when that file exists (hidden) | `ccp run companyA --account auto:company` |
 
 # omp (hidden)
 

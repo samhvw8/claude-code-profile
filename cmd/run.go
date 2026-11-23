@@ -190,6 +190,9 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 	if ra.orProfile {
 		if dir := currentAccountDir(paths); dir != "" {
 			if h, err := profile.AccountHarness(dir); err == nil && h == harness && h == profile.HarnessClaude {
+				if bound, err := profile.AccountProfile(dir); err == nil {
+					cmdArgs = withProfileMCP(paths, bound, cmdArgs)
+				}
 				execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 				execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+dir)
 				return execCmd, release, nil
@@ -209,6 +212,7 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 		} else {
 			fmt.Fprintf(os.Stderr, "ccp: no account of profile %s is logged in; running on the profile\n", profileName)
 		}
+		cmdArgs = withProfileMCP(paths, profileName, cmdArgs)
 		execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 		execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+paths.ProfileDir(profileName))
 		return execCmd, release, nil
@@ -263,7 +267,9 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 	}
 	if account != "" {
 		markAccountUsed(configDir)
+		reportAccountOnlyMCP(paths, profileName, account, configDir)
 	}
+	cmdArgs = withProfileMCP(paths, profileName, cmdArgs)
 	execCmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 	execCmd.Env = profile.WithEnv(os.Environ(), "CLAUDE_CONFIG_DIR="+configDir)
 	return execCmd, release, nil
