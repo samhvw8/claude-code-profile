@@ -10,9 +10,10 @@ import (
 )
 
 var piCmd = &cobra.Command{
-	Use:    "pi",
-	Short:  "Carry a profile's output style into pi",
-	Hidden: true,
+	Annotations: map[string]string{harnessAnnotation: "true"},
+	Use:         "pi",
+	Short:       "Carry a profile's output style into pi",
+	Hidden:      true,
 	Long: `Carry a ccp profile's output style into pi (~/.pi/agent, or
 PI_CODING_AGENT_DIR).
 

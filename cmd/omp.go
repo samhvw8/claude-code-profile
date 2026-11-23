@@ -21,9 +21,10 @@ var (
 )
 
 var ompCmd = &cobra.Command{
-	Use:    "omp",
-	Short:  "Link hub items to omp (oh-my-pi)",
-	Hidden: true,
+	Annotations: map[string]string{harnessAnnotation: "true"},
+	Use:         "omp",
+	Short:       "Link hub items to omp (oh-my-pi)",
+	Hidden:      true,
 	Long: `Manage ccp hub links for omp, the oh-my-pi coding agent.
 
 omp reads its own config from ~/.omp/agent/ and only loads ~/.claude when its

@@ -18,9 +18,10 @@ import (
 var harnessListJSON bool
 
 var harnessCmd = &cobra.Command{
-	Use:    "harness",
-	Short:  "Manage custom harness plugins (TOML manifests and executable plugins)",
-	Hidden: true,
+	Annotations: map[string]string{harnessAnnotation: "true"},
+	Use:         "harness",
+	Short:       "Manage custom harness plugins (TOML manifests and executable plugins)",
+	Hidden:      true,
 	Long: `Mirror a ccp profile into custom harnesses using declarative TOML manifests
 (~/.ccp/harnesses/<id>.toml) or executable stdin/stdout JSON plugins
 (~/.ccp/harnesses/<id> or ccp-harness-<id> on PATH).

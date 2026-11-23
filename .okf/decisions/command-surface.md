@@ -23,4 +23,7 @@ The CLI was approaching git-level surface area for a profile switcher.
 # Implication
 
 Hidden commands still work, just not in `--help`. Don't unhide without strong justification.
+Since 2026-11-23 the hidden harness commands (`omp`, `opencode`, `agy`, `pi`, `harness`) are named
+in an "Other harnesses" footer of `ccp --help`, built from the `ccp-harness` annotation on each
+command; they stay out of the command list and the count.
 The current hidden set is listed in the [command reference](/cli/command-reference.md).

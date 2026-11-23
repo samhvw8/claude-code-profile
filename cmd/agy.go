@@ -12,9 +12,10 @@ import (
 )
 
 var agyCmd = &cobra.Command{
-	Use:    "agy",
-	Short:  "Mirror a profile into Antigravity CLI (agy)",
-	Hidden: true,
+	Annotations: map[string]string{harnessAnnotation: "true"},
+	Use:         "agy",
+	Short:       "Mirror a profile into Antigravity CLI (agy)",
+	Hidden:      true,
 	Long: `Mirror a ccp profile into Antigravity CLI (agy), whose global config is
 ~/.gemini/config.
 

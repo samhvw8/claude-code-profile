@@ -12,9 +12,10 @@ import (
 )
 
 var opencodeCmd = &cobra.Command{
-	Use:    "opencode",
-	Short:  "Mirror a profile into opencode",
-	Hidden: true,
+	Annotations: map[string]string{harnessAnnotation: "true"},
+	Use:         "opencode",
+	Short:       "Mirror a profile into opencode",
+	Hidden:      true,
 	Long: `Mirror a ccp profile into opencode (~/.config/opencode).
 
 opencode already reads ~/.claude/CLAUDE.md and ~/.claude/skills/, which follow

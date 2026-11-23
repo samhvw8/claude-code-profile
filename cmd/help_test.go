@@ -56,6 +56,33 @@ func TestHubHelpNamesEveryType(t *testing.T) {
 	}
 }
 
+// The hidden harness commands stay out of the command list but are named in
+// a footer of the root help only.
+func TestRootHelpNamesHiddenHarnesses(t *testing.T) {
+	var out strings.Builder
+	rootCmd.SetOut(&out)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	if err := rootCmd.Usage(); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	_, footer, ok := strings.Cut(got, "Other harnesses")
+	if !ok {
+		t.Fatalf("no harness footer:\n%s", got)
+	}
+	for _, name := range []string{"agy", "harness", "omp", "opencode", "pi"} {
+		if !strings.Contains(footer, "  "+name+" ") {
+			t.Errorf("footer misses %s:\n%s", name, footer)
+		}
+	}
+	if strings.Contains(footer, "  run ") || strings.Contains(footer, "  env ") {
+		t.Errorf("footer lists a non-harness command:\n%s", footer)
+	}
+	if harnessFooter(statusCmd) != "" {
+		t.Error("footer shown below the root")
+	}
+}
+
 func TestStatusHelpNamesAccounts(t *testing.T) {
 	if !strings.Contains(statusCmd.Long, "Accounts") {
 		t.Errorf("status help does not mention the accounts table:\n%s", statusCmd.Long)
