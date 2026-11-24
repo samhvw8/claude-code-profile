@@ -332,7 +332,7 @@ ccp session --account gt2                     # a sub-shell on gt2
 ccp env companyA --account gt2 --format=mise # pin a folder to one account
 ```
 
-Everything after `--` is the command; name `claude` before its flags.
+Everything after `--` is the command. When the first word after `--` starts with `-`, the words are arguments for the default command (the account's harness, else `claude`).
 
 ### How auto picks
 

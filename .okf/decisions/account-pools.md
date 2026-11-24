@@ -4,7 +4,7 @@ title: "Account pools: auto:<pool> picks across profiles"
 description: "2026-11-23: An account may name one pool; --account auto:<pool> picks the pool's freest account whatever profile it is linked to. ccp run relinks a free Claude account (process scan plus a flock); env and session never relink; agy accounts run on any profile."
 tags: [decision, accounts, activation, pools]
 decided: 2026-11-23
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T08:00:00Z }
+generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T10:10:00Z }
 ---
 
 # Decision
@@ -23,6 +23,11 @@ Set it with `ccp account add <name> [<profile>] --pool <p>` or `ccp account pool
 (`--clear` removes it). Every binding writer (`LinkAccount`, the agy relink) carries the
 existing binding forward and changes only the profile and harness, so a relink keeps the pool
 (and `migrated_from`).
+
+`ccp account pool` works on an account that already exists: it rewrites only the pool, so the
+login, profile and harness stay. An account names one pool at most. There is no free label or
+second group on an account: grouping is the pool, and a new grouping need changes the pool (for
+example, several values), not adds a field beside it.
 
 # How a pick works
 

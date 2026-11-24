@@ -259,7 +259,7 @@ ccp run dev -- claude --continue     # one command; the default command is claud
 eval "$(ccp env dev)"                # this terminal only
 ```
 
-Everything after `--` is the command and its arguments, so name `claude` before its flags.
+Everything after `--` is the command and its arguments. When the first word after `--` starts with `-`, the words are arguments for the default command (`ccp run dev -- --continue` runs `claude --continue`).
 
 Claude Code loads the profile's `CLAUDE.md` and rules from `CLAUDE_CONFIG_DIR` (or the `~/.claude` symlink) by itself. Don't wrap `claude` in an alias that adds `--add-dir`: since Claude Code 2.1.326 that asks for workspace trust on every start.
 
@@ -275,6 +275,14 @@ ccp run --account work1          # log in with /login
 ccp account add work2 work
 ccp run --account work2
 ccp account                      # list accounts and their usage
+```
+
+An account can also be an Antigravity CLI (`agy`) login. `ccp run` on it starts `agy`:
+
+```bash
+ccp account add agy1 work --harness agy
+ccp run --account agy1                   # sign in once
+ccp run --account agy1 -- --model <m>    # agy flags only: no need to name agy
 ```
 
 Then use them:
@@ -306,9 +314,18 @@ ccp run client --account auto:company    # the pool's freest account, relinked t
 ccp use client --accounts --pool company # the folder's claude picks from the pool
 ```
 
+`ccp account pool` works on an account that already exists and keeps its login. An account is in one pool at most; `ccp account pool work1 --clear` takes it out.
+
 `ccp run` relinks a Claude account only while no Claude Code process runs on it; `ccp env` and `ccp session` never relink and only take pool members already linked to the profile.
 
 `--account auto` picks among the accounts linked to the profile, once, when the command starts. It reads each account's plan usage from Claude's usage endpoint (cached 5 minutes) and prefers an account under 80% of its 5-hour limit and 95% of its weekly limit. When usage is unknown or equal, it picks the account used least recently. ccp never refreshes a token and never switches accounts in a running session: to move off a busy account, start Claude Code again.
+
+Remove an account when you no longer need it. ccp refuses while a session runs on it:
+
+```bash
+ccp account remove work1         # delete only the login; the folder and pool stay, so you can log in again
+ccp account remove work1 --all   # delete the login and the account folder (for agy, also its data folder)
+```
 
 `ccp migrate --accounts [--dry-run]` moves each profile's existing login into the account of the same name.
 
