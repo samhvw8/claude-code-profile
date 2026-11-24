@@ -114,7 +114,7 @@ Workflow and discovery layouts: [source system](/features/source-system.md).
 | `ccp unlink <profile> <path>` | Unlink a hub item | `ccp unlink quickfix skills/vue-dev` |
 | `ccp auto [--path]` | Profile from `.ccp.yaml` (hidden) | `ccp auto --path` |
 | `ccp session [<profile>]` | Shell with the profile active, optionally under an account (`auto` picks among the profile's accounts; `auto:<pool>` among pool members already linked to the profile, never a relink) (hidden) | `ccp session --account work2` |
-| `ccp run [<profile>] [--account <name>\|auto\|auto:<pool>] [-- <cmd>]` | Run a command (default `claude`) with the profile, optionally under an account; a named account brings its own profile, `auto` picks the freest, `auto:<pool>` the pool's freest from any profile; with `auto` and no command, `agy` starts when every candidate account is agy; Claude gets `--mcp-config=<profile>/mcp.json` when that file exists (hidden) | `ccp run companyA --account auto:company` |
+| `ccp run [<profile>] [--account <name>\|auto\|auto:<pool>] [-- [<cmd>] [args...]]` | Run a command (default `claude`) with the profile, optionally under an account; a named account brings its own profile, `auto` picks the freest, `auto:<pool>` the pool's freest from any profile; with `auto` and no command, `agy` starts when every candidate account is agy; words after `--` that start with `-` are arguments for the default command (`ccp run --account agy1 -- --model x` runs `agy --model x`); Claude gets `--mcp-config=<profile>/mcp.json` when that file exists (hidden) | `ccp run companyA --account auto:company` |
 
 # omp (hidden)
 

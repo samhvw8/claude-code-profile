@@ -83,7 +83,7 @@ profile, hub-changing commands, and `ccp bootstrap`. `ccp agy` is hidden
 `ccp account add <name> [<profile>] --harness agy` creates an account bound to a profile with
 `harness = "agy"` in `.ccp-account.toml` (`~/.ccp/accounts/<name>/`, no symlinks) and an isolated
 agy data folder `~/.gemini/antigravity-cli-ccp-<name>/`. `ccp run --account <name>` (or
-`ccp run <profile> --account auto -- agy`, or `--account auto` with no command when every candidate account is agy) runs `agy` with `--app_data_dir=antigravity-cli-ccp-<name>`
+`ccp run <profile> --account auto -- agy`, or `--account auto` with no command when every candidate account is agy) runs `agy`, with any flags given after `--` (`ccp run --account <name> -- --model <m>`), with `--app_data_dir=antigravity-cli-ccp-<name>`
 and `SSH_CLIENT="ccp 0 0"` (on any profile; the bound one is only the default, `--relink` changes it) so `agy` uses file-based token storage instead of the shared Keychain,
 refreshes `~/.gemini/antigravity-cli-ccp-<name>/settings.json` from main while keeping extra list
 items (`permissions.{allow,deny,ask}`, `trustedWorkspaces`), and leaves `CLAUDE_CONFIG_DIR` on the

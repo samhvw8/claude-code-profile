@@ -4,7 +4,7 @@ title: "agy accounts use file-based token storage with --app_data_dir and SSH_CL
 description: "2026-11-20: Account bindings gain harness = \"agy\" (default claude). Each agy account runs in ~/.gemini/antigravity-cli-ccp-<name>/ with SSH_CLIENT set, merged settings.json, and quota read via agy -p /usage."
 tags: [decision, agy, accounts, activation]
 decided: 2026-11-20
-generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T05:00:00Z }
+generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T09:00:00Z }
 sources:
   - id: agy-auth-re
     resource: research/261119-agy-accounts/agy-auth-re.md
@@ -60,6 +60,11 @@ empty sets stay on `claude`. `--or-profile` turns detection off: its fallback ru
 the profile itself, and a bare `agy` there would use the shared agy login. An explicit command
 (`-- claude`, `-- agy`) is never changed, so
 the `use --accounts` shim (which passes the real `claude`) behaves as before.
+
+Words after `--` that start with `-` are not a command: they are arguments for the default command
+(`ccp run --account agy1 -- --model x` runs `agy --model x`; with no account, `claude`). The command
+then counts as not given, so the detection above applies. Before this, the first flag was read as
+the command name and always failed. On a mixed set `claude` starts and gets the flags.
 
 Rejected: picking the freest account across both harnesses. The program that starts would then
 change from run to run with the quota, and Claude Code and agy are not interchangeable.

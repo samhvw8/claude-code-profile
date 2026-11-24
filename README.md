@@ -283,6 +283,7 @@ Then use them:
 ccp run --account work2                          # this account, its own profile
 ccp run work --account auto                      # the account with the most limit left
 ccp run work --account auto -- claude --resume   # with claude flags
+ccp run work --account auto -- --resume          # flags only: they go to the default command (claude, or agy when every account is agy)
 eval "$(ccp env work --account auto)"            # this terminal only
 ccp status                                       # each account's 5-hour and weekly usage
 ```

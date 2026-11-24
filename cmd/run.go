@@ -16,7 +16,7 @@ import (
 )
 
 var runCmd = &cobra.Command{
-	Use:    "run [<profile>] [--account <name>|auto|auto:<pool> [--relink|--or-profile]] [-- <command> [args...]]",
+	Use:    "run [<profile>] [--account <name>|auto|auto:<pool> [--relink|--or-profile]] [-- [<command>] [args...]]",
 	Hidden: true,
 	Short:  "Run a command with a specific profile active",
 	Long: `Execute a command with CLAUDE_CONFIG_DIR set to the specified profile.
@@ -46,6 +46,9 @@ skipped. The pick line names the pool and any relink.
 With --account auto or auto:<pool> and no command, if every candidate account is
 agy, ccp starts agy instead of claude (not with --or-profile).
 
+Words after -- that start with "-" are arguments for the default command:
+'ccp run --account agy1 -- --model x' runs 'agy --model x'.
+
 --or-profile (with --account auto or auto:<pool>) never fails for lack of an account: a
 session already on an account keeps it, and with no account free and logged in it
 runs on the profile itself. The shim from 'ccp use --accounts' passes it.
@@ -53,6 +56,7 @@ runs on the profile itself. The shim from 'ccp use --accounts' passes it.
 Examples:
   ccp run --account work1                  # claude, account work1's profile
   ccp run --account agy1                   # agy, account agy1's profile
+  ccp run --account agy1 -- --model x      # agy --model x (flags only: default command)
   ccp run --account auto -- claude -c      # continue on the freest Claude account
   ccp run --account auto -- agy            # start on the freest agy account
   ccp run companyA --account auto:company # freest account of pool company
@@ -155,7 +159,7 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 		switch {
 		case bindErr == nil:
 			if !ra.commandExplicit && acctHarness == profile.HarnessAgy {
-				cmdArgs = []string{profile.HarnessAgy}
+				cmdArgs[0] = profile.HarnessAgy
 			}
 			if cmdH := commandHarness(cmdArgs[0]); cmdH != acctHarness {
 				return nil, release, fmt.Errorf("account %q uses harness %s; cannot run %q", ra.account, acctHarness, filepath.Base(cmdArgs[0]))
@@ -176,7 +180,7 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 			}
 			if profile.IsAgyAccountDir(ra.account, paths.AccountDir(ra.account)) || commandHarness(cmdArgs[0]) == profile.HarnessAgy {
 				if !ra.commandExplicit {
-					cmdArgs = []string{profile.HarnessAgy}
+					cmdArgs[0] = profile.HarnessAgy
 				}
 				if commandHarness(cmdArgs[0]) != profile.HarnessAgy {
 					return nil, release, fmt.Errorf("account %q uses harness %s; cannot run %q", ra.account, profile.HarnessAgy, filepath.Base(cmdArgs[0]))
@@ -215,7 +219,7 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 			return nil, release, err
 		}
 		if isAgy {
-			cmdArgs = []string{profile.HarnessAgy}
+			cmdArgs[0] = profile.HarnessAgy
 			harness = profile.HarnessAgy
 			if pool != "" {
 				fmt.Fprintf(os.Stderr, "ccp: every account of pool %s is agy; starting agy\n", pool)
@@ -313,13 +317,20 @@ type runArgs struct {
 // parseRunArgs reads "[<profile>] [--account <name>] [--relink] [-- <command>]".
 // Flag parsing is off for run so the command's own flags pass through; only
 // the arguments before "--" belong to ccp. Without "--" the command is claude
-// (or agy when the named account uses harness agy).
+// (or agy when the named account uses harness agy). Words after "--" that
+// start with "-" are arguments for that default command.
 func parseRunArgs(args []string) (runArgs, error) {
 	var ra runArgs
 	own, command := args, []string{"claude"}
 	if sep := slices.Index(args, "--"); sep >= 0 {
 		own, command = args[:sep], args[sep+1:]
 		ra.commandExplicit = true
+		// A program name never starts with "-": such words are arguments
+		// for the default command.
+		if len(command) > 0 && strings.HasPrefix(command[0], "-") {
+			command = append([]string{"claude"}, command...)
+			ra.commandExplicit = false
+		}
 	}
 	// Flag parsing is off, so cobra never sees a help flag: handle it here.
 	if slices.Contains(own, "-h") || slices.Contains(own, "--help") {

@@ -272,6 +272,7 @@ ccp run --account gt4                          # Claude Code on gt4: type /login
 ccp account add agy1 companyA --harness agy   # agy account (file token storage in ~/.gemini/antigravity-cli-ccp-agy1)
 ccp run --account agy1                         # agy on agy1: sign in once
 ccp run companyA --account auto -- agy        # auto-pick among the profile's agy accounts
+ccp run --account agy1 -- --model <model>      # flags only after --: they go to the account's harness (agy here)
 ccp account add gt5 companyA --pool company   # ...and put it in pool company at once
 ccp account pool gt1 company                   # put an existing account in a pool
 ccp account pool gt1 --clear                   # take it out
