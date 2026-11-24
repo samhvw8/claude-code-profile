@@ -232,7 +232,7 @@ links everything else (skills, settings, history) to one profile. **The profile'
 the accounts linked to it; `--account auto` picks among them, never from another profile.
 
 ```text
-profile companyA ── gt1, gt2, gt3     (the companyA workspace's accounts)
+profile companyA ── ca1, ca2, ca3     (the companyA workspace's accounts)
 profile acme      ── acme1, acme2      (another client's accounts)
 profile default   ── (no accounts: plain claude, personal login)
 ```
@@ -267,22 +267,22 @@ ccp status           # also lists managed accounts
 ### Add accounts to a profile
 
 ```bash
-ccp account add gt4 companyA                  # Claude account (default); profile defaults to current
-ccp run --account gt4                          # Claude Code on gt4: type /login once
+ccp account add ca4 companyA                  # Claude account (default); profile defaults to current
+ccp run --account ca4                          # Claude Code on ca4: type /login once
 ccp account add agy1 companyA --harness agy   # agy account (file token storage in ~/.gemini/antigravity-cli-ccp-agy1)
 ccp run --account agy1                         # agy on agy1: sign in once
 ccp run companyA --account auto -- agy        # auto-pick among the profile's agy accounts
 ccp run --account agy1 -- --model <model>      # flags only after --: they go to the account's harness (agy here)
-ccp account add gt5 companyA --pool company   # ...and put it in pool company at once
-ccp account pool gt1 company                   # put an existing account in a pool
-ccp account pool gt1 --clear                   # take it out
-ccp account remove gt4                         # log gt4 out: delete only its login, keep folder and pool; asks y/N
-ccp account remove gt4 --all                   # delete the login, the account folder and (agy) its data dir
-ccp account remove gt4 --force                 # no question (needed without a terminal, and with --json); never skips the running-session check
+ccp account add ca5 companyA --pool company   # ...and put it in pool company at once
+ccp account pool ca1 company                   # put an existing account in a pool
+ccp account pool ca1 --clear                   # take it out
+ccp account remove ca4                         # log ca4 out: delete only its login, keep folder and pool; asks y/N
+ccp account remove ca4 --all                   # delete the login, the account folder and (agy) its data dir
+ccp account remove ca4 --force                 # no question (needed without a terminal, and with --json); never skips the running-session check
 ccp account                                    # check: shows HARNESS, PROFILE, POOL, email, and usage
 ```
 
-Pick short names that say the profile (`gt1`, `acme1`). `auto` is reserved. `ccp env`, `ccp session`,
+Pick short names that say the profile (`ca1`, `acme1`). `auto` is reserved. `ccp env`, `ccp session`,
 and `ccp use --accounts` are Claude-only; start `agy` accounts with `ccp run`.
 
 ### Make a folder use its accounts (`claude` picks the account)
@@ -324,12 +324,12 @@ Accounts you buy for yourself: link them to the profile you use them with (for e
 ### Choose the account by hand
 
 ```bash
-ccp run --account gt2                         # one run on gt2 (its own profile)
+ccp run --account ca2                         # one run on ca2 (its own profile)
 ccp run companyA --account auto -- claude -c # one run, auto pick, with claude flags after --
 ccp run companyA --account auto:company      # one run, the pool's freest (relinked if free)
-eval "$(ccp env --account gt2)"               # this terminal only
-ccp session --account gt2                     # a sub-shell on gt2
-ccp env companyA --account gt2 --format=mise # pin a folder to one account
+eval "$(ccp env --account ca2)"               # this terminal only
+ccp session --account ca2                     # a sub-shell on ca2
+ccp env companyA --account ca2 --format=mise # pin a folder to one account
 ```
 
 Everything after `--` is the command. When the first word after `--` starts with `-`, the words are arguments for the default command (the account's harness, else `claude`).
@@ -351,7 +351,7 @@ Everything after `--` is the command. When the first word after `--` starts with
 Close its Claude sessions, then:
 
 ```bash
-ccp run acme --account gt3 --relink   # gt3 is now one of acme's accounts (same login)
+ccp run acme --account ca3 --relink   # ca3 is now one of acme's accounts (same login)
 ```
 
 ### Remove an account
@@ -361,7 +361,7 @@ its login and its folder:
 
 ```bash
 # Claude account:
-d=$HOME/.ccp/accounts/gt4
+d=$HOME/.ccp/accounts/ca4
 security delete-generic-password -s "Claude Code-credentials-$(printf %s "$d" | shasum -a 256 | cut -c1-8)"  # macOS only
 rm -rf "$d"
 

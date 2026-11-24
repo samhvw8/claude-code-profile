@@ -174,13 +174,13 @@ func TestFindOrphanKeychainLogins(t *testing.T) {
 	os.Symlink(dotsWork, paths.ProfileDir("work"))
 	os.Symlink(defDir, paths.GlobalClaudeDir)
 
-	// Account 'gt1' (real dir) and 'gt2' (symlink to ext/gt2).
+	// Account 'ca1' (real dir) and 'ca2' (symlink to ext/ca2).
 	os.MkdirAll(paths.AccountsDir(), 0755)
-	gt1Dir := paths.AccountDir("gt1")
+	gt1Dir := paths.AccountDir("ca1")
 	os.MkdirAll(gt1Dir, 0755)
-	extGt2 := filepath.Join(root, "ext", "gt2")
+	extGt2 := filepath.Join(root, "ext", "ca2")
 	os.MkdirAll(extGt2, 0755)
-	os.Symlink(extGt2, paths.AccountDir("gt2"))
+	os.Symlink(extGt2, paths.AccountDir("ca2"))
 
 	// Unrelated CLAUDE_CONFIG_DIR outside ccp.
 	orphanSvc := "Claude Code-credentials-" + migration.ConfigDirHash(filepath.Join(root, "some-worktree"))
@@ -195,7 +195,7 @@ func TestFindOrphanKeychainLogins(t *testing.T) {
 		"Claude Code-credentials-" + migration.ConfigDirHash(dotsWork),
 		"Claude Code-credentials-" + migration.ConfigDirHash(realDotsWork),
 		"Claude Code-credentials-" + migration.ConfigDirHash(gt1Dir),
-		"Claude Code-credentials-" + migration.ConfigDirHash(paths.AccountDir("gt2")),
+		"Claude Code-credentials-" + migration.ConfigDirHash(paths.AccountDir("ca2")),
 		"Claude Code-credentials-" + migration.ConfigDirHash(extGt2),
 		"Claude Code-credentials-nothexzz",
 		orphanSvc,

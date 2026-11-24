@@ -45,7 +45,7 @@ example, several values), not adds a field beside it.
   the binding and re-scans under it, relinks with `LinkAccount(relink=true)` when needed, starts
   the process, then releases the lock and waits. The lock file is opened close-on-exec, so the
   session never holds it. A failed re-check releases the lock and tries the next candidate. The
-  stderr line names the pool and any relink: `ccp: account gt2 (pool company, relinked from
+  stderr line names the pool and any relink: `ccp: account ca2 (pool company, relinked from
   companyA, 7d 30%)`. A member whose lock cannot be taken, whose re-check fails, or whose
   relink fails is a lost candidate: the next is tried, and with none left the error is the
   "no usable account" one that `--or-profile` falls back on.

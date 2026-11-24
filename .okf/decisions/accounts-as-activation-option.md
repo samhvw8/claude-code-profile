@@ -128,7 +128,7 @@ auto` on `run`, `session` and `env` (shell format only: mise and direnv would fr
 picks among the accounts linked to the profile. With no profile named it uses the current one:
 `CLAUDE_CONFIG_DIR` (a project's `mise.toml`, or the account folder of the running session),
 else `~/.claude`. `auto` is reserved and cannot name an account. The pick is printed on stderr:
-`ccp: account gt2 (7d 30%)`.
+`ccp: account ca2 (7d 30%)`.
 
 **Usage source (A).** Each logged-in account's token is read from where Claude Code keeps it
 (the Keychain item of the account folder, or its `.credentials.json`) and sent to `GET

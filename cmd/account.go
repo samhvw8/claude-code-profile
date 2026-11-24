@@ -29,16 +29,16 @@ the profile; only the login differs. For agy accounts (--harness agy), agy uses
 file-based token storage in ~/.gemini/antigravity-cli-ccp-<name>/.
 
   ccp account                                    # list accounts with plan usage
-  ccp account add gt1 companyA                  # create a Claude account
-  ccp account add agy1 companyA --harness agy   # create an agy account
-  ccp run --account gt1                          # start Claude on it; type /login once
+  ccp account add ca1 companyA                   # create a Claude account
+  ccp account add agy1 companyA --harness agy    # create an agy account
+  ccp run --account ca1                          # start Claude on it; type /login once
   ccp run --account agy1                         # start agy on it; sign in once
-  ccp run companyA --account auto               # the account with the most limit left
-  ccp account pool gt1 company                   # put gt1 in pool "company"
+  ccp run companyA --account auto                # the account with the most limit left
+  ccp account pool ca1 company                   # put ca1 in pool "company"
   ccp run --account auto:company                 # freest account of the pool, any profile
-  eval "$(ccp env --account gt2)"                # this terminal only (Claude only)
-  ccp account remove gt1                         # log gt1 out (delete only its login)
-  ccp account remove gt1 --all                   # delete login, account folder and agy data
+  eval "$(ccp env --account ca2)"                # this terminal only (Claude only)
+  ccp account remove ca1                         # log ca1 out (delete only its login)
+  ccp account remove ca1 --all                   # delete login, account folder and agy data
 
 With no subcommand, ccp account lists the accounts.`,
 	Args: cobra.NoArgs,
@@ -73,7 +73,7 @@ An account that already exists is refused; move it to another profile with
 --relink.
 
 --pool puts the new account in a pool for 'ccp run --account auto:<pool>':
-  ccp account add gt3 companyA --pool company`,
+  ccp account add ca3 companyA --pool company`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runAccountAdd,
 }
@@ -89,8 +89,8 @@ limit left, whatever profile it is linked to. A Claude account linked to
 another profile is relinked to the requested one, but only while no Claude
 Code session runs on it. An account is in at most one pool.
 
-  ccp account pool gt1 company     # gt1 joins pool "company"
-  ccp account pool gt1 --clear     # gt1 leaves its pool`,
+  ccp account pool ca1 company     # ca1 joins pool "company"
+  ccp account pool ca1 --clear     # ca1 leaves its pool`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: runAccountPool,
 }

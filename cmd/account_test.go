@@ -55,15 +55,15 @@ func TestAccountList_EmptyShowsHowToAdd(t *testing.T) {
 
 func TestAccountAdd_CreatesAndLists(t *testing.T) {
 	paths := accountCmdEnv(t, "dev", "work")
-	out, err := captureStdout(t, func() error { return runCcp(t, "account", "add", "gt1", "work") })
+	out, err := captureStdout(t, func() error { return runCcp(t, "account", "add", "ca1", "work") })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "ccp run --account gt1") {
+	if !strings.Contains(out, "ccp run --account ca1") {
 		t.Errorf("add did not say how to log in:\n%s", out)
 	}
-	if got, err := profile.AccountProfile(paths.AccountDir("gt1")); err != nil || got != "work" {
-		t.Fatalf("gt1 bound to %q, %v; want work", got, err)
+	if got, err := profile.AccountProfile(paths.AccountDir("ca1")); err != nil || got != "work" {
+		t.Fatalf("ca1 bound to %q, %v; want work", got, err)
 	}
 
 	accountListJSON = true
@@ -76,24 +76,24 @@ func TestAccountAdd_CreatesAndLists(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &list); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
-	if len(list) != 1 || list[0].Name != "gt1" || list[0].Profile != "work" || list[0].LoggedIn {
-		t.Errorf("list = %+v; want gt1 on work, not logged in", list)
+	if len(list) != 1 || list[0].Name != "ca1" || list[0].Profile != "work" || list[0].LoggedIn {
+		t.Errorf("list = %+v; want ca1 on work, not logged in", list)
 	}
 }
 
 func TestAccountAdd_Refusals(t *testing.T) {
 	accountCmdEnv(t, "dev")
-	if _, err := captureStdout(t, func() error { return runCcp(t, "account", "add", "gt1", "dev") }); err != nil {
+	if _, err := captureStdout(t, func() error { return runCcp(t, "account", "add", "ca1", "dev") }); err != nil {
 		t.Fatal(err)
 	}
 	cases := []struct {
 		args []string
 		want string
 	}{
-		{[]string{"account", "add", "gt1", "dev"}, "already exists"},
+		{[]string{"account", "add", "ca1", "dev"}, "already exists"},
 		{[]string{"account", "add", "auto", "dev"}, "reserved"},
-		{[]string{"account", "add", "gt2", "nope"}, "profile not found"},
-		{[]string{"account", "add", "gt2"}, "no current profile"},
+		{[]string{"account", "add", "ca2", "nope"}, "profile not found"},
+		{[]string{"account", "add", "ca2"}, "no current profile"},
 	}
 	for _, c := range cases {
 		_, err := captureStdout(t, func() error { return runCcp(t, c.args...) })
@@ -139,7 +139,7 @@ func TestAccountAdd_AgyCreatesFoldersMergedSettingsAndListsHarness(t *testing.T)
 	// Mark agy1 logged in (non-empty token) and provide cached usage so status/list show "-" email without running agy.
 	os.WriteFile(filepath.Join(dataDir, "antigravity-oauth-token"), []byte("tok"), 0600)
 	os.WriteFile(filepath.Join(paths.AccountDir("agy1"), ".ccp-usage.json"), []byte(`{"last":{"fetched_at":"2099-01-01T00:00:00Z","five_hour":{"utilization":10},"seven_day":{"utilization":38.3},"scoped":[{"name":"Claude and GPT models","utilization":97}]}}`), 0644)
-	if _, _, err := profile.LinkAccount(paths, "gt1", "work", false); err != nil {
+	if _, _, err := profile.LinkAccount(paths, "ca1", "work", false); err != nil {
 		t.Fatal(err)
 	}
 	tableOut, err = captureStdout(t, func() error { return runCcp(t, "account", "list") })
@@ -244,7 +244,7 @@ func testCredBytes(expires time.Time) []byte {
 
 func TestAccountList_OtherLoginsAndBoundaries(t *testing.T) {
 	paths := accountCmdEnv(t, "default", "work")
-	if _, _, err := profile.LinkAccount(paths, "gt1", "work", false); err != nil {
+	if _, _, err := profile.LinkAccount(paths, "ca1", "work", false); err != nil {
 		t.Fatal(err)
 	}
 	home := filepath.Dir(paths.GlobalClaudeDir)
@@ -295,8 +295,8 @@ func TestAccountList_OtherLoginsAndBoundaries(t *testing.T) {
 	if err := json.Unmarshal([]byte(jsonOut), &list); err != nil {
 		t.Fatalf("json: %v\n%s", err, jsonOut)
 	}
-	if len(list) != 1 || list[0].Name != "gt1" {
-		t.Errorf("json list = %+v, want only gt1", list)
+	if len(list) != 1 || list[0].Name != "ca1" {
+		t.Errorf("json list = %+v, want only ca1", list)
 	}
 	accountListJSON = false
 

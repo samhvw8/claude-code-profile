@@ -59,7 +59,7 @@ Examples:
   ccp run --account agy1 -- --model x      # agy --model x (flags only: default command)
   ccp run --account auto -- claude -c      # continue on the freest Claude account
   ccp run --account auto -- agy            # start on the freest agy account
-  ccp run companyA --account auto:company # freest account of pool company
+  ccp run companyA --account auto:company  # freest account of pool company
   ccp run companyA --account auto
   ccp run minimal -- claude "fix this bug"
   ccp run dev -- npm test`,

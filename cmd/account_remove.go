@@ -49,8 +49,8 @@ with its conversations).
 Refuses while a session is running on the account (even with --force).
 Prompts for confirmation unless --force is passed. --json requires --force.
 
-  ccp account remove gt1                 # log gt1 out, keep folder and pool
-  ccp account remove gt1 --all           # delete login, folder and agy data
+  ccp account remove ca1                 # log ca1 out, keep folder and pool
+  ccp account remove ca1 --all           # delete login, folder and agy data
   ccp account rm agy1 --force --json     # non-interactive JSON output`,
 	Args: cobra.ExactArgs(1),
 	RunE: runAccountRemove,

@@ -110,17 +110,17 @@ func TestActivationProfile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, _, err := profile.LinkAccount(paths, "gt1", "companyA", false); err != nil {
+	if _, _, err := profile.LinkAccount(paths, "ca1", "companyA", false); err != nil {
 		t.Fatal(err)
 	}
 
-	if got, err := activationProfile(paths, "", "gt1"); err != nil || got != "companyA" {
+	if got, err := activationProfile(paths, "", "ca1"); err != nil || got != "companyA" {
 		t.Errorf("named account: %q, %v; want its own profile", got, err)
 	}
-	if _, err := activationProfile(paths, "", "gt9"); err == nil || !strings.Contains(err.Error(), "does not exist yet") {
+	if _, err := activationProfile(paths, "", "ca9"); err == nil || !strings.Contains(err.Error(), "does not exist yet") {
 		t.Errorf("unknown account: %v", err)
 	}
-	if got, err := activationProfile(paths, "default", "gt9"); err != nil || got != "default" {
+	if got, err := activationProfile(paths, "default", "ca9"); err != nil || got != "default" {
 		t.Errorf("a named profile wins: %q, %v", got, err)
 	}
 	if _, err := activationProfile(paths, "nope", ""); err == nil {
@@ -132,7 +132,7 @@ func TestActivationProfile(t *testing.T) {
 		t.Errorf("auto: %q, %v", got, err)
 	}
 	// Inside an account session, auto stays on the account's profile.
-	t.Setenv("CLAUDE_CONFIG_DIR", paths.AccountDir("gt1"))
+	t.Setenv("CLAUDE_CONFIG_DIR", paths.AccountDir("ca1"))
 	if got, err := activationProfile(must(config.ResolvePaths()), "", "auto"); err != nil || got != "companyA" {
 		t.Errorf("auto inside an account: %q, %v", got, err)
 	}
@@ -215,7 +215,7 @@ func TestRun_AgyAccountsAndAuto(t *testing.T) {
 	// Give agy1 a cached usage so --account auto needs no live /usage call.
 	os.WriteFile(filepath.Join(paths.AccountDir("agy1"), ".ccp-usage.json"), []byte(`{"last":{"fetched_at":"2099-01-01T00:00:00Z","five_hour":{"utilization":10},"seven_day":{"utilization":20}}}`), 0644)
 	// Also add a Claude account to verify pools stay separated by harness.
-	if _, _, err := profile.LinkAccount(paths, "gt1", "work", false); err != nil {
+	if _, _, err := profile.LinkAccount(paths, "ca1", "work", false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -252,7 +252,7 @@ func TestRun_AgyAccountsAndAuto(t *testing.T) {
 		t.Errorf("settings not refreshed on run:\n%s", merged)
 	}
 
-	// 3. --account auto -- agy picks agy1 (not gt1).
+	// 3. --account auto -- agy picks agy1 (not ca1).
 	os.Remove(record)
 	if err := runCcp(t, "run", "work", "--account", "auto", "--", "agy", "-c"); err != nil {
 		t.Fatalf("auto -- agy: %v", err)
@@ -266,7 +266,7 @@ func TestRun_AgyAccountsAndAuto(t *testing.T) {
 	if err := runCcp(t, "run", "--account", "agy1", "--", "claude"); err == nil || !strings.Contains(err.Error(), "uses harness agy") {
 		t.Errorf("agy account running claude: %v", err)
 	}
-	if err := runCcp(t, "run", "--account", "gt1", "--", "agy"); err == nil || !strings.Contains(err.Error(), "uses harness claude") {
+	if err := runCcp(t, "run", "--account", "ca1", "--", "agy"); err == nil || !strings.Contains(err.Error(), "uses harness claude") {
 		t.Errorf("claude account running agy: %v", err)
 	}
 }
@@ -276,7 +276,7 @@ func TestRun_MissingAgyErrorsOnlyForAgyAccount(t *testing.T) {
 	if _, err := profile.CreateAgyAccount(paths, "agy1", "work"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := profile.LinkAccount(paths, "gt1", "work", false); err != nil {
+	if _, _, err := profile.LinkAccount(paths, "ca1", "work", false); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", "/usr/bin:/bin")
@@ -284,7 +284,7 @@ func TestRun_MissingAgyErrorsOnlyForAgyAccount(t *testing.T) {
 		t.Errorf("missing agy: %v", err)
 	}
 	// Claude account still runs even when agy is missing.
-	if err := runCcp(t, "run", "--account", "gt1", "--", "sh", "-c", "true"); err != nil {
+	if err := runCcp(t, "run", "--account", "ca1", "--", "sh", "-c", "true"); err != nil {
 		t.Errorf("claude account failed without agy: %v", err)
 	}
 }
@@ -379,7 +379,7 @@ func TestRun_AgyEdgeCases(t *testing.T) {
 	}
 
 	// 6. --account auto --or-profile -- agy ignores CLAUDE_CONFIG_DIR pointing to a Claude account.
-	claudeDir, _, err := profile.LinkAccount(paths, "gt1", "work", false)
+	claudeDir, _, err := profile.LinkAccount(paths, "ca1", "work", false)
 	if err != nil {
 		t.Fatal(err)
 	}
