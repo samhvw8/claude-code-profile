@@ -1,6 +1,6 @@
 # ccp - Claude Code Profile Manager
 
-**Current version: v0.59.0**
+**Current version: v0.60.0**
 
 Go CLI tool for managing Claude Code profiles via a central hub. Uses Cobra for CLI, go-toml/v2 for
 TOML config, gopkg.in/yaml.v3 for YAML, and Bubble Tea for interactive TUI selection.
