@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-24
+* **Update**: Released v0.60.3 (example names only): [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: Example names are neutral now: the example profile is `companyA` and the example accounts are `ca1`…`ca5` in the help text of `ccp run`, `account`, `env` and `session`, in `skills/ccp/SKILL.md`, in the tests, and in [command reference](/cli/command-reference.md), [activation](/architecture/activation.md), [account pools](/decisions/account-pools.md), [accounts decision](/decisions/accounts-as-activation-option.md) and [mise shim anti-pattern](/anti-patterns/mise-shim-in-claude-wrapper.md).
 * **Update**: Released v0.60.2 (docs only): [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: Docs pass after v0.60.1. README: the `--` sentence no longer says to name `claude` before its flags (flags only go to the default command); the Accounts section gains agy accounts, `ccp account remove` (default and `--all`), and a note that `ccp account pool` works on an existing account, keeps its login, and allows one pool. `skills/ccp/SKILL.md`: same `--` sentence. [Account pools](/decisions/account-pools.md) states the same and that an account has no free label beside the pool.
