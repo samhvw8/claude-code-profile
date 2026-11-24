@@ -3,7 +3,7 @@ type: Changelog
 title: Release history
 description: What changed in each ccp release that the spec recorded, newest first.
 tags: [product, releases, history]
-generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T09:10:00Z }
+generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T10:20:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md revision history (removed 2026-09-14 by the OKF migration)"
@@ -20,6 +20,7 @@ The authoritative version is the latest git tag (also stated in `CLAUDE.md`).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.60.2 | 2026-11-24 | Docs only, no code change. README and `skills/ccp/SKILL.md` no longer say to name `claude` before its flags after `--`; the README Accounts section covers agy accounts, `ccp account remove` and pools on existing accounts ([account pools](/decisions/account-pools.md)). |
 | 0.60.1 | 2026-11-24 | Added: in `ccp run`, words after `--` that start with `-` are arguments for the default command (the account's harness, else `claude`), so `ccp run --account agy1 -- --model x` runs `agy --model x` ([decision](/decisions/agy-accounts-file-token-mode.md)). Before, the first flag was read as the command name and failed. A named command after `--` is unchanged. |
 | 0.60.0 | 2026-11-24 | Added: `ccp account remove <name> [--all] [--force]` (alias `rm`) ([decision](/decisions/account-concept.md)). The default deletes only the account's login (Keychain item on macOS, `.credentials.json` on Linux, the agy token) and keeps the folder, pool and agy conversations; `--all` also deletes the account folder and the agy data dir. It refuses while a session runs on the account (never skipped by `--force`), asks to confirm unless `--force`, and deletes the login first. Added: `ccp run --account auto` and `auto:<pool>` with no command start `agy` when every candidate account is agy; mixed and all-Claude sets, explicit commands and `--or-profile` are unchanged ([agy accounts](/decisions/agy-accounts-file-token-mode.md)). Changed: one `migration.ProcessLister` lists Claude and agy processes; `ccp run` on an agy account holds the account lock until its process starts. |
 | 0.59.0 | 2026-11-23 | Added: shared MCP servers per profile ([decision](/decisions/profile-mcp-file.md)). `profiles/<name>/mcp.json` reaches every account: `ccp run` passes `--mcp-config=<file>` to Claude Code, and on a name clash the file wins. ccp never writes `.claude.json`: `ccp run` and `ccp doctor` report servers that exist on one account only, and `ccp doctor --fix` creates a missing `mcp.json` (0600) from the profile's servers. `ccp --help` ends with an "Other harnesses" footer naming the hidden `agy`, `harness`, `omp`, `opencode` and `pi` commands. |

@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-24
+* **Update**: Released v0.60.2 (docs only): [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: Docs pass after v0.60.1. README: the `--` sentence no longer says to name `claude` before its flags (flags only go to the default command); the Accounts section gains agy accounts, `ccp account remove` (default and `--all`), and a note that `ccp account pool` works on an existing account, keeps its login, and allows one pool. `skills/ccp/SKILL.md`: same `--` sentence. [Account pools](/decisions/account-pools.md) states the same and that an account has no free label beside the pool.
 * **Update**: Released v0.60.1: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: `ccp run`: words after `--` that start with `-` are arguments for the default command (the account's harness, else `claude`), so `ccp run --account agy1 -- --model x` runs `agy --model x`; the command counts as not given, so `auto` harness detection applies ([agy accounts](/decisions/agy-accounts-file-token-mode.md)). Updated [command reference](/cli/command-reference.md), [agy integration](/features/agy.md), README, `skills/ccp/SKILL.md`. Tests: `cmd/run_flags_test.go`. After a review: the usage line reads `[-- [<command>] [args...]]`, and the tests also cover `-- -`, `-- --`, `-- -h`, `--or-profile` and a broken binding with `--relink`.
