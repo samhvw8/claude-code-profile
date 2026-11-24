@@ -4,7 +4,7 @@ title: "agy (Antigravity CLI) integration"
 description: "Mirroring a profile into Antigravity CLI's ~/.gemini/config: context link, GEMINI.md style, converted rules and agents, skill links, ownership, and following."
 resource: internal/profile/agy.go
 tags: [feature, integration, agy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T07:00:00Z }
+generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T05:00:00Z }
 sources:
   - id: agy-loader-tests
     resource: "Hands-on tests of agy v1.5.6's global config loading (orchestrator session, 2026-11-12)"
@@ -83,7 +83,7 @@ profile, hub-changing commands, and `ccp bootstrap`. `ccp agy` is hidden
 `ccp account add <name> [<profile>] --harness agy` creates an account bound to a profile with
 `harness = "agy"` in `.ccp-account.toml` (`~/.ccp/accounts/<name>/`, no symlinks) and an isolated
 agy data folder `~/.gemini/antigravity-cli-ccp-<name>/`. `ccp run --account <name>` (or
-`ccp run <profile> --account auto -- agy`) runs `agy` with `--app_data_dir=antigravity-cli-ccp-<name>`
+`ccp run <profile> --account auto -- agy`, or `--account auto` with no command when every candidate account is agy) runs `agy` with `--app_data_dir=antigravity-cli-ccp-<name>`
 and `SSH_CLIENT="ccp 0 0"` (on any profile; the bound one is only the default, `--relink` changes it) so `agy` uses file-based token storage instead of the shared Keychain,
 refreshes `~/.gemini/antigravity-cli-ccp-<name>/settings.json` from main while keeping extra list
 items (`permissions.{allow,deny,ask}`, `trustedWorkspaces`), and leaves `CLAUDE_CONFIG_DIR` on the

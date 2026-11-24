@@ -4,7 +4,7 @@ title: "agy accounts use file-based token storage with --app_data_dir and SSH_CL
 description: "2026-11-20: Account bindings gain harness = \"agy\" (default claude). Each agy account runs in ~/.gemini/antigravity-cli-ccp-<name>/ with SSH_CLIENT set, merged settings.json, and quota read via agy -p /usage."
 tags: [decision, agy, accounts, activation]
 decided: 2026-11-20
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T07:00:00Z }
+generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T05:00:00Z }
 sources:
   - id: agy-auth-re
     resource: research/261119-agy-accounts/agy-auth-re.md
@@ -27,7 +27,8 @@ Account bindings in `.ccp-account.toml` gain `harness = "agy"`; absent means `"c
   executable, sets `SSH_CLIENT=ccp 0 0`, keeps `CLAUDE_CONFIG_DIR` on the profile folder (the one
   named, else the bound one),
   refreshes `settings.json`, and touches `.ccp-last-used`. `--account auto` derives the candidates'
-  harness from the command basename (`agy` vs everything else).
+  harness from the command basename (`agy` vs everything else); with no command, see
+  [harness detection](#harness-detection-for-auto-2026-11-24).
 - `ccp env` and `ccp session` refuse `agy` accounts because shell/mise/direnv exports cannot pass
   `--app_data_dir`. `ccp use --accounts` stays Claude-only.
 - Before each run (and at creation), `~/.gemini/antigravity-cli-ccp-<name>/settings.json` is written
@@ -48,6 +49,18 @@ named (a missing default falls back to the current profile, an error when there 
 bound to the profile and prints a note instead. A binding still needs a non-empty profile. Pooled
 picks (`--account auto:<pool> -- agy`) take agy members from every profile
 ([account pools](/decisions/account-pools.md)).
+
+# Harness detection for auto (2026-11-24)
+
+A named account always started its own harness. `ccp run --account auto` and `auto:<pool>` now do
+the same in one case: when the user gave **no command** and **every readable candidate account**
+(the pool's members, or the accounts bound to the profile) is agy, `ccp run` starts `agy` and
+prints `ccp: every account of <pool X | profile Y> is agy; starting agy`. Mixed, all-Claude and
+empty sets stay on `claude`, and an explicit command (`-- claude`, `-- agy`) is never changed, so
+the `use --accounts` shim (which passes the real `claude`) behaves as before.
+
+Rejected: picking the freest account across both harnesses. The program that starts would then
+change from run to run with the quota, and Claude Code and agy are not interchangeable.
 
 # Verified facts (agy 1.5.13)[^agy-auth-re]
 

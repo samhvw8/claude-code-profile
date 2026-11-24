@@ -3,7 +3,7 @@ type: Mechanism
 title: Profile activation
 description: How a profile becomes active — per project through env files, globally through the ~/.claude symlink, or per command.
 tags: [architecture, activation, profiles]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T07:00:00Z }
+generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T05:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md (removed 2026-09-14 by the OKF migration)"
@@ -68,7 +68,7 @@ With no account logged in it runs on the profile.
 `ccp run --account <name>` defaults the command to `agy`, passes `--app_data_dir=antigravity-cli-ccp-<name>`
 and `SSH_CLIENT="ccp 0 0"`, keeps `CLAUDE_CONFIG_DIR` set to the profile folder (any profile: the binding only names the default), refreshes merged
 `settings.json`, and touches `.ccp-last-used`. `ccp run <profile> --account auto -- agy` picks among
-the profile's `agy` accounts. `ccp env` and `ccp session` refuse `agy` accounts because shell
+the profile's `agy` accounts; with no command, `--account auto` starts `agy` itself when every candidate account is agy. `ccp env` and `ccp session` refuse `agy` accounts because shell
 exports cannot carry the flag; see [agy accounts decision](/decisions/agy-accounts-file-token-mode.md).
 
 # Parallel sessions

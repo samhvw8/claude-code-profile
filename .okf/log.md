@@ -1,5 +1,9 @@
 # Update Log
 
+## 2026-11-24
+* **Update**: `ccp run --account auto` and `auto:<pool>` with no command start `agy` when every readable candidate account is agy; mixed and all-Claude sets, and any explicit command, are unchanged ([agy accounts](/decisions/agy-accounts-file-token-mode.md)). Rejected: the freest account across both harnesses. Test: `TestPrepareRunCmd_AutoHarness`.
+* **Decision**: [Account concept](/decisions/account-concept.md) gains `ccp account remove <name> [--creds-only] [--force]` (alias `rm`): default deletes the login, the account folder and, for agy, its data dir; `--creds-only` deletes only the login. Refused while a session runs on the account (Claude process scan under the relink lock; new `migration.AgyProcessLister` for agy; both fail closed, never skipped by `--force`); login first, then data. Updated [command reference](/cli/command-reference.md) and [command flags](/cli/command-flags.md). Tests: `TestAccountRemove_*`.
+
 ## 2026-11-23
 * **Update**: Released v0.59.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: `ccp --help` ends with an "Other harnesses" footer naming the hidden harness commands (`agy`, `harness`, `omp`, `opencode`, `pi`), built from a `ccp-harness` annotation, so they are findable without unhiding them. [Command surface](/decisions/command-surface.md) updated. Test: `TestRootHelpNamesHiddenHarnesses`.

@@ -1,10 +1,10 @@
 ---
 type: Decision
 title: "Account is the sixth concept; the budget is seven for now"
-description: "2026-11-18: the user-facing concept budget rises from five to seven, and Account becomes the sixth concept with a visible ccp account command (list and add; pool added 2026-11-23). Extended 2026-11-20 with read-only display of unmanaged other logins."
+description: "2026-11-18: the user-facing concept budget rises from five to seven, and Account becomes the sixth concept with a visible ccp account command (list and add; pool added 2026-11-23, remove added 2026-11-24). Extended 2026-11-20 with read-only display of unmanaged other logins."
 tags: [decision, concepts, accounts, command-surface]
 decided: 2026-11-18
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-23T08:00:00Z }
+generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T05:00:00Z }
 ---
 
 # Decision
@@ -19,6 +19,7 @@ Account gets a visible command:
 |---|---|
 | `ccp account` / `ccp account list [--json]` | Every account with its profile, email, 5-hour and weekly use, model-scoped weeks, age of the read and last use. With none, it prints how to add one. |
 | `ccp account add <name> [<profile>] [--pool <p>]` | Creates the account folder for a profile (default: the current one). It starts logged out; `ccp run --account <name>` then `/login` logs it in once. An existing account is refused. |
+| `ccp account remove <name> [--creds-only] [--force]` (2026-11-24) | Deletes the account's login and its data, or only the login ([Remove](#remove-added-2026-11-24)). |
 | `ccp account pool <name> <pool>\|--clear` (2026-11-23) | Sets or clears an existing account's pool ([account pools](/decisions/account-pools.md)). A subcommand, not a flag on `add`, because `add` refuses an account that already exists. |
 
 Everything else in [accounts are an option of Activation](/decisions/accounts-as-activation-option.md)
@@ -39,9 +40,9 @@ account list and found nothing. The five-concept rule had pushed a real, user-vi
 - **Keep five concepts; show an empty Accounts section in `status` and a line in root help.**
   Cheaper on the budget, but the user chose a real command.
 - **Make Account replace another concept.** None of the five is redundant with it.
-- **`ccp account remove`.** Left out for now: removing an account must also delete its Keychain
-  login (macOS) or `.credentials.json` (Linux), and refuse while a session runs on it. Add it
-  as its own change when needed.
+- **`ccp account remove`.** Left out on 2026-11-18 because it must also delete the Keychain
+  login (macOS) or `.credentials.json` (Linux) and refuse while a session runs on it. Added on
+  2026-11-24 with those two rules ([Remove](#remove-added-2026-11-24)).
 
 # Consequences
 
@@ -49,6 +50,33 @@ account list and found nothing. The five-concept rule had pushed a real, user-vi
   [design principles](/engineering/design-principles.md) say seven (six in use).
 - Earlier concepts that say "not a sixth concept" (bundles, output styles, omp) were judged
   against the old budget of five; they are still not concepts.
+
+# Remove (added 2026-11-24)
+
+`ccp account remove <name>` (alias `rm`) has two modes, chosen by the user:
+
+| Mode | Deletes | Keeps |
+|---|---|---|
+| default (creds + data) | The login, then `~/.ccp/accounts/<name>/`; for agy also `~/.gemini/antigravity-cli-ccp-<name>/` (token, conversations) | Nothing |
+| `--creds-only` | Only the login | The account folder, its binding and pool, and the agy data dir |
+
+- **The login** is the Keychain item `migration.KeychainServiceFor(accountDir, false)` on macOS,
+  `<accountDir>/.credentials.json` on Linux, and `antigravity-oauth-token` for agy. It goes through
+  the existing `migration.CredentialStore`; a missing login is not an error.
+- **Busy accounts are refused in both modes, and `--force` never skips that.** Claude: the relink
+  lock plus the Claude process scan (`accountBusy`). agy: `migration.AgyProcessLister` looks for a
+  process with `--app_data_dir=antigravity-cli-ccp-<name>`. Both fail closed: a failed scan or a
+  process whose arguments cannot be read counts as running. The check runs before the prompt and
+  again right before the delete.
+- **Confirmation.** It prints each path and the Keychain service name, then asks y/N. `--force`
+  skips the question; with no terminal on stdin and no `--force` it refuses. `--json` needs
+  `--force` and prints `{name, harness, mode, removed}`.
+- **Order.** The login is deleted first; if that fails, nothing else is deleted.
+- An account with an unreadable binding is still removable (`profile.IsAgyAccountDir` tells the
+  harness).
+
+Rejected: keeping the agy data dir by default (it leaves a folder with a live token), and a
+separate `ccp account logout` command (a flag on `remove` is enough).
 
 # Other logins (added 2026-11-20)
 
