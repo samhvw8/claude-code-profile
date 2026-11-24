@@ -22,7 +22,7 @@ var (
 var accountCmd = &cobra.Command{
 	Use:     "account",
 	Aliases: []string{"accounts", "acc"},
-	Short:   "List and add accounts (logins a profile runs under)",
+	Short:   "Manage accounts (logins a profile runs under)",
 	Long: `An account is a folder, ~/.ccp/accounts/<name>/, that runs one profile under
 its own login. For Claude Code accounts, skills, settings and history link to
 the profile; only the login differs. For agy accounts (--harness agy), agy uses
@@ -37,6 +37,8 @@ file-based token storage in ~/.gemini/antigravity-cli-ccp-<name>/.
   ccp account pool gt1 company                   # put gt1 in pool "company"
   ccp run --account auto:company                 # freest account of the pool, any profile
   eval "$(ccp env --account gt2)"                # this terminal only (Claude only)
+  ccp account remove gt1                         # delete login and account folder
+  ccp account remove gt1 --creds-only            # delete only the login
 
 With no subcommand, ccp account lists the accounts.`,
 	Args: cobra.NoArgs,
@@ -98,7 +100,7 @@ func init() {
 	accountAddCmd.Flags().StringVar(&accountAddHarness, "harness", profile.HarnessClaude, "Account harness: claude or agy")
 	accountAddCmd.Flags().StringVar(&accountAddPool, "pool", "", "Put the account in a pool (for --account auto:<pool>)")
 	accountPoolCmd.Flags().BoolVar(&accountPoolClear, "clear", false, "Take the account out of its pool")
-	accountCmd.AddCommand(accountListCmd, accountAddCmd, accountPoolCmd)
+	accountCmd.AddCommand(accountListCmd, accountAddCmd, accountPoolCmd, accountRemoveCmd)
 	rootCmd.AddCommand(accountCmd)
 }
 

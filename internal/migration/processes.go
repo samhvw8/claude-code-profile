@@ -27,6 +27,20 @@ type ProcessLister interface {
 	ClaudeProcesses() ([]ClaudeProcess, error)
 }
 
+// AgyProcess is a running process that carries an --app_data_dir flag, or a
+// process whose arguments could not be read and whose executable name may be
+// agy.
+type AgyProcess struct {
+	PID        int
+	AppDataDir string // value of --app_data_dir / -app_data_dir, "" when unknown
+	ArgsKnown  bool   // false when argv could not be read
+}
+
+// AgyProcessLister finds running agy processes.
+type AgyProcessLister interface {
+	AgyProcesses() ([]AgyProcess, error)
+}
+
 // NewProcessLister returns this machine's process lister: sysctl on macOS,
 // /proc on Linux, nil elsewhere (callers must treat nil as "cannot tell").
 func NewProcessLister() ProcessLister {
@@ -35,6 +49,15 @@ func NewProcessLister() ProcessLister {
 		return newSysctlLister()
 	case "linux":
 		return procLister{root: "/proc"}
+	}
+	return nil
+}
+
+// NewAgyProcessLister returns this machine's agy process lister: sysctl on
+// macOS, /proc on Linux, nil elsewhere (callers must treat nil as "cannot tell").
+func NewAgyProcessLister() AgyProcessLister {
+	if l, ok := NewProcessLister().(AgyProcessLister); ok {
+		return l
 	}
 	return nil
 }
@@ -106,6 +129,39 @@ func mayBeClaude(comm string) bool {
 	return comm == "claude" || jsRuntime.MatchString(comm)
 }
 
+// mayBeAgy reports whether a bare executable name could be agy, for processes
+// whose arguments cannot be read.
+func mayBeAgy(comm string) bool {
+	return comm == "agy" || strings.HasPrefix(comm, "antigravity")
+}
+
+// appDataDirOf extracts the value of --app_data_dir or -app_data_dir from argv
+// (both --flag=value and --flag value forms, stopping at "--"), matching
+// cmd.hasAppDataDirFlag. When the flag is repeated, the last value wins.
+func appDataDirOf(argv []string) (string, bool) {
+	if len(argv) < 2 {
+		return "", false
+	}
+	args := argv[1:]
+	val := ""
+	found := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			break
+		}
+		if v, ok := strings.CutPrefix(a, "--app_data_dir="); ok {
+			val, found = v, true
+		} else if v, ok := strings.CutPrefix(a, "-app_data_dir="); ok {
+			val, found = v, true
+		} else if (a == "--app_data_dir" || a == "-app_data_dir") && i+1 < len(args) {
+			i++
+			val, found = args[i], true
+		}
+	}
+	return val, found
+}
+
 func configDirOf(env []string) string {
 	dir := ""
 	for _, kv := range env {
@@ -161,6 +217,37 @@ func (l sysctlLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 		}
 		if isClaudeProcess(exec, argv) {
 			out = append(out, ClaudeProcess{PID: e.pid, ConfigDir: configDirOf(env), EnvKnown: true})
+		}
+	}
+	return out, nil
+}
+
+func (l sysctlLister) AgyProcesses() ([]AgyProcess, error) {
+	entries, err := l.procs()
+	if err != nil {
+		return nil, err
+	}
+	var out []AgyProcess
+	for _, e := range entries {
+		if e.pid <= 0 {
+			continue
+		}
+		buf, err := l.procargs(e.pid)
+		if errors.Is(err, errProcessGone) {
+			continue
+		}
+		var argv []string
+		if err == nil {
+			_, argv, _, err = parseProcargs2(buf)
+		}
+		if err != nil {
+			if mayBeAgy(e.comm) {
+				out = append(out, AgyProcess{PID: e.pid})
+			}
+			continue
+		}
+		if dir, ok := appDataDirOf(argv); ok {
+			out = append(out, AgyProcess{PID: e.pid, AppDataDir: dir, ArgsKnown: true})
 		}
 	}
 	return out, nil
@@ -258,6 +345,40 @@ func (l procLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 			procs = append(procs, ClaudeProcess{PID: pid})
 		default:
 			procs = append(procs, ClaudeProcess{PID: pid, ConfigDir: configDirOf(strings.Split(string(environ), "\x00")), EnvKnown: true})
+		}
+	}
+	return procs, nil
+}
+
+func (l procLister) AgyProcesses() ([]AgyProcess, error) {
+	entries, err := os.ReadDir(l.root)
+	if err != nil {
+		return nil, err
+	}
+	var procs []AgyProcess
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		dir := filepath.Join(l.root, e.Name())
+		cmdline, err := os.ReadFile(filepath.Join(dir, "cmdline"))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // exited
+		}
+		if err != nil {
+			comm, cerr := os.ReadFile(filepath.Join(dir, "comm"))
+			if cerr != nil || mayBeAgy(strings.TrimSpace(string(comm))) {
+				procs = append(procs, AgyProcess{PID: pid})
+			}
+			continue
+		}
+		if len(cmdline) == 0 {
+			continue // kernel thread or zombie
+		}
+		argv := strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")
+		if appDir, ok := appDataDirOf(argv); ok {
+			procs = append(procs, AgyProcess{PID: pid, AppDataDir: appDir, ArgsKnown: true})
 		}
 	}
 	return procs, nil
