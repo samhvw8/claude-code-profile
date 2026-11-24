@@ -126,7 +126,7 @@ ccp project add skills/coding agents/reviewer
 | `ccp account [list]` | List accounts with their profile, pool and plan usage |
 | `ccp account add <name> [<profile>] [--pool <p>]` | Create an account for a profile, optionally in a pool |
 | `ccp account pool <name> <pool>\|--clear` | Put an account in a pool (for `--account auto:<pool>`), or take it out |
-| `ccp account remove <name> [--creds-only]` | Delete an account's login and data, or only its login; refused while a session runs on it |
+| `ccp account remove <name> [--all] [--force]` | Delete an account's login, or with `--all` its login and data; refused while a session runs on it |
 | `ccp doctor [--fix]` | Diagnose and fix common issues |
 | `ccp bootstrap` | New machine: sync sources from `ccp.toml`, then fix all profiles |
 | `ccp config shell` | Print the `ccp-use` shell function |

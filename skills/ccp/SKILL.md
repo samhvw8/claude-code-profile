@@ -275,8 +275,9 @@ ccp run companyA --account auto -- agy        # auto-pick among the profile's ag
 ccp account add gt5 companyA --pool company   # ...and put it in pool company at once
 ccp account pool gt1 company                   # put an existing account in a pool
 ccp account pool gt1 --clear                   # take it out
-ccp account remove gt4 --creds-only            # log gt4 out: delete only its login, keep folder and pool
-ccp account remove gt4                         # delete the login, the account folder and (agy) its data dir; asks y/N
+ccp account remove gt4                         # log gt4 out: delete only its login, keep folder and pool; asks y/N
+ccp account remove gt4 --all                   # delete the login, the account folder and (agy) its data dir
+ccp account remove gt4 --force                 # no question (needed without a terminal, and with --json); never skips the running-session check
 ccp account                                    # check: shows HARNESS, PROFILE, POOL, email, and usage
 ```
 

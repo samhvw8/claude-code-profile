@@ -99,7 +99,7 @@ func pickAccountFrom(paths *config.Paths, profileName, account string, relink bo
 	harness = profile.DefaultHarness(harness)
 	var candidates []profile.Account
 	if pool == "" {
-		bound, err := profile.AccountsBoundTo(paths, profileName)
+		bound, err := autoCandidates(paths, profileName, pool)
 		if err != nil {
 			return "", err
 		}
@@ -111,7 +111,7 @@ func pickAccountFrom(paths *config.Paths, profileName, account string, relink bo
 			return "", fmt.Errorf("%w: no account is linked to profile %q; add one with 'ccp account add <name> %s' and /login in it", errNoUsableAccount, profileName, profileName)
 		}
 	} else {
-		members, err := profile.AccountsInPool(paths, pool)
+		members, err := autoCandidates(paths, profileName, pool)
 		if err != nil {
 			return "", err
 		}
@@ -154,6 +154,16 @@ func pickAccountFrom(paths *config.Paths, profileName, account string, relink bo
 	}
 	fmt.Fprintf(os.Stderr, "ccp: account %s (%s)\n", picked.Name, reason)
 	return picked.Name, nil
+}
+
+// autoCandidates returns the readable accounts --account auto (pool "") or
+// auto:<pool> chooses among, of every harness: the one rule both the pick and
+// the harness detection of 'ccp run' read.
+func autoCandidates(paths *config.Paths, profileName, pool string) ([]profile.Account, error) {
+	if pool != "" {
+		return profile.AccountsInPool(paths, pool)
+	}
+	return profile.AccountsBoundTo(paths, profileName)
 }
 
 // withHarness keeps the accounts of one harness.

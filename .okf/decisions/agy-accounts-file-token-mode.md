@@ -56,7 +56,9 @@ A named account always started its own harness. `ccp run --account auto` and `au
 the same in one case: when the user gave **no command** and **every readable candidate account**
 (the pool's members, or the accounts bound to the profile) is agy, `ccp run` starts `agy` and
 prints `ccp: every account of <pool X | profile Y> is agy; starting agy`. Mixed, all-Claude and
-empty sets stay on `claude`, and an explicit command (`-- claude`, `-- agy`) is never changed, so
+empty sets stay on `claude`. `--or-profile` turns detection off: its fallback runs the command on
+the profile itself, and a bare `agy` there would use the shared agy login. An explicit command
+(`-- claude`, `-- agy`) is never changed, so
 the `use --accounts` shim (which passes the real `claude`) behaves as before.
 
 Rejected: picking the freest account across both harnesses. The program that starts would then

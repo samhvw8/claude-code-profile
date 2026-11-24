@@ -19,7 +19,7 @@ Account gets a visible command:
 |---|---|
 | `ccp account` / `ccp account list [--json]` | Every account with its profile, email, 5-hour and weekly use, model-scoped weeks, age of the read and last use. With none, it prints how to add one. |
 | `ccp account add <name> [<profile>] [--pool <p>]` | Creates the account folder for a profile (default: the current one). It starts logged out; `ccp run --account <name>` then `/login` logs it in once. An existing account is refused. |
-| `ccp account remove <name> [--creds-only] [--force]` (2026-11-24) | Deletes the account's login and its data, or only the login ([Remove](#remove-added-2026-11-24)). |
+| `ccp account remove <name> [--all] [--force]` (2026-11-24) | Deletes the account's login, or with `--all` the login and its data ([Remove](#remove-added-2026-11-24)). |
 | `ccp account pool <name> <pool>\|--clear` (2026-11-23) | Sets or clears an existing account's pool ([account pools](/decisions/account-pools.md)). A subcommand, not a flag on `add`, because `add` refuses an account that already exists. |
 
 Everything else in [accounts are an option of Activation](/decisions/accounts-as-activation-option.md)
@@ -53,27 +53,44 @@ account list and found nothing. The five-concept rule had pushed a real, user-vi
 
 # Remove (added 2026-11-24)
 
-`ccp account remove <name>` (alias `rm`) has two modes, chosen by the user:
+`ccp account remove <name>` (alias `rm`) has two modes. The user chose the login-only mode as the
+default (2026-11-24): the common need is to log a seat out, and the default must not delete agy
+conversations.
 
 | Mode | Deletes | Keeps |
 |---|---|---|
-| default (creds + data) | The login, then `~/.ccp/accounts/<name>/`; for agy also `~/.gemini/antigravity-cli-ccp-<name>/` (token, conversations) | Nothing |
-| `--creds-only` | Only the login | The account folder, its binding and pool, and the agy data dir |
+| default (login only) | Only the login | The account folder, its binding and pool, and the agy data dir |
+| `--all` (login + data) | The login, then `~/.ccp/accounts/<name>/`; for agy also `~/.gemini/antigravity-cli-ccp-<name>/` (token, conversations) | Nothing |
 
 - **The login** is the Keychain item `migration.KeychainServiceFor(accountDir, false)` on macOS,
   `<accountDir>/.credentials.json` on Linux, and `antigravity-oauth-token` for agy. It goes through
-  the existing `migration.CredentialStore`; a missing login is not an error.
-- **Busy accounts are refused in both modes, and `--force` never skips that.** Claude: the relink
-  lock plus the Claude process scan (`accountBusy`). agy: `migration.AgyProcessLister` looks for a
-  process with `--app_data_dir=antigravity-cli-ccp-<name>`. Both fail closed: a failed scan or a
+  the existing `migration.CredentialStore`; a missing login is not an error. `accountDir` is made
+  absolute with `filepath.Abs`, as `ccp run` does, because Claude Code hashes that exact string (a
+  relative `CCP_DIR` would otherwise name another Keychain item). On macOS a
+  `<accountDir>/.credentials.json` left by Claude Code is deleted as part of the login too.
+- **Busy accounts are refused in both modes, and `--force` never skips that.** Remove takes the
+  account's relink lock for both harnesses, and every `ccp run --account` start (agy too, since
+  this change) holds that lock until its process runs, so a start and a remove never interleave.
+  Claude: the Claude process scan (`accountBusy`). agy: `ProcessLister.AgyProcesses` (the same
+  lister and the same walk of the process table as the Claude scan, one test seam) looks for a
+  process whose `--app_data_dir` value ends in `antigravity-cli-ccp-<name>` (any spelling: a trailing
+  slash, `./`, `~/.gemini/...`, another letter case), or is an absolute path to the data dir. Both fail closed: a failed scan or a
   process whose arguments cannot be read counts as running. The check runs before the prompt and
   again right before the delete.
 - **Confirmation.** It prints each path and the Keychain service name, then asks y/N. `--force`
   skips the question; with no terminal on stdin and no `--force` it refuses. `--json` needs
-  `--force` and prints `{name, harness, mode, removed}`.
-- **Order.** The login is deleted first; if that fails, nothing else is deleted.
+  `--force` and prints `{name, harness, mode, removed}`; `mode` is `all` or `creds-only`.
+- **Order.** The login is deleted first; if that fails, nothing else is deleted. Then the agy data
+  dir, and the account folder last: while the folder exists, a failed run can be repeated.
+- **A symlinked account folder is refused.** `os.RemoveAll` would delete only the link and report
+  the account removed.
+- **The default mode also deletes ccp's saved usage read** (`.ccp-usage.json`), so `ccp account` does
+  not show the old usage next to "not logged in". The email stays: it is in Claude Code's own
+  `.claude.json`, which ccp never writes.
+- **Known limit.** An agy session started by hand (not through `ccp run`) takes no lock; only the
+  process scan sees it.
 - An account with an unreadable binding is still removable (`profile.IsAgyAccountDir` tells the
-  harness).
+  harness). A folder with no binding file, no `.claude.json` and an agy data dir is removed as agy.
 
 Rejected: keeping the agy data dir by default (it leaves a folder with a live token), and a
 separate `ccp account logout` command (a flag on `remove` is enough).

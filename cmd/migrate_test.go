@@ -22,6 +22,7 @@ func (noLogins) Delete(string, string) (string, error)    { return "", nil }
 type noProcs struct{}
 
 func (noProcs) ClaudeProcesses() ([]migration.ClaudeProcess, error) { return nil, nil }
+func (noProcs) AgyProcesses() ([]migration.AgyProcess, error)       { return nil, nil }
 
 func TestMigrate_AccountsOnlyWithFlag(t *testing.T) {
 	root := t.TempDir()

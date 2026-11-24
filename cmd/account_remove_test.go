@@ -60,8 +60,25 @@ type fakeAgyLister struct {
 	err   error
 }
 
-func (f *fakeAgyLister) AgyProcesses() ([]migration.AgyProcess, error) {
-	return f.procs, f.err
+// splitLister is the one process lister with a Claude half and an agy half;
+// a nil half stands for a scan that cannot run.
+type splitLister struct {
+	claude migration.ProcessLister
+	agy    *fakeAgyLister
+}
+
+func (s splitLister) ClaudeProcesses() ([]migration.ClaudeProcess, error) {
+	if s.claude == nil {
+		return nil, errors.New("no process lister on this system")
+	}
+	return s.claude.ClaudeProcesses()
+}
+
+func (s splitLister) AgyProcesses() ([]migration.AgyProcess, error) {
+	if s.agy == nil {
+		return nil, errors.New("no process lister on this system")
+	}
+	return s.agy.procs, s.agy.err
 }
 
 func installAccountRemoveSeams(
@@ -70,23 +87,21 @@ func installAccountRemoveSeams(
 	claudeStore migration.CredentialStore,
 	agyStore migration.CredentialStore,
 	claudeLister migration.ProcessLister,
-	agyLister migration.AgyProcessLister,
+	agyLister *fakeAgyLister,
 	isTTY bool,
 ) {
 	t.Helper()
 	origGOOS := accountRemoveGOOS
 	origClaudeStore := newRemoveCredentialStore
 	origAgyStore := newRemoveAgyStore
-	origAgyLister := newAgyProcessLister
 	origTTY := stdinIsTerminal
 	t.Cleanup(func() {
 		accountRemoveGOOS = origGOOS
 		newRemoveCredentialStore = origClaudeStore
 		newRemoveAgyStore = origAgyStore
-		newAgyProcessLister = origAgyLister
 		stdinIsTerminal = origTTY
 		accountRemoveForce = false
-		accountRemoveCredsOnly = false
+		accountRemoveAll = false
 		accountListJSON = false
 	})
 
@@ -97,12 +112,7 @@ func installAccountRemoveSeams(
 	} else {
 		newRemoveAgyStore = func() migration.CredentialStore { return migration.FileStore{} }
 	}
-	installFakeLister(t, claudeLister)
-	if agyLister == nil {
-		newAgyProcessLister = func() migration.AgyProcessLister { return nil }
-	} else {
-		newAgyProcessLister = func() migration.AgyProcessLister { return agyLister }
-	}
+	installFakeLister(t, splitLister{claude: claudeLister, agy: agyLister})
 	stdinIsTerminal = func() bool { return isTTY }
 }
 
@@ -152,7 +162,7 @@ func setupAgyAccount(t *testing.T, paths *config.Paths, name, prof, pool string,
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Put a conversation marker in dataDir to verify --creds-only keeps it.
+	// Put a conversation marker in dataDir to verify the default mode keeps it.
 	if err := os.WriteFile(filepath.Join(dataDir, "conversation.json"), []byte(`{"id":"c1"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +202,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--force"},
+			args:             []string{"account", "remove", "c1", "--all", "--force"},
 			wantFolderExists: false,
 			wantLoginExists:  false,
 		},
@@ -201,7 +211,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "linux",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "rm", "c1", "--force", "--json"},
+			args:             []string{"account", "rm", "c1", "--all", "--force", "--json"},
 			wantFolderExists: false,
 			wantLoginExists:  false,
 			wantJSONMode:     "all",
@@ -212,7 +222,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         false,
-			args:             []string{"account", "remove", "c1", "--force", "--json"},
+			args:             []string{"account", "remove", "c1", "--all", "--force", "--json"},
 			wantFolderExists: false,
 			wantLoginExists:  false,
 			wantJSONMode:     "all",
@@ -223,7 +233,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessAgy,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "a1", "--force", "--json"},
+			args:             []string{"account", "remove", "a1", "--all", "--force", "--json"},
 			wantFolderExists: false,
 			wantDataExists:   false,
 			wantLoginExists:  false,
@@ -235,7 +245,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--creds-only", "--force", "--json"},
+			args:             []string{"account", "remove", "c1", "--force", "--json"},
 			wantFolderExists: true,
 			wantLoginExists:  false,
 			wantJSONMode:     "creds-only",
@@ -246,7 +256,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessAgy,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "a1", "--creds-only", "--force", "--json"},
+			args:             []string{"account", "remove", "a1", "--force", "--json"},
 			wantFolderExists: true,
 			wantDataExists:   true,
 			wantLoginExists:  false,
@@ -258,7 +268,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--force"},
+			args:             []string{"account", "remove", "c1", "--all", "--force"},
 			claudeProcs:      []migration.ClaudeProcess{{PID: 42, ConfigDir: "__ACCOUNT_DIR__", EnvKnown: true}},
 			wantErr:          "Claude Code session is running",
 			wantFolderExists: true,
@@ -269,7 +279,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--creds-only", "--force"},
+			args:             []string{"account", "remove", "c1", "--force"},
 			claudeProcs:      []migration.ClaudeProcess{{PID: 42, ConfigDir: "__ACCOUNT_DIR__", EnvKnown: true}},
 			wantErr:          "Claude Code session is running",
 			wantFolderExists: true,
@@ -280,7 +290,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessAgy,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "a1", "--force"},
+			args:             []string{"account", "remove", "a1", "--all", "--force"},
 			agyProcs:         []migration.AgyProcess{{PID: 99, AppDataDir: profile.AgyAppDataDirName("a1"), ArgsKnown: true}},
 			wantErr:          "agy session is running",
 			wantFolderExists: true,
@@ -292,7 +302,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--force"},
+			args:             []string{"account", "remove", "c1", "--all", "--force"},
 			claudeScanErr:    errors.New("sysctl boom"),
 			wantErr:          "sysctl boom",
 			wantFolderExists: true,
@@ -303,7 +313,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--force"},
+			args:             []string{"account", "remove", "c1", "--all", "--force"},
 			nilClaudeLister:  true,
 			wantErr:          "no process lister",
 			wantFolderExists: true,
@@ -314,7 +324,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--force"},
+			args:             []string{"account", "remove", "c1", "--all", "--force"},
 			claudeProcs:      []migration.ClaudeProcess{{PID: 7, EnvKnown: false}},
 			wantErr:          "Claude Code session is running",
 			wantFolderExists: true,
@@ -325,7 +335,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessAgy,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "a1", "--force"},
+			args:             []string{"account", "remove", "a1", "--all", "--force"},
 			agyScanErr:       errors.New("proc boom"),
 			wantErr:          "proc boom",
 			wantFolderExists: true,
@@ -337,7 +347,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessAgy,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "a1", "--force"},
+			args:             []string{"account", "remove", "a1", "--all", "--force"},
 			nilAgyLister:     true,
 			wantErr:          "no process lister",
 			wantFolderExists: true,
@@ -349,7 +359,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessAgy,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "a1", "--force"},
+			args:             []string{"account", "remove", "a1", "--all", "--force"},
 			agyProcs:         []migration.AgyProcess{{PID: 8, ArgsKnown: false}},
 			wantErr:          "agy session is running",
 			wantFolderExists: true,
@@ -361,7 +371,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1"},
+			args:             []string{"account", "remove", "c1", "--all"},
 			isTTY:            false,
 			wantErr:          "without a terminal",
 			wantFolderExists: true,
@@ -372,7 +382,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--json"},
+			args:             []string{"account", "remove", "c1", "--all", "--json"},
 			isTTY:            true,
 			wantErr:          "--json requires --force",
 			wantFolderExists: true,
@@ -383,7 +393,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "c1", "--force"},
+			args:             []string{"account", "remove", "c1", "--all", "--force"},
 			deleteErr:        errors.New("keychain locked"),
 			wantErr:          "keychain locked",
 			wantFolderExists: true,
@@ -394,7 +404,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			goos:             "darwin",
 			harness:          profile.HarnessAgy,
 			loggedIn:         true,
-			args:             []string{"account", "remove", "a1", "--force"},
+			args:             []string{"account", "remove", "a1", "--all", "--force"},
 			deleteErr:        errors.New("permission denied"),
 			wantErr:          "permission denied",
 			wantFolderExists: true,
@@ -407,7 +417,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			harness:          profile.HarnessClaude,
 			loggedIn:         true,
 			corruptBinding:   true,
-			args:             []string{"account", "remove", "c1", "--force"},
+			args:             []string{"account", "remove", "c1", "--all", "--force"},
 			wantFolderExists: false,
 			wantLoginExists:  false,
 		},
@@ -417,7 +427,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			harness:          profile.HarnessAgy,
 			loggedIn:         true,
 			corruptBinding:   true,
-			args:             []string{"account", "remove", "a1", "--force", "--json"},
+			args:             []string{"account", "remove", "a1", "--all", "--force", "--json"},
 			wantFolderExists: false,
 			wantDataExists:   false,
 			wantLoginExists:  false,
@@ -459,7 +469,7 @@ func TestAccountRemove_Table(t *testing.T) {
 			if !tc.nilClaudeLister {
 				claudeLister = &fakeLister{procs: claudeProcs, err: tc.claudeScanErr}
 			}
-			var agyLister migration.AgyProcessLister
+			var agyLister *fakeAgyLister
 			if !tc.nilAgyLister {
 				agyLister = &fakeAgyLister{procs: tc.agyProcs, err: tc.agyScanErr}
 			}
@@ -491,7 +501,7 @@ func TestAccountRemove_Table(t *testing.T) {
 				}
 				if tc.wantDataExists {
 					if _, convErr := os.Stat(filepath.Join(dataDir, "conversation.json")); convErr != nil {
-						t.Errorf("conversation.json missing after --creds-only: %v", convErr)
+						t.Errorf("conversation.json missing after the default mode: %v", convErr)
 					}
 				}
 			} else {
@@ -524,12 +534,12 @@ func TestAccountRemove_UnknownAndInvalidName(t *testing.T) {
 	accountCmdEnv(t, "work")
 	installAccountRemoveSeams(t, "darwin", &fakeCredStore{}, nil, &fakeLister{}, &fakeAgyLister{}, true)
 
-	_, err := captureStdout(t, func() error { return runCcp(t, "account", "remove", "ghost", "--force") })
+	_, err := captureStdout(t, func() error { return runCcp(t, "account", "remove", "ghost", "--all", "--force") })
 	if err == nil || !strings.Contains(err.Error(), "ccp account") {
 		t.Fatalf("unknown account err = %v, want mention of 'ccp account'", err)
 	}
 
-	_, err = captureStdout(t, func() error { return runCcp(t, "account", "remove", "../escape", "--force") })
+	_, err = captureStdout(t, func() error { return runCcp(t, "account", "remove", "../escape", "--all", "--force") })
 	if err == nil {
 		t.Fatalf("expected validation error for invalid account name")
 	}
@@ -555,12 +565,12 @@ func TestAccountRemove_CredsOnlyShowsNotLoggedIn(t *testing.T) {
 	}
 
 	// Remove creds only for both.
-	if _, err := captureStdout(t, func() error { return runCcp(t, "account", "remove", "c1", "--creds-only", "--force") }); err != nil {
+	if _, err := captureStdout(t, func() error { return runCcp(t, "account", "remove", "c1", "--force") }); err != nil {
 		t.Fatal(err)
 	}
-	accountRemoveCredsOnly = false
+	accountRemoveAll = false
 	accountRemoveForce = false
-	if _, err := captureStdout(t, func() error { return runCcp(t, "account", "remove", "a1", "--creds-only", "--force") }); err != nil {
+	if _, err := captureStdout(t, func() error { return runCcp(t, "account", "remove", "a1", "--force") }); err != nil {
 		t.Fatal(err)
 	}
 
@@ -570,7 +580,7 @@ func TestAccountRemove_CredsOnlyShowsNotLoggedIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(accounts) != 2 {
-		t.Fatalf("accounts after --creds-only = %d, want 2", len(accounts))
+		t.Fatalf("accounts after the default mode = %d, want 2", len(accounts))
 	}
 	for _, a := range accounts {
 		if a.Pool != "team" {
@@ -580,7 +590,7 @@ func TestAccountRemove_CredsOnlyShowsNotLoggedIn(t *testing.T) {
 	statuses := reader.Read(accounts)
 	for _, s := range statuses {
 		if s.LoggedIn {
-			t.Errorf("account %s still reported LoggedIn=true after --creds-only", s.Name)
+			t.Errorf("account %s still reported LoggedIn=true after the default mode", s.Name)
 		}
 		if s.Note != "not logged in" {
 			t.Errorf("account %s Note = %q, want 'not logged in'", s.Name, s.Note)
@@ -611,7 +621,7 @@ func TestAccountRemove_InteractivePrompt(t *testing.T) {
 	}
 
 	// Answering "n" prints exact targets (Keychain service name + folder) and deletes nothing.
-	out, err := withStdin("n\n", func() error { return runCcp(t, "account", "remove", "c1") })
+	out, err := withStdin("n\n", func() error { return runCcp(t, "account", "remove", "c1", "--all") })
 	if err != nil {
 		t.Fatalf("cancel err: %v", err)
 	}
@@ -629,7 +639,7 @@ func TestAccountRemove_InteractivePrompt(t *testing.T) {
 	}
 
 	// Answering "y" proceeds and deletes both.
-	out, err = withStdin("y\n", func() error { return runCcp(t, "account", "remove", "c1") })
+	out, err = withStdin("y\n", func() error { return runCcp(t, "account", "remove", "c1", "--all") })
 	if err != nil {
 		t.Fatalf("confirm err: %v", err)
 	}

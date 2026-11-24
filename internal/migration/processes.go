@@ -22,11 +22,6 @@ type ClaudeProcess struct {
 	EnvKnown  bool   // false when the environment could not be read
 }
 
-// ProcessLister finds running Claude Code processes.
-type ProcessLister interface {
-	ClaudeProcesses() ([]ClaudeProcess, error)
-}
-
 // AgyProcess is a running process that carries an --app_data_dir flag, or a
 // process whose arguments could not be read and whose executable name may be
 // agy.
@@ -36,8 +31,9 @@ type AgyProcess struct {
 	ArgsKnown  bool   // false when argv could not be read
 }
 
-// AgyProcessLister finds running agy processes.
-type AgyProcessLister interface {
+// ProcessLister finds running Claude Code and agy processes.
+type ProcessLister interface {
+	ClaudeProcesses() ([]ClaudeProcess, error)
 	AgyProcesses() ([]AgyProcess, error)
 }
 
@@ -49,15 +45,6 @@ func NewProcessLister() ProcessLister {
 		return newSysctlLister()
 	case "linux":
 		return procLister{root: "/proc"}
-	}
-	return nil
-}
-
-// NewAgyProcessLister returns this machine's agy process lister: sysctl on
-// macOS, /proc on Linux, nil elsewhere (callers must treat nil as "cannot tell").
-func NewAgyProcessLister() AgyProcessLister {
-	if l, ok := NewProcessLister().(AgyProcessLister); ok {
-		return l
 	}
 	return nil
 }
@@ -188,12 +175,23 @@ type sysctlLister struct {
 	procargs func(pid int) ([]byte, error) // returns errProcessGone for ESRCH
 }
 
-func (l sysctlLister) ClaudeProcesses() ([]ClaudeProcess, error) {
+// sysctlProc is one process as the kernel reports it; readable is false when
+// its arguments could not be read or parsed (another user's process, or a
+// malformed buffer).
+type sysctlProc struct {
+	pid        int
+	comm, exec string
+	argv, env  []string
+	readable   bool
+}
+
+// read walks the process table once for both ClaudeProcesses and AgyProcesses.
+func (l sysctlLister) read() ([]sysctlProc, error) {
 	entries, err := l.procs()
 	if err != nil {
 		return nil, err
 	}
-	var out []ClaudeProcess
+	var out []sysctlProc
 	for _, e := range entries {
 		if e.pid <= 0 {
 			continue
@@ -202,52 +200,52 @@ func (l sysctlLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 		if errors.Is(err, errProcessGone) {
 			continue
 		}
-		var exec string
-		var argv, env []string
+		p := sysctlProc{pid: e.pid, comm: e.comm}
 		if err == nil {
-			exec, argv, env, err = parseProcargs2(buf)
+			p.exec, p.argv, p.env, err = parseProcargs2(buf)
 		}
-		if err != nil {
-			// Unreadable (another user's process, or a malformed buffer): a
-			// process that may be Claude counts as using every login.
-			if mayBeClaude(e.comm) {
-				out = append(out, ClaudeProcess{PID: e.pid})
+		p.readable = err == nil
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func (l sysctlLister) ClaudeProcesses() ([]ClaudeProcess, error) {
+	procs, err := l.read()
+	if err != nil {
+		return nil, err
+	}
+	var out []ClaudeProcess
+	for _, p := range procs {
+		if !p.readable {
+			// A process that may be Claude counts as using every login.
+			if mayBeClaude(p.comm) {
+				out = append(out, ClaudeProcess{PID: p.pid})
 			}
 			continue
 		}
-		if isClaudeProcess(exec, argv) {
-			out = append(out, ClaudeProcess{PID: e.pid, ConfigDir: configDirOf(env), EnvKnown: true})
+		if isClaudeProcess(p.exec, p.argv) {
+			out = append(out, ClaudeProcess{PID: p.pid, ConfigDir: configDirOf(p.env), EnvKnown: true})
 		}
 	}
 	return out, nil
 }
 
 func (l sysctlLister) AgyProcesses() ([]AgyProcess, error) {
-	entries, err := l.procs()
+	procs, err := l.read()
 	if err != nil {
 		return nil, err
 	}
 	var out []AgyProcess
-	for _, e := range entries {
-		if e.pid <= 0 {
-			continue
-		}
-		buf, err := l.procargs(e.pid)
-		if errors.Is(err, errProcessGone) {
-			continue
-		}
-		var argv []string
-		if err == nil {
-			_, argv, _, err = parseProcargs2(buf)
-		}
-		if err != nil {
-			if mayBeAgy(e.comm) {
-				out = append(out, AgyProcess{PID: e.pid})
+	for _, p := range procs {
+		if !p.readable {
+			if mayBeAgy(p.comm) {
+				out = append(out, AgyProcess{PID: p.pid})
 			}
 			continue
 		}
-		if dir, ok := appDataDirOf(argv); ok {
-			out = append(out, AgyProcess{PID: e.pid, AppDataDir: dir, ArgsKnown: true})
+		if dir, ok := appDataDirOf(p.argv); ok {
+			out = append(out, AgyProcess{PID: p.pid, AppDataDir: dir, ArgsKnown: true})
 		}
 	}
 	return out, nil
@@ -307,12 +305,24 @@ type procLister struct {
 	root string
 }
 
-func (l procLister) ClaudeProcesses() ([]ClaudeProcess, error) {
+// procCmdline is one /proc entry: its argv, or, when cmdline could not be
+// read, its executable name (commKnown false when that failed too).
+type procCmdline struct {
+	pid       int
+	dir       string
+	argv      []string
+	readable  bool
+	comm      string
+	commKnown bool
+}
+
+// read walks /proc once for both ClaudeProcesses and AgyProcesses.
+func (l procLister) read() ([]procCmdline, error) {
 	entries, err := os.ReadDir(l.root)
 	if err != nil {
 		return nil, err
 	}
-	var procs []ClaudeProcess
+	var out []procCmdline
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
 		if err != nil {
@@ -325,60 +335,63 @@ func (l procLister) ClaudeProcesses() ([]ClaudeProcess, error) {
 		}
 		if err != nil {
 			comm, cerr := os.ReadFile(filepath.Join(dir, "comm"))
-			if cerr != nil || mayBeClaude(strings.TrimSpace(string(comm))) {
-				procs = append(procs, ClaudeProcess{PID: pid})
-			}
+			out = append(out, procCmdline{pid: pid, dir: dir, comm: strings.TrimSpace(string(comm)), commKnown: cerr == nil})
 			continue
 		}
 		if len(cmdline) == 0 {
 			continue // kernel thread or zombie
 		}
-		exe, _ := os.Readlink(filepath.Join(dir, "exe")) // unreadable for other users' processes
-		if !isClaudeProcess(exe, strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")) {
+		out = append(out, procCmdline{pid: pid, dir: dir, readable: true,
+			argv: strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")})
+	}
+	return out, nil
+}
+
+func (l procLister) ClaudeProcesses() ([]ClaudeProcess, error) {
+	cmds, err := l.read()
+	if err != nil {
+		return nil, err
+	}
+	var procs []ClaudeProcess
+	for _, c := range cmds {
+		if !c.readable {
+			if !c.commKnown || mayBeClaude(c.comm) {
+				procs = append(procs, ClaudeProcess{PID: c.pid})
+			}
 			continue
 		}
-		environ, err := os.ReadFile(filepath.Join(dir, "environ"))
+		exe, _ := os.Readlink(filepath.Join(c.dir, "exe")) // unreadable for other users' processes
+		if !isClaudeProcess(exe, c.argv) {
+			continue
+		}
+		environ, err := os.ReadFile(filepath.Join(c.dir, "environ"))
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
 			continue // exited
 		case err != nil:
-			procs = append(procs, ClaudeProcess{PID: pid})
+			procs = append(procs, ClaudeProcess{PID: c.pid})
 		default:
-			procs = append(procs, ClaudeProcess{PID: pid, ConfigDir: configDirOf(strings.Split(string(environ), "\x00")), EnvKnown: true})
+			procs = append(procs, ClaudeProcess{PID: c.pid, ConfigDir: configDirOf(strings.Split(string(environ), "\x00")), EnvKnown: true})
 		}
 	}
 	return procs, nil
 }
 
 func (l procLister) AgyProcesses() ([]AgyProcess, error) {
-	entries, err := os.ReadDir(l.root)
+	cmds, err := l.read()
 	if err != nil {
 		return nil, err
 	}
 	var procs []AgyProcess
-	for _, e := range entries {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil {
-			continue
-		}
-		dir := filepath.Join(l.root, e.Name())
-		cmdline, err := os.ReadFile(filepath.Join(dir, "cmdline"))
-		if errors.Is(err, fs.ErrNotExist) {
-			continue // exited
-		}
-		if err != nil {
-			comm, cerr := os.ReadFile(filepath.Join(dir, "comm"))
-			if cerr != nil || mayBeAgy(strings.TrimSpace(string(comm))) {
-				procs = append(procs, AgyProcess{PID: pid})
+	for _, c := range cmds {
+		if !c.readable {
+			if !c.commKnown || mayBeAgy(c.comm) {
+				procs = append(procs, AgyProcess{PID: c.pid})
 			}
 			continue
 		}
-		if len(cmdline) == 0 {
-			continue // kernel thread or zombie
-		}
-		argv := strings.Split(strings.TrimRight(string(cmdline), "\x00"), "\x00")
-		if appDir, ok := appDataDirOf(argv); ok {
-			procs = append(procs, AgyProcess{PID: pid, AppDataDir: appDir, ArgsKnown: true})
+		if appDir, ok := appDataDirOf(c.argv); ok {
+			procs = append(procs, AgyProcess{PID: c.pid, AppDataDir: appDir, ArgsKnown: true})
 		}
 	}
 	return procs, nil

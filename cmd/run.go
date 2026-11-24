@@ -44,7 +44,7 @@ folder (a process ccp cannot read counts as running there); busy accounts are
 skipped. The pick line names the pool and any relink.
 
 With --account auto or auto:<pool> and no command, if every candidate account is
-agy, ccp starts agy instead of claude.
+agy, ccp starts agy instead of claude (not with --or-profile).
 
 --or-profile (with --account auto or auto:<pool>) never fails for lack of an account: a
 session already on an account keeps it, and with no account free and logged in it
@@ -207,7 +207,9 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 	if err != nil {
 		return nil, release, err
 	}
-	if isAuto && !ra.commandExplicit && !ra.relink {
+	// Not with --or-profile: its fallback runs the command on the profile
+	// itself, and a bare agy there would use the shared agy login.
+	if isAuto && !ra.commandExplicit && !ra.relink && !ra.orProfile {
 		isAgy, err := detectAutoAgy(paths, profileName, pool)
 		if err != nil {
 			return nil, release, err
@@ -246,6 +248,12 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 		exe, err := exec.LookPath(cmdArgs[0])
 		if err != nil {
 			return nil, release, fmt.Errorf("agy not found on PATH; install Antigravity CLI (agy) first: %w", err)
+		}
+		// Held until the process has started, so 'ccp account remove' never
+		// deletes the account between this check and the start.
+		release, err = lockForLink(paths.AccountDir(account))
+		if err != nil {
+			return nil, release, err
 		}
 		// An agy account runs on any profile; its binding only names the
 		// default one, and only --relink rewrites it.
@@ -391,15 +399,7 @@ func activationDir(paths *config.Paths, profileName, account string, accountSet,
 // profileName when pool is empty) uses harness agy. At least one readable
 // candidate must exist.
 func detectAutoAgy(paths *config.Paths, profileName, pool string) (bool, error) {
-	var (
-		candidates []profile.Account
-		err        error
-	)
-	if pool != "" {
-		candidates, err = profile.AccountsInPool(paths, pool)
-	} else {
-		candidates, err = profile.AccountsBoundTo(paths, profileName)
-	}
+	candidates, err := autoCandidates(paths, profileName, pool)
 	if err != nil {
 		return false, err
 	}

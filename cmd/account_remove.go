@@ -13,20 +13,20 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/samhvw8/claude-code-profile/internal/accountusage"
 	"github.com/samhvw8/claude-code-profile/internal/config"
 	"github.com/samhvw8/claude-code-profile/internal/migration"
 	"github.com/samhvw8/claude-code-profile/internal/profile"
 )
 
 var (
-	accountRemoveForce     bool
-	accountRemoveCredsOnly bool
+	accountRemoveForce bool
+	accountRemoveAll   bool
 
 	// Test seams so tests never touch the real Keychain, process table, or TTY.
 	accountRemoveGOOS        = func() string { return runtime.GOOS }
 	newRemoveCredentialStore = migration.NewCredentialStore
 	newRemoveAgyStore        = func() migration.CredentialStore { return migration.FileStore{} }
-	newAgyProcessLister      = migration.NewAgyProcessLister
 	stdinIsTerminal          = func() bool {
 		info, err := os.Stdin.Stat()
 		return err == nil && info.Mode()&os.ModeCharDevice != 0
@@ -36,19 +36,21 @@ var (
 var accountRemoveCmd = &cobra.Command{
 	Use:     "remove <name>",
 	Aliases: []string{"rm"},
-	Short:   "Remove an account and its login, or only its login",
-	Long: `Remove an account's login and folder (~/.ccp/accounts/<name>/). For an agy
-account, also remove its data directory (~/.gemini/antigravity-cli-ccp-<name>/).
+	Short:   "Delete an account's login, or with --all the whole account",
+	Long: `Delete the stored login of an account (Keychain item on macOS,
+.credentials.json on Linux, or antigravity-oauth-token for agy). The account
+folder, its binding and pool, and the agy data directory stay, so the account
+can log in again with 'ccp run --account <name>'.
 
-With --creds-only, delete only the stored login (Keychain item on macOS,
-.credentials.json on Linux, or antigravity-oauth-token for agy) and leave the
-account folder, binding, pool, and agy data directory intact.
+With --all, also delete the account folder (~/.ccp/accounts/<name>/) and, for
+an agy account, its data directory (~/.gemini/antigravity-cli-ccp-<name>/,
+with its conversations).
 
 Refuses while a session is running on the account (even with --force).
 Prompts for confirmation unless --force is passed. --json requires --force.
 
-  ccp account remove gt1                 # delete login and account folder
-  ccp account remove gt1 --creds-only    # log out gt1, keep folder and pool
+  ccp account remove gt1                 # log gt1 out, keep folder and pool
+  ccp account remove gt1 --all           # delete login, folder and agy data
   ccp account rm agy1 --force --json     # non-interactive JSON output`,
 	Args: cobra.ExactArgs(1),
 	RunE: runAccountRemove,
@@ -56,7 +58,7 @@ Prompts for confirmation unless --force is passed. --json requires --force.
 
 func init() {
 	accountRemoveCmd.Flags().BoolVarP(&accountRemoveForce, "force", "f", false, "Skip confirmation prompt")
-	accountRemoveCmd.Flags().BoolVar(&accountRemoveCredsOnly, "creds-only", false, "Delete only the stored login; keep account folder and data")
+	accountRemoveCmd.Flags().BoolVar(&accountRemoveAll, "all", false, "Also delete the account folder and, for agy, its data directory")
 }
 
 type accountRemoveJSON struct {
@@ -84,20 +86,28 @@ func runAccountRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("ccp not initialized: run 'ccp init' first")
 	}
 
-	accountDir := filepath.Clean(paths.AccountDir(name))
-	info, err := os.Stat(accountDir)
+	// Claude Code hashes the absolute CLAUDE_CONFIG_DIR that ccp run passes
+	// (filepath.Abs there too); any other spelling names another Keychain item.
+	accountDir, err := filepath.Abs(paths.AccountDir(name))
+	if err != nil {
+		return err
+	}
+	info, err := os.Lstat(accountDir)
 	if errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("account %q does not exist; list accounts with 'ccp account'", name)
 	}
 	if err != nil {
 		return err
 	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("account folder %s is a symlink; ccp does not remove through a link: delete the link and its target yourself", accountDir)
+	}
 	if !info.IsDir() {
 		return fmt.Errorf("account path %s is not a directory", accountDir)
 	}
 
 	harness := profile.HarnessClaude
-	if profile.IsAgyAccountDir(name, accountDir) {
+	if profile.IsAgyAccountDir(name, accountDir) || agyAccountWithoutBinding(name, accountDir) {
 		harness = profile.HarnessAgy
 	}
 
@@ -122,6 +132,18 @@ func runAccountRemove(cmd *cobra.Command, args []string) error {
 		claudeLoginKey = migration.LoginKey(goos, accountDir)
 		loginLabel = migration.LoginLocation(goos, accountDir)
 	}
+	// Where the Keychain holds the login, Claude Code can still have written
+	// it to this file (a Keychain it could not use); it is part of the login.
+	claudeCredFile := ""
+	if harness == profile.HarnessClaude {
+		if f := filepath.Join(accountDir, ".credentials.json"); f != claudeLoginKey {
+			if _, err := os.Lstat(f); err == nil {
+				claudeCredFile = f
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+		}
+	}
 
 	// Interactive confirmation: refuse early if busy, require a TTY, show exact targets.
 	if !accountRemoveForce {
@@ -131,15 +153,20 @@ func runAccountRemove(cmd *cobra.Command, args []string) error {
 		if !stdinIsTerminal() {
 			return fmt.Errorf("refusing to remove account %q without a terminal; pass --force to skip confirmation", name)
 		}
-		if accountRemoveCredsOnly {
+		if !accountRemoveAll {
 			fmt.Printf("Will remove login for account %q (%s):\n", name, harness)
 			fmt.Printf("  Login:    %s\n", loginLabel)
+			if claudeCredFile != "" {
+				fmt.Printf("  Login:    %s\n", claudeCredFile)
+			}
 		} else {
 			fmt.Printf("Will remove account %q (%s):\n", name, harness)
 			fmt.Printf("  Login:    %s\n", loginLabel)
-			fmt.Printf("  Folder:   %s\n", accountDir)
 			if harness == profile.HarnessAgy {
-				fmt.Printf("  Data dir: %s\n", agyDataDir)
+				fmt.Printf("  Folder:   %s\n", accountDir)
+				fmt.Printf("  Data dir: %s (agy conversations and settings)\n", agyDataDir)
+			} else {
+				fmt.Printf("  Folder:   %s (with the state only this account has, such as MCP servers added on it)\n", accountDir)
 			}
 		}
 		fmt.Print("Remove? [y/N]: ")
@@ -155,15 +182,13 @@ func runAccountRemove(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Take the Claude account lock and check busy right before deleting.
-	release := noRelease
-	if harness == profile.HarnessClaude {
-		release, err = lockForLink(accountDir)
-		if err != nil {
-			return err
-		}
-		defer release()
+	// Take the account lock and check busy right before deleting: every
+	// 'ccp run --account' start holds the same lock until its process runs.
+	release, err := lockForLink(accountDir)
+	if err != nil {
+		return err
 	}
+	defer release()
 	if err := checkAccountNotBusy(harness, name, accountDir, agyDataDir); err != nil {
 		return err
 	}
@@ -203,25 +228,41 @@ func runAccountRemove(cmd *cobra.Command, args []string) error {
 			}
 			removed = append(removed, claudeLoginKey)
 		}
+		if claudeCredFile != "" {
+			if err := os.Remove(claudeCredFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("remove login %s: %w", claudeCredFile, err)
+			}
+			removed = append(removed, claudeCredFile)
+		}
 	}
 
 	// 2. Delete account folder (and agy data dir) in default mode.
 	mode := "creds-only"
-	if !accountRemoveCredsOnly {
+	if accountRemoveAll {
 		mode = "all"
-		if err := os.RemoveAll(accountDir); err != nil {
-			return fmt.Errorf("remove account folder %s: %w", accountDir, err)
-		}
-		removed = append(removed, accountDir)
+		// The account folder goes last: while it exists, a failed run can be
+		// repeated with the same command.
 		if harness == profile.HarnessAgy {
 			_, dStatErr := os.Stat(agyDataDir)
 			dataExisted := dStatErr == nil
 			if err := os.RemoveAll(agyDataDir); err != nil {
-				return fmt.Errorf("remove agy data dir %s: %w", agyDataDir, err)
+				return fmt.Errorf("remove agy data dir %s: %w (the account folder is kept; run the command again)", agyDataDir, err)
 			}
 			if dataExisted {
 				removed = append(removed, agyDataDir)
 			}
+		}
+		if err := os.RemoveAll(accountDir); err != nil {
+			return fmt.Errorf("remove account folder %s: %w", accountDir, err)
+		}
+		removed = append(removed, accountDir)
+	}
+
+	if !accountRemoveAll {
+		// ccp's own saved usage read belongs to the login that is gone;
+		// 'ccp account' would show it next to "not logged in".
+		if err := os.Remove(filepath.Join(accountDir, accountusage.UsageFile)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove saved usage of account %s: %w", name, err)
 		}
 	}
 
@@ -236,7 +277,7 @@ func runAccountRemove(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	if accountRemoveCredsOnly {
+	if !accountRemoveAll {
 		if len(removed) == 0 {
 			fmt.Printf("No login found for account %s (%s); nothing removed\n", name, harness)
 		} else {
@@ -255,7 +296,7 @@ func checkAccountNotBusy(harness, name, accountDir, agyDataDir string) error {
 			if scanErr != nil {
 				return fmt.Errorf("cannot verify whether agy is running on account %q: %w", name, scanErr)
 			}
-			return fmt.Errorf("cannot remove account %q: an agy session is running on it (close it first)", name)
+			return fmt.Errorf("cannot remove account %q: an agy session is running on it, or an agy process ccp cannot read may be (close it first)", name)
 		}
 		return nil
 	}
@@ -264,14 +305,33 @@ func checkAccountNotBusy(harness, name, accountDir, agyDataDir string) error {
 		if scanErr != nil {
 			return fmt.Errorf("cannot verify whether Claude Code is running on account %q: %w", name, scanErr)
 		}
-		return fmt.Errorf("cannot remove account %q: a Claude Code session is running on it (close it first)", name)
+		return fmt.Errorf("cannot remove account %q: a Claude Code session is running on it, or a process ccp cannot read may be (close it first)", name)
 	}
 	return nil
 }
 
+// agyAccountWithoutBinding reports an agy account whose binding file is gone:
+// profile.IsAgyAccountDir only guesses for an unreadable binding, and a
+// missing one would be removed as a Claude account, leaving the agy token and
+// data dir behind. No Claude state plus an agy data dir means agy.
+func agyAccountWithoutBinding(name, accountDir string) bool {
+	if _, err := os.Lstat(filepath.Join(accountDir, profile.AccountFile)); !errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+	if _, err := os.Lstat(filepath.Join(accountDir, ".claude.json")); !errors.Is(err, os.ErrNotExist) {
+		return false
+	}
+	dataDir, err := profile.AgyAccountDataDir(name)
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(dataDir)
+	return err == nil && info.IsDir()
+}
+
 // scanAgyProcesses lists running agy processes, or says why it cannot.
 func scanAgyProcesses() ([]migration.AgyProcess, error) {
-	lister := newAgyProcessLister()
+	lister := newProcessLister()
 	if lister == nil {
 		return nil, errors.New("no process lister on this system")
 	}
@@ -289,7 +349,11 @@ func agyAccountBusy(procs []migration.AgyProcess, scanErr error, appDataDirName,
 		if !p.ArgsKnown {
 			return true
 		}
-		if p.AppDataDir == appDataDirName {
+		// agy resolves a relative value under ~/.gemini, so every spelling
+		// that ends in the account's folder name counts (a trailing slash,
+		// ./, ~/.gemini/..., another letter case): a wrong "busy" only
+		// refuses, a wrong "free" deletes under a live session.
+		if strings.EqualFold(filepath.Base(filepath.Clean(p.AppDataDir)), appDataDirName) {
 			return true
 		}
 		if agyDataDir != "" && filepath.IsAbs(p.AppDataDir) && profile.SameDir(p.AppDataDir, agyDataDir) {

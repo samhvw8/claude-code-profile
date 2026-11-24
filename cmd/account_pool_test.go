@@ -21,7 +21,11 @@ type fakeLister struct {
 	procs, later []migration.ClaudeProcess
 	err          error
 	calls        atomic.Int32
+	agy          []migration.AgyProcess
+	agyErr       error
 }
+
+func (f *fakeLister) AgyProcesses() ([]migration.AgyProcess, error) { return f.agy, f.agyErr }
 
 func (f *fakeLister) ClaudeProcesses() ([]migration.ClaudeProcess, error) {
 	if f.calls.Add(1) > 1 && f.later != nil {

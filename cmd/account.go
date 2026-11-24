@@ -37,8 +37,8 @@ file-based token storage in ~/.gemini/antigravity-cli-ccp-<name>/.
   ccp account pool gt1 company                   # put gt1 in pool "company"
   ccp run --account auto:company                 # freest account of the pool, any profile
   eval "$(ccp env --account gt2)"                # this terminal only (Claude only)
-  ccp account remove gt1                         # delete login and account folder
-  ccp account remove gt1 --creds-only            # delete only the login
+  ccp account remove gt1                         # log gt1 out (delete only its login)
+  ccp account remove gt1 --all                   # delete login, account folder and agy data
 
 With no subcommand, ccp account lists the accounts.`,
 	Args: cobra.NoArgs,

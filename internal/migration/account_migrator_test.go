@@ -82,6 +82,7 @@ func (s *fakeStore) mutations() []string {
 type fakeProcs []ClaudeProcess
 
 func (f fakeProcs) ClaudeProcesses() ([]ClaudeProcess, error) { return f, nil }
+func (f fakeProcs) AgyProcesses() ([]AgyProcess, error)       { return nil, nil }
 
 type migrateEnv struct {
 	paths *config.Paths
