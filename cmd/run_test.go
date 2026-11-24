@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -371,9 +373,9 @@ func TestRun_AgyEdgeCases(t *testing.T) {
 		t.Error("corrupt relink created symlink")
 	}
 
-	// 5. --account auto without '-- agy' defaults to claude pool and does not pick agy1.
-	if err := runCcp(t, "run", "work", "--account", "auto"); err == nil || !strings.Contains(err.Error(), "no account is linked") {
-		t.Errorf("claude auto on agy-only pool: %v", err)
+	// 5. --account auto with explicit '-- claude' on an agy-only profile keeps the Claude error.
+	if err := runCcp(t, "run", "work", "--account", "auto", "--", "claude"); err == nil || !strings.Contains(err.Error(), "no account is linked") {
+		t.Errorf("explicit claude auto on agy-only profile: %v", err)
 	}
 
 	// 6. --account auto --or-profile -- agy ignores CLAUDE_CONFIG_DIR pointing to a Claude account.
@@ -390,4 +392,275 @@ func TestRun_AgyEdgeCases(t *testing.T) {
 	if !strings.Contains(string(got), "ARGV=--app_data_dir=antigravity-cli-ccp-agy1\n") {
 		t.Errorf("expected agy1 launch, got:\n%s", got)
 	}
+}
+
+func TestPrepareRunCmd_AutoHarness(t *testing.T) {
+	prep := func(t *testing.T, paths *config.Paths, args ...string) (*exec.Cmd, string, error) {
+		t.Helper()
+		ra, err := parseRunArgs(args)
+		if err != nil {
+			t.Fatalf("parseRunArgs(%v): %v", args, err)
+		}
+		var cmd *exec.Cmd
+		stderr, err := stderrOf(t, func() error {
+			c, rel, err := prepareRunCmd(paths, ra)
+			if rel != nil {
+				rel()
+			}
+			cmd = c
+			return err
+		})
+		return cmd, stderr, err
+	}
+
+	envVal := func(env []string, key string) string {
+		prefix := key + "="
+		for _, e := range env {
+			if strings.HasPrefix(e, prefix) {
+				return strings.TrimPrefix(e, prefix)
+			}
+		}
+		return ""
+	}
+
+	t.Run("all-agy profile", func(t *testing.T) {
+		paths := accountCmdEnv(t, "work")
+		binDir := filepath.Join(t.TempDir(), "bin")
+		installFakeAgy(t, binDir, filepath.Join(t.TempDir(), "unused"))
+		t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
+		if _, err := profile.CreateAgyAccount(paths, "agy1", "work"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := profile.CreateAgyAccount(paths, "agy2", "work"); err != nil {
+			t.Fatal(err)
+		}
+		installFakeUsage(t, map[string]float64{"agy1": 50, "agy2": 10}, nil)
+
+		cmd, stderr, err := prep(t, paths, "work", "--account", "auto")
+		if err != nil {
+			t.Fatalf("prepareRunCmd: %v", err)
+		}
+		if filepath.Base(cmd.Path) != profile.HarnessAgy {
+			t.Errorf("cmd.Path = %q, want agy", cmd.Path)
+		}
+		if !slices.Contains(cmd.Args[1:], "--app_data_dir=antigravity-cli-ccp-agy2") {
+			t.Errorf("cmd.Args = %v, want --app_data_dir=antigravity-cli-ccp-agy2", cmd.Args)
+		}
+		if got := envVal(cmd.Env, "SSH_CLIENT"); got != "ccp 0 0" {
+			t.Errorf("SSH_CLIENT = %q, want %q", got, "ccp 0 0")
+		}
+		if got := envVal(cmd.Env, "CLAUDE_CONFIG_DIR"); got != paths.ProfileDir("work") {
+			t.Errorf("CLAUDE_CONFIG_DIR = %q, want %q", got, paths.ProfileDir("work"))
+		}
+		detectLine := "ccp: every account of profile work is agy; starting agy\n"
+		pickLine := "ccp: account agy2 ("
+		di := strings.Index(stderr, detectLine)
+		pi := strings.Index(stderr, pickLine)
+		if di < 0 || pi < 0 || di >= pi {
+			t.Errorf("stderr order wrong:\n%s", stderr)
+		}
+	})
+
+	t.Run("all-agy pool", func(t *testing.T) {
+		paths := accountCmdEnv(t, "work", "other")
+		binDir := filepath.Join(t.TempDir(), "bin")
+		installFakeAgy(t, binDir, filepath.Join(t.TempDir(), "unused"))
+		t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
+		if _, err := profile.CreateAgyAccount(paths, "agy1", "work"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := profile.CreateAgyAccount(paths, "agy2", "other"); err != nil {
+			t.Fatal(err)
+		}
+		if err := profile.SetAccountPool(paths.AccountDir("agy1"), "gp"); err != nil {
+			t.Fatal(err)
+		}
+		if err := profile.SetAccountPool(paths.AccountDir("agy2"), "gp"); err != nil {
+			t.Fatal(err)
+		}
+		installFakeUsage(t, map[string]float64{"agy1": 5, "agy2": 60}, nil)
+
+		cmd, stderr, err := prep(t, paths, "other", "--account", "auto:gp")
+		if err != nil {
+			t.Fatalf("prepareRunCmd: %v", err)
+		}
+		if filepath.Base(cmd.Path) != profile.HarnessAgy {
+			t.Errorf("cmd.Path = %q, want agy", cmd.Path)
+		}
+		if !slices.Contains(cmd.Args[1:], "--app_data_dir=antigravity-cli-ccp-agy1") {
+			t.Errorf("cmd.Args = %v, want --app_data_dir=antigravity-cli-ccp-agy1", cmd.Args)
+		}
+		if got := envVal(cmd.Env, "CLAUDE_CONFIG_DIR"); got != paths.ProfileDir("other") {
+			t.Errorf("CLAUDE_CONFIG_DIR = %q, want %q", got, paths.ProfileDir("other"))
+		}
+		detectLine := "ccp: every account of pool gp is agy; starting agy\n"
+		pickLine := "ccp: account agy1 (pool gp, "
+		di := strings.Index(stderr, detectLine)
+		pi := strings.Index(stderr, pickLine)
+		if di < 0 || pi < 0 || di >= pi {
+			t.Errorf("stderr order wrong:\n%s", stderr)
+		}
+	})
+
+	t.Run("mixed pool stays claude", func(t *testing.T) {
+		paths := accountCmdEnv(t, "work")
+		if _, err := profile.CreateAgyAccount(paths, "agy1", "work"); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := profile.LinkAccount(paths, "c1", "work", false); err != nil {
+			t.Fatal(err)
+		}
+		if err := profile.SetAccountPool(paths.AccountDir("agy1"), "mix"); err != nil {
+			t.Fatal(err)
+		}
+		if err := profile.SetAccountPool(paths.AccountDir("c1"), "mix"); err != nil {
+			t.Fatal(err)
+		}
+		installFakeLister(t, &fakeLister{})
+		installFakeUsage(t, map[string]float64{"agy1": 5, "c1": 25}, nil)
+
+		cmd, stderr, err := prep(t, paths, "work", "--account", "auto:mix")
+		if err != nil {
+			t.Fatalf("prepareRunCmd: %v", err)
+		}
+		if cmd.Args[0] != profile.HarnessClaude {
+			t.Errorf("cmd.Args[0] = %q, want claude", cmd.Args[0])
+		}
+		if got := envVal(cmd.Env, "CLAUDE_CONFIG_DIR"); got != paths.AccountDir("c1") {
+			t.Errorf("CLAUDE_CONFIG_DIR = %q, want %q", got, paths.AccountDir("c1"))
+		}
+		if strings.Contains(stderr, "starting agy") {
+			t.Errorf("unexpected agy notice on mixed pool:\n%s", stderr)
+		}
+	})
+
+	t.Run("all-Claude stays claude", func(t *testing.T) {
+		paths := accountCmdEnv(t, "work")
+		if _, _, err := profile.LinkAccount(paths, "c1", "work", false); err != nil {
+			t.Fatal(err)
+		}
+		if err := profile.SetAccountPool(paths.AccountDir("c1"), "cp"); err != nil {
+			t.Fatal(err)
+		}
+		installFakeLister(t, &fakeLister{})
+		installFakeUsage(t, map[string]float64{"c1": 15}, nil)
+
+		for _, args := range [][]string{
+			{"work", "--account", "auto"},
+			{"work", "--account", "auto:cp"},
+		} {
+			cmd, stderr, err := prep(t, paths, args...)
+			if err != nil {
+				t.Fatalf("%v: %v", args, err)
+			}
+			if cmd.Args[0] != profile.HarnessClaude {
+				t.Errorf("%v: cmd.Args[0] = %q, want claude", args, cmd.Args[0])
+			}
+			if strings.Contains(stderr, "starting agy") {
+				t.Errorf("%v: unexpected agy notice:\n%s", args, stderr)
+			}
+		}
+	})
+
+	t.Run("no accounts keeps today's error", func(t *testing.T) {
+		paths := accountCmdEnv(t, "empty")
+		_, stderr, err := prep(t, paths, "empty", "--account", "auto")
+		if !errors.Is(err, errNoUsableAccount) || !strings.Contains(err.Error(), `no account is linked to profile "empty"`) {
+			t.Errorf("empty profile err = %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("empty profile stderr = %q, want empty", stderr)
+		}
+
+		_, stderr, err = prep(t, paths, "empty", "--account", "auto:nope")
+		if !errors.Is(err, errNoUsableAccount) || !strings.Contains(err.Error(), `pool "nope" has no Claude account`) {
+			t.Errorf("empty pool err = %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("empty pool stderr = %q, want empty", stderr)
+		}
+	})
+
+	t.Run("explicit -- claude on all-agy pool keeps today's error", func(t *testing.T) {
+		paths := accountCmdEnv(t, "work")
+		if _, err := profile.CreateAgyAccount(paths, "agy1", "work"); err != nil {
+			t.Fatal(err)
+		}
+		if err := profile.SetAccountPool(paths.AccountDir("agy1"), "gp"); err != nil {
+			t.Fatal(err)
+		}
+
+		_, stderr, err := prep(t, paths, "work", "--account", "auto:gp", "--", "claude")
+		if !errors.Is(err, errNoUsableAccount) || !strings.Contains(err.Error(), `pool "gp" has no Claude account`) {
+			t.Errorf("explicit claude on all-agy pool err = %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("explicit claude stderr = %q, want empty", stderr)
+		}
+	})
+
+	t.Run("unreadable account ignored", func(t *testing.T) {
+		paths := accountCmdEnv(t, "work", "onlybroken")
+		binDir := filepath.Join(t.TempDir(), "bin")
+		installFakeAgy(t, binDir, filepath.Join(t.TempDir(), "unused"))
+		t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
+		if _, err := profile.CreateAgyAccount(paths, "agy1", "work"); err != nil {
+			t.Fatal(err)
+		}
+		if err := profile.SetAccountPool(paths.AccountDir("agy1"), "gp"); err != nil {
+			t.Fatal(err)
+		}
+		brokenDir := paths.AccountDir("broken")
+		if err := os.MkdirAll(brokenDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(brokenDir, profile.AccountFile), []byte("profile = [\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		installFakeUsage(t, map[string]float64{"agy1": 10}, nil)
+
+		// Profile with agy1 + unreadable broken detects agy.
+		cmd, stderr, err := prep(t, paths, "work", "--account", "auto")
+		if err != nil {
+			t.Fatalf("profile with unreadable: %v", err)
+		}
+		if filepath.Base(cmd.Path) != profile.HarnessAgy {
+			t.Errorf("profile with unreadable: cmd.Path = %q, want agy", cmd.Path)
+		}
+		if !strings.Contains(stderr, "ccp: every account of profile work is agy; starting agy\n") {
+			t.Errorf("profile with unreadable stderr:\n%s", stderr)
+		}
+
+		// Pool with agy1 + unreadable broken detects agy.
+		cmd, stderr, err = prep(t, paths, "work", "--account", "auto:gp")
+		if err != nil {
+			t.Fatalf("pool with unreadable: %v", err)
+		}
+		if filepath.Base(cmd.Path) != profile.HarnessAgy {
+			t.Errorf("pool with unreadable: cmd.Path = %q, want agy", cmd.Path)
+		}
+		if !strings.Contains(stderr, "ccp: every account of pool gp is agy; starting agy\n") {
+			t.Errorf("pool with unreadable stderr:\n%s", stderr)
+		}
+
+		// Profile with no readable accounts stays claude and returns today's error.
+		_, stderr, err = prep(t, paths, "onlybroken", "--account", "auto")
+		if !errors.Is(err, errNoUsableAccount) || !strings.Contains(err.Error(), `no account is linked to profile "onlybroken"`) {
+			t.Errorf("onlybroken err = %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("onlybroken stderr = %q, want empty", stderr)
+		}
+
+		// Direct check: allAgyAccounts ignores entries with Err != nil.
+		if !allAgyAccounts([]profile.Account{
+			{Name: "broken", Err: errors.New("corrupt")},
+			{Name: "agy1", Harness: profile.HarnessAgy},
+		}) {
+			t.Error("allAgyAccounts did not ignore unreadable account")
+		}
+		if allAgyAccounts([]profile.Account{{Name: "broken", Err: errors.New("corrupt")}}) {
+			t.Error("allAgyAccounts returned true for only unreadable accounts")
+		}
+	})
 }

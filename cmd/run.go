@@ -43,6 +43,9 @@ is relinked to this one, but only while no Claude Code process runs on its
 folder (a process ccp cannot read counts as running there); busy accounts are
 skipped. The pick line names the pool and any relink.
 
+With --account auto or auto:<pool> and no command, if every candidate account is
+agy, ccp starts agy instead of claude.
+
 --or-profile (with --account auto or auto:<pool>) never fails for lack of an account: a
 session already on an account keeps it, and with no account free and logged in it
 runs on the profile itself. The shim from 'ccp use --accounts' passes it.
@@ -203,6 +206,21 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 	profileName, err := activationProfile(paths, ra.profile, ra.account)
 	if err != nil {
 		return nil, release, err
+	}
+	if isAuto && !ra.commandExplicit && !ra.relink {
+		isAgy, err := detectAutoAgy(paths, profileName, pool)
+		if err != nil {
+			return nil, release, err
+		}
+		if isAgy {
+			cmdArgs = []string{profile.HarnessAgy}
+			harness = profile.HarnessAgy
+			if pool != "" {
+				fmt.Fprintf(os.Stderr, "ccp: every account of pool %s is agy; starting agy\n", pool)
+			} else {
+				fmt.Fprintf(os.Stderr, "ccp: every account of profile %s is agy; starting agy\n", profileName)
+			}
+		}
 	}
 	account, release, err := chooseRunAccount(paths, profileName, ra.account, ra.relink, harness)
 	pooledLock := pool != "" && harness == profile.HarnessClaude && err == nil
@@ -369,9 +387,42 @@ func activationDir(paths *config.Paths, profileName, account string, accountSet,
 	return dir, err
 }
 
+// detectAutoAgy reports whether every readable candidate account of pool (or
+// profileName when pool is empty) uses harness agy. At least one readable
+// candidate must exist.
+func detectAutoAgy(paths *config.Paths, profileName, pool string) (bool, error) {
+	var (
+		candidates []profile.Account
+		err        error
+	)
+	if pool != "" {
+		candidates, err = profile.AccountsInPool(paths, pool)
+	} else {
+		candidates, err = profile.AccountsBoundTo(paths, profileName)
+	}
+	if err != nil {
+		return false, err
+	}
+	return allAgyAccounts(candidates), nil
+}
+
+func allAgyAccounts(accounts []profile.Account) bool {
+	seen := false
+	for _, a := range accounts {
+		if a.Err != nil {
+			continue
+		}
+		if profile.DefaultHarness(a.Harness) != profile.HarnessAgy {
+			return false
+		}
+		seen = true
+	}
+	return seen
+}
+
 // addAccountFlags registers --account and --relink on a command that sets
 // CLAUDE_CONFIG_DIR.
 func addAccountFlags(c *cobra.Command, account *string, relink *bool) {
-	c.Flags().StringVar(account, "account", "", "Run the profile under an account folder (~/.ccp/accounts/<name>) with its own Claude login; auto picks among the profile's accounts, auto:<pool> among a pool's")
+	c.Flags().StringVar(account, "account", "", "Run the profile under an account folder (~/.ccp/accounts/<name>) with its own Claude login; auto picks among the profile's accounts, auto:<pool> among a pool's (in 'ccp run' with no command, starts agy when every candidate is agy)")
 	c.Flags().BoolVar(relink, "relink", false, "With --account: link an account that is linked to another profile")
 }
