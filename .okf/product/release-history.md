@@ -3,7 +3,7 @@ type: Changelog
 title: Release history
 description: What changed in each ccp release that the spec recorded, newest first.
 tags: [product, releases, history]
-generated: { by: claude-code/claude-fable-5-2, at: 2026-11-24T16:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T06:00:00Z }
 sources:
   - id: ccp-spec
     resource: "docs/ccp-spec.md revision history (removed 2026-09-14 by the OKF migration)"
@@ -20,6 +20,7 @@ The authoritative version is the latest git tag (also stated in `CLAUDE.md`).
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 0.61.0 | 2026-11-25 | Added: `ccp project install <source> <items> --link` links source items into a project's `.claude/` for this machine only ([decision](/decisions/project-linked-sources.md)): absolute links into `~/.ccp/sources/`, the source in the project's own `ccp.toml` (marker first line) and its commit in `ccp.lock`, all kept out of git through `.git/info/exclude`. `ccp project install` with no arguments recreates the links; new `ccp project update [source]`; `project list` marks links; `project remove` drops them without touching the clone. `ccp source remove` refuses a clone that a project recorded in `~/.ccp/state/project-links.toml` still links. |
 | 0.60.3 | 2026-11-24 | No behavior change. The examples in the help text of `ccp run`, `account`, `env` and `session`, in `skills/ccp/SKILL.md`, in the docs and in the tests use neutral names: profile `companyA`, accounts `ca1`…`ca5`. |
 | 0.60.2 | 2026-11-24 | Docs only, no code change. README and `skills/ccp/SKILL.md` no longer say to name `claude` before its flags after `--`; the README Accounts section covers agy accounts, `ccp account remove` and pools on existing accounts ([account pools](/decisions/account-pools.md)). |
 | 0.60.1 | 2026-11-24 | Added: in `ccp run`, words after `--` that start with `-` are arguments for the default command (the account's harness, else `claude`), so `ccp run --account agy1 -- --model x` runs `agy --model x` ([decision](/decisions/agy-accounts-file-token-mode.md)). Before, the first flag was read as the command name and failed. A named command after `--` is unchanged. |
