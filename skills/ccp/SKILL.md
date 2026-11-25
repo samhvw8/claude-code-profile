@@ -1,6 +1,6 @@
 ---
 name: ccp
-description: "Use and manage ccp — the Claude Code Profile Manager. Use when: switching profiles, creating profiles, installing skills from sources, managing hub items, linking/unlinking items, setting up ccp for the first time, activating profiles per-project. Actions: switch, create, install, link, unlink, init, find, list, update profiles and hub items. Keywords: ccp use, ccp init, profile switch, hub link, source add, install skill, settings template, find skills, profile create. Also: Claude accounts and account pools — add a Claude account or login, several accounts or seats for one client or workspace, share seats across profiles with a pool, auto-pick the account with the most limit left, load-balance logins, ccp account, ccp account pool, --account auto, --account auto:<pool>, ccp use --accounts [--pool], move or remove an account. Casual triggers: 'add another Claude account', 'my company gave me more accounts', 'which account has limit left', 'switch to my dev profile', 'install a skill', 'set up ccp', 'find skills on github', 'which profile am I using', 'add this skill to my profile', 'how do I use ccp'."
+description: "Use and manage ccp — the Claude Code Profile Manager. Use when: switching profiles, creating profiles, installing skills from sources, managing hub items, linking/unlinking items, setting up ccp for the first time, activating profiles per-project. Actions: switch, create, install, link, unlink, init, find, list, update profiles and hub items. Keywords: ccp use, ccp init, profile switch, hub link, source add, install skill, settings template, find skills, profile create. Also: Claude accounts and account pools — add a Claude account or login, several accounts or seats for one client or workspace, share seats across profiles with a pool, auto-pick the account with the most limit left, load-balance logins, ccp account, ccp account pool, --account auto, --account auto:<pool>, ccp use --accounts [--pool], move or remove an account. Also: project-only skills — link a team or private repo's skills into one project for this machine only, ccp project install --link, a project ccp.toml, ccp project update. Casual triggers: 'add another Claude account', 'my company gave me more accounts', 'which account has limit left', 'switch to my dev profile', 'install a skill', 'set up ccp', 'find skills on github', 'which profile am I using', 'add this skill to my profile', 'add these skills only to this project', 'link my company repo's skills into this repo', 'how do I use ccp'."
 ---
 
 # ccp — Claude Code Profile Manager
@@ -388,10 +388,34 @@ login moves, plain `claude` is logged out. Prefer `ccp account add` plus a fresh
 | An MCP server is gone after switching account | `claude mcp add` writes only the account in use. Put shared servers in `~/.ccp/profiles/<profile>/mcp.json` (`ccp doctor --fix` creates it from the profile's servers); `ccp run` passes it to every account. `ccp run` and `ccp doctor` list servers that exist on one account only |
 | The status line shows another account's usage | The status line tool caches usage globally; trust `ccp account` |
 
+## Project-only skills (linked)
+
+Use this when skills belong to one project and should stay current, but must not go into the
+synced `~/.ccp/ccp.toml` (a private team repo) or into the project's git.
+
+```bash
+ccp project install https://github.com/<org>/<repo> skills/a skills/b --link   # in the project
+ccp project list            # "(dir, link: <org>/<repo>)" per linked item
+ccp project update          # pull the project's sources; links follow
+ccp project install         # no args: recreate the links (new machine, deleted link)
+ccp project remove skills/a # drops the link only; the clone stays
+```
+
+- Links are absolute symlinks into `~/.ccp/sources/<id>`; the source and items go in
+  `<project>/ccp.toml`, the commit in `<project>/ccp.lock`. ccp adds both files and each link to
+  `.git/info/exclude`.
+- Prefer the full URL: the `owner/repo` form looks the repo up in skills.sh and GitHub first.
+- A real folder in the way (one the team's own sync wrote) is never replaced: ccp reports it.
+- When `~/.ccp/ccp.toml` also lists the source, its lock wins and `ccp source update` updates it.
+- `ccp source remove` refuses a clone that a project still links (listed in `~/.ccp/state/project-links.toml`) and names the projects: run `ccp project remove` there first.
+- A `ccp.toml` already in the project root that ccp did not write (no marker first line) is left alone; `--link` refuses until it is moved.
+- Profile-scoped instead: `ccp install <source> <items> --link <profile>` (recorded in `~/.ccp/ccp.toml`).
+
 ## Tips
 
 - `ccp install` (no args) syncs all sources in `ccp.toml` at the commits `ccp.lock` pins — useful for new machines
 - Installed items are shadows (symlinks into `~/.ccp/sources/`), so `ccp source update` updates them in place. To edit one, use `--clone` first; `source update` refuses a clone with local edits
 - `ccp project add` copies (not symlinks) so projects are git-committable
+- `ccp project install <source> <items> --link` links instead, for this machine only: the source goes in the project's own `ccp.toml`/`ccp.lock` (not `~/.ccp/ccp.toml`), both files and the links go in `.git/info/exclude`; `ccp project install` (no args) recreates the links, `ccp project update` updates them
 - `ccp doctor` diagnoses broken hub links, manifests, hub structure, and (macOS) orphan Claude Keychain logins; `--fix` removes links whose hub item is gone
 - `ccp status` shows the active profile, hub counts and per-profile health

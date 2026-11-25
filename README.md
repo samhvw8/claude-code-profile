@@ -10,7 +10,7 @@ A CLI tool for managing multiple Claude Code **configuration profiles** via a ce
 - **Multiple Profiles**: Create purpose-specific configurations (quickfix, full-stack-dev, documentation)
 - **Settings Templates**: Complete `settings.json` templates referenced by name — what you see is what you get
 - **Sources**: Install skills and agents from GitHub or skills.sh; each item links into its source clone, so an update is one command
-- **Project Setup**: Copy hub items into any project's `.claude/` for team-shareable, git-committable config
+- **Project Setup**: Copy hub items into any project's `.claude/` for team-shareable, git-committable config, or link a source's skills into one project for this machine only
 - **Concurrent Profiles**: Run different profiles simultaneously in different projects via mise/direnv
 - **Accounts**: Run one profile under several Claude logins, pick one per terminal, or let ccp pick the one with the most plan limit left
 - **Other Agents**: Mirror a profile into omp, opencode, Antigravity CLI (agy) and pi
@@ -62,6 +62,9 @@ ccp use quickfix
 
 # Copy hub items into a project's .claude/
 ccp project add skills/coding agents/reviewer
+
+# Or link a repo's skills into this project only (this machine, kept out of git)
+ccp project install https://github.com/owner/repo skills/x --link
 ```
 
 ## Architecture
@@ -174,8 +177,14 @@ A bundle groups coupled items (for example a skill, its hook and its agent) that
 | Command | Description |
 |---------|-------------|
 | `ccp project add [items...] [-i]` | Copy hub items into project's `.claude/` |
-| `ccp project list` | List items in project's `.claude/` |
-| `ccp project remove [items...]` | Remove items from project's `.claude/` |
+| `ccp project install <source> [items...] [-a] [-i]` | Copy items from a source into project's `.claude/` |
+| `ccp project install <source> [items...] --link` | Link items instead, recorded in the project's own `ccp.toml`/`ccp.lock` |
+| `ccp project install` | Recreate the links of the project's `ccp.toml` (new machine, deleted link) |
+| `ccp project update [source]` | Update the project's linked sources and its `ccp.lock` |
+| `ccp project list` | List items in project's `.claude/` (linked items show their source) |
+| `ccp project remove [items...]` | Remove items from project's `.claude/` (a link only; the clone stays) |
+
+Copies are local to the project and can be committed. Links point into `~/.ccp/sources/`, so they are for this machine only: ccp writes the source to `<project>/ccp.toml` (not the synced `~/.ccp/ccp.toml`) and adds `ccp.toml`, `ccp.lock` and each link to `.git/info/exclude`. A real file or folder in the way is never replaced.
 
 ### Other Agents (omp, opencode, agy, pi)
 
