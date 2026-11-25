@@ -19,6 +19,11 @@ type Registry struct {
 	Sources map[string]Source `toml:"sources"`
 
 	ccpDir string `toml:"-"`
+
+	// projectRoot is set for a project's ccp.toml (LoadProjectRegistry);
+	// Save then writes that file instead of ~/.ccp/ccp.toml.
+	projectRoot    string `toml:"-"`
+	projectForeign bool   `toml:"-"`
 }
 
 // NewRegistry creates an empty registry
@@ -131,6 +136,9 @@ func LoadRegistry(path string) (*Registry, error) {
 
 // Save writes sources to ccp.toml and their versions to ccp.lock
 func (r *Registry) Save() error {
+	if r.projectRoot != "" {
+		return r.saveProject()
+	}
 	if err := os.MkdirAll(r.ccpDir, 0755); err != nil {
 		return err
 	}

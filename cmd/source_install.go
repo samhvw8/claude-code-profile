@@ -351,7 +351,18 @@ func addSourceForInstall(identifier, refOverride string, paths *config.Paths, re
 		Ref:      ref,
 		Progress: true,
 	}
-	if err := provider.Fetch(ctx, url, sourceDir, opts); err != nil {
+	// A project's ccp.toml shares ~/.ccp/sources with the hub and with other
+	// projects: Fetch would delete a clone they already link to.
+	reuse := false
+	if registry.IsProject() {
+		var err error
+		if reuse, err = reusableClone(sourceDir, url, provider.Type()); err != nil {
+			return err
+		}
+	}
+	if reuse {
+		fmt.Printf("  Using the existing clone: %s\n", sourceDir)
+	} else if err := provider.Fetch(ctx, url, sourceDir, opts); err != nil {
 		return err
 	}
 

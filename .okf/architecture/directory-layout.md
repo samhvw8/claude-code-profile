@@ -56,6 +56,7 @@ sources:
 ├── harnesses/                  # Custom harness plugins (<id>.toml manifests or <id> executables)
 ├── state/
 │   ├── harnesses/<id>.json     # Copy/link ownership ledger and opt-in marker per custom harness
+│   ├── project-links.toml      # Project roots with ccp project install --link links; machine-local
 │   ├── settings/<profile>.json  # What ccp last wrote to each settings.json; machine-local
 │   └── usage/<key>.json         # Cached usage of unmanaged logins (0600, 5m window); machine-local
 └── ccp.toml                    # Config + installed sources

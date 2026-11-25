@@ -32,8 +32,14 @@ var projectAddInteractive bool
 var projectCmd = &cobra.Command{
 	Use:     "project",
 	Aliases: []string{"proj"},
-	Short:   "Manage hub items in the current project's .claude/ directory",
-	Long:    `Copy hub items into or manage them within the current project's .claude/ directory.`,
+	Short:   "Copy or link items into the current project's .claude/ directory",
+	Long: `Copy hub items into or manage them within the current project's .claude/ directory.
+
+Copies (project add, project install) are local to the project and can be committed.
+Links (project install --link) are for this machine only: they point into the source
+clones in ~/.ccp/sources, the project's own ccp.toml and ccp.lock record them, and
+.git/info/exclude keeps all of it out of git. 'ccp project install' with no
+arguments recreates them; 'ccp project update' updates them.`,
 }
 
 var projectAddCmd = &cobra.Command{
@@ -55,8 +61,9 @@ Examples:
 var projectListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls", "l"},
-	Short:   "List hub items in the project's .claude/ directory",
+	Short:   "List items in the project's .claude/ directory",
 	Long: `Scan the current project's .claude/ directory and list items by type.
+A linked item shows its source, or "broken link" when its clone is gone.
 
 Examples:
   ccp project list
@@ -69,6 +76,7 @@ var projectRemoveCmd = &cobra.Command{
 	Aliases: []string{"rm"},
 	Short:   "Remove hub items from the project's .claude/ directory",
 	Long: `Remove items from the current project's .claude/ directory.
+A linked item loses only its link (the clone stays) and leaves the project's ccp.toml.
 
 Examples:
   ccp project remove skills/coding
@@ -301,6 +309,22 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to scan %s: %w", claudeDir, err)
 	}
 
+	// Items the project's ccp.toml links, by type/name, with their source.
+	links := map[string]string{}
+	if paths, err := config.ResolvePaths(); err == nil {
+		project, err := source.LoadProjectRegistry(filepath.Dir(claudeDir), paths)
+		if err != nil {
+			// The copies can still be listed; only the link marks are missing.
+			fmt.Printf("WARN: links not marked: %v\n", err)
+			project = source.NewRegistry(paths.CcpDir)
+		}
+		for _, entry := range project.ListSources() {
+			for _, item := range entry.Source.Installed {
+				links[item] = entry.ID
+			}
+		}
+	}
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
 	for _, itemType := range projectHubItemTypes {
@@ -314,6 +338,22 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 			typeIndicator := "file"
 			if item.IsDir {
 				typeIndicator = "dir"
+			}
+			// A rule directory is listed flattened (style/a.md); its link is the directory.
+			name := item.Name
+			id, ok := links[string(itemType)+"/"+name]
+			if !ok {
+				if dir, _, cut := strings.Cut(name, "/"); cut {
+					name = dir
+					id, ok = links[string(itemType)+"/"+name]
+				}
+			}
+			if ok {
+				if _, err := os.Stat(filepath.Join(claudeDir, string(itemType), name)); err != nil {
+					typeIndicator = "broken link: " + id + ", run: ccp project install"
+				} else {
+					typeIndicator += ", link: " + id
+				}
 			}
 			fmt.Fprintf(w, "  %s\t(%s)\n", item.Name, typeIndicator)
 		}
@@ -333,6 +373,24 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	paths, err := config.ResolvePaths()
+	if err != nil {
+		return err
+	}
+	// Loaded before anything is deleted: a ccp.toml that cannot be read must
+	// stop the command, or a removed link would come back on the next sync.
+	project, err := source.LoadProjectRegistry(filepath.Dir(claudeDir), paths)
+	if err != nil {
+		return err
+	}
+	forgot := false
+	defer func() {
+		if forgot {
+			if err := project.Save(); err != nil {
+				fmt.Printf("WARN: could not update %s: %v\n", filepath.Join(filepath.Dir(claudeDir), source.ProjectFile), err)
+			}
+		}
+	}()
 
 	for _, ref := range args {
 		itemType, itemName, err := parseItemRef(ref)
@@ -341,15 +399,26 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 		}
 
 		itemPath := filepath.Join(claudeDir, string(itemType), itemName)
-		if _, err := os.Stat(itemPath); err != nil {
+		// Lstat: a broken link is still an item to remove.
+		if _, err := os.Lstat(itemPath); err != nil {
 			return fmt.Errorf("item not found: %s/%s in %s", itemType, itemName, claudeDir)
 		}
 
+		// RemoveAll on a link removes the link, never the clone it points to.
 		if err := os.RemoveAll(itemPath); err != nil {
 			return fmt.Errorf("failed to remove %s/%s: %w", itemType, itemName, err)
 		}
 
 		fmt.Printf("Removed %s/%s from %s\n", itemType, itemName, claudeDir)
+
+		// The source stays, like a global source with no installed items.
+		item := string(itemType) + "/" + itemName
+		if entry := project.FindSourceByItem(item); entry != nil {
+			if err := project.RemoveInstalled(entry.ID, item); err != nil {
+				return err
+			}
+			forgot = true
+		}
 	}
 
 	return nil

@@ -27,6 +27,7 @@ removed in v0.28 ([release history](/product/release-history.md)). Commands:
 | `doctor` | `--fix` | Fix what can be fixed: create missing hub dirs, reconcile drift, remove links (and manifest entries) whose hub item is gone. Only links directly inside the hub item dirs are checked — links inside a profile-local item, and `debug/`, `projects/` etc., are not ccp's |
 | `doctor` | `--verify-omp` | Ask a live omp what its prompt carries |
 | `reset` | `--force` | Skip confirmation |
+| `project install` | `-l, --link` | Link items (absolute symlinks into `~/.ccp/sources/`) instead of copying; record the source in the project's `ccp.toml`/`ccp.lock` and add them to `.git/info/exclude` |
 | `use` | `-g, --global` | Update the global `~/.claude` symlink (default: project env) |
 | `use` | `--show` | Show the current profile |
 | `use` | `--accounts` | Project mode: write `.ccp/bin/claude`, put `.ccp/bin` on PATH (`mise.toml` `_.path` or `.envrc` `PATH_add`), add `.ccp/` to `.git/info/exclude`; plain `claude` then picks the profile's account with the most limit left. Not with `-g` |

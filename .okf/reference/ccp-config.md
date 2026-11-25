@@ -4,7 +4,7 @@ title: ccp.toml configuration
 description: Global ccp configuration — default registry, registry settings, and the auto-managed list of installed sources.
 resource: internal/config/ccp_config.go
 tags: [reference, config, sources]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T00:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-25T00:00:00Z }
 sources:
   - id: dev-reference
     resource: "docs/dev-reference.md (removed 2026-09-14 by the OKF migration)"
@@ -64,3 +64,23 @@ A `ccp.toml` written before `ccp.lock` still carries `commit` (and an `updated` 
 reads that `commit` when `ccp.lock` has no entry for the source, and the next save moves it into
 `ccp.lock` and drops `updated`. See [source system](/features/source-system.md) and
 [bootstrap](/features/bootstrap.md).
+
+# Project ccp.toml
+
+A project can hold its own `ccp.toml` and `ccp.lock` at its root (the git root, or `--dir`),
+written by `ccp project install --link` ([decision](/decisions/project-linked-sources.md)).
+Its first line is a marker comment (`# Sources linked into this project's .claude/ by 'ccp project install --link'.`); a `ccp.toml` without it belongs to something else and ccp neither reads nor writes it. Only `[sources]` appears; there is no `path` (the clone is always `~/.ccp/sources/<id>`) and
+no registry settings. The lock has the global format.
+
+```toml
+[sources.'owner/repo']
+registry = 'github'
+provider = 'git'
+url = 'https://github.com/owner/repo.git'
+ref = 'main'
+installed = ['skills/my-skill']   # links in <project>/.claude/
+```
+
+Both files are hand-editable, so loading refuses a source id that is not one directory under
+`sources/`, a `url` or `ref` that starts with `-`, and an `installed` entry that is not a
+plain `type/name`. Removing the last source removes both files.

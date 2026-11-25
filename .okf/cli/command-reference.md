@@ -104,7 +104,8 @@ Workflow and discovery layouts: [source system](/features/source-system.md).
 | Command | Description | Example |
 |---------|-------------|---------|
 | `ccp project add [items...] [-i]` | Copy hub items into the project's `.claude/` | `ccp project add skills/coding` |
-| `ccp project install [source] [items...]` | Install from a source into the project | `ccp project install owner/repo skills/x` |
+| `ccp project install [source] [items...] [--link]` | Install from a source into the project (copy; `--link`: link, recorded in the project's `ccp.toml`). No arguments: recreate the project's links | `ccp project install owner/repo skills/x --link` |
+| `ccp project update [source]` | Update the sources in the project's `ccp.toml` and its `ccp.lock` | `ccp project update` |
 | `ccp project list` / `remove [items...]` | Inspect and remove project items | `ccp project remove skills/coding` |
 | `ccp plugin list <owner/repo>` | List marketplace plugins | `ccp plugin list EveryInc/compound-engineering-plugin` |
 | `ccp plugin add <source>` | Install a plugin | `ccp plugin add owner/repo@plugin-name` |

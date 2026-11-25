@@ -42,6 +42,20 @@ func runSourceRemove(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// A project's ccp.toml can link this clone (ccp project install --link);
+	// deleting it would break those links without a word.
+	using, err := source.ProjectsUsing(paths, sourceID)
+	if err != nil {
+		return err
+	}
+	if len(using) > 0 {
+		fmt.Printf("The clone of %s is linked by %d project(s):\n", sourceID, len(using))
+		for _, root := range using {
+			fmt.Printf("  - %s\n", root)
+		}
+		return fmt.Errorf("not removed: run 'ccp project remove <items>' in each project first")
+	}
+
 	src, err := registry.GetSource(sourceID)
 	if err != nil {
 		return err

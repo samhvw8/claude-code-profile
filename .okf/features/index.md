@@ -1,7 +1,7 @@
 # Features
 
 * [Bundles](bundles.md) - Atomic, non-separable groups of hub items that are linked and removed as one unit.
-* [Project setup](project-setup.md) - Copying hub items into a project's .claude/ directory so a team uses them without ccp.
+* [Project setup](project-setup.md) - Copying hub items into a project's .claude/ directory so a team uses them without ccp, or linking source items into it for this machine only.
 * [Source system](source-system.md) - Finding and installing hub items from skills.sh and GitHub, including the repository layouts ccp discovers.
 * [Output styles](output-styles.md) - The output-styles hub item type: linked into Claude Code like commands, and carried into omp, pi, opencode and agy as a generated file because they have no output styles.
 * [Bootstrap (multi-machine sync)](bootstrap.md) - Setting ccp up on another machine — pull sources and fix profiles after dotfiles land; chezmoi users can also push local-only hub items.

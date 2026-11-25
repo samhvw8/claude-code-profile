@@ -4,6 +4,7 @@ Settled choices with their rationale. Do not re-open one without a user request;
 
 # Architecture and product
 
+* [Linked project installs use a machine-local project ccp.toml](project-linked-sources.md) - 2026-11-25: ccp project install --link links source items into a project's .claude/ and records the source in <project>/ccp.toml and ccp.lock, kept out of git, not in ~/.ccp/ccp.toml.
 * [Account pools: auto:<pool> picks across profiles](account-pools.md) - 2026-11-23: An account names at most one pool; --account auto:<pool> picks across profiles, ccp run relinks a free Claude account (process scan plus flock), env and session never relink.
 * [Shared MCP servers: a profile mcp.json passed with --mcp-config](profile-mcp-file.md) - 2026-11-23: profiles/<name>/mcp.json reaches every account through ccp run's --mcp-config=<file>; ccp never writes .claude.json and only reports servers added on one account.
 * [Account is the sixth concept; the budget is seven for now](account-concept.md) - 2026-11-18: The concept budget rises from five to seven and Account becomes a concept with a visible ccp account command (list, add, since 2026-11-23 pool, and since 2026-11-24 remove); the --account mechanism is unchanged.

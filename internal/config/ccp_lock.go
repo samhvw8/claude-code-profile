@@ -10,7 +10,7 @@ import (
 // CcpLockVersion is the current ccp.lock format version.
 const CcpLockVersion = 1
 
-const ccpLockHeader = "# Written by ccp: the version each source in ccp.toml is locked to.\n# Do not edit by hand; 'ccp source update' moves it.\n\n"
+const ccpLockHeader = "# Written by ccp: the version each source in ccp.toml is locked to.\n# Do not edit by hand; 'ccp source update' (or 'ccp project update' for a project) moves it.\n\n"
 
 // CcpLock is ccp.lock: the resolved version of each source in ccp.toml. It
 // holds no timestamps, so the same sources give the same bytes on every machine.
