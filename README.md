@@ -339,6 +339,19 @@ ccp account remove work1 --all   # delete the login and the account folder (for 
 
 `ccp migrate --accounts [--dry-run]` moves each profile's existing login into the account of the same name.
 
+To make your personal login the default account, run this from a plain terminal (not inside Claude Code, or the migration refuses):
+
+```bash
+ccp migrate --accounts                      # profile default's login -> account default
+ccp account use default --profile default   # rule + the shim ~/.ccp/bin/claude
+# once per machine: put ~/.ccp/bin first on PATH, e.g. in ~/.config/mise/config.local.toml
+#   [env]
+#   _.path = ["{{env.HOME}}/.ccp/bin"]
+claude auth status                          # new shell: configDirectory ~/.ccp/accounts/default
+```
+
+There is no separate global account: the global default is the rule of the global profile (`~/.claude`). On another machine that shares `profile.toml` through dotfiles, upgrade ccp to 0.62.0 or later **before** pulling (an older ccp drops the `account` line when it rewrites the file), then migrate and add the PATH entry there.
+
 ## Profile Manifest
 
 Each profile has a `profile.toml` manifest:

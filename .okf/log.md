@@ -1,6 +1,7 @@
 # Update Log
 
 ## 2026-11-26
+* **Update**: README and `skills/ccp/SKILL.md`: playbooks for making the personal login the default account (`migrate --accounts` from a plain terminal, `account use default`, the PATH entry, `claude auth status`) and for another machine sharing `profile.toml` (upgrade ccp before pulling); the global default account is the global profile's rule; three troubleshooting rows (logged out after migrate, a rule naming a missing account, the `account` line dropped by an older ccp). See [account rule](/decisions/profile-account-rule.md).
 * **Update**: Released v0.62.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Decision**: [A profile's account rule](/decisions/profile-account-rule.md) — new `ccp account use [<name>|auto|auto:<pool>] [--profile p] [--clear]` stores `account` in `profile.toml`; the shim `~/.ccp/bin/claude` runs hidden `ccp run --profile-rule`, which keeps an account session, runs unchanged with no rule, and with no usable account leaves `CLAUDE_CONFIG_DIR` as it was. `ccp account` lists the rules. `ccp use --accounts`/`--pool` deprecated. Updated [profile.toml](/reference/profile-manifest.md), [command reference](/cli/command-reference.md), `skills/ccp/SKILL.md`. Tests: `cmd/account_use_test.go`.
 

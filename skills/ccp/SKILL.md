@@ -381,7 +381,43 @@ rm -rf "$HOME/.ccp/accounts/agy1" "$HOME/.gemini/antigravity-cli-ccp-agy1"
 `ccp migrate --accounts [--dry-run]` moves each profile's current login into the account of the
 same name (profile `default` → account `default`). It acts on **every** profile, including the
 personal `default`, and refuses a profile while Claude Code runs on its login. After the global
-login moves, plain `claude` is logged out. Prefer `ccp account add` plus a fresh `/login`.
+login moves, plain `claude` is logged out until an account rule and the shim take over (below).
+For a new seat, prefer `ccp account add` plus a fresh `/login`.
+
+### Make the personal login the default account (one machine)
+
+Run this from a plain terminal, not from inside Claude Code: the migration sees the Claude Code
+session that runs it and refuses (`refused (Claude Code is running on this login … (PID n))`).
+
+```bash
+ccp --version                               # 0.62.0 or later
+ccp migrate --accounts --dry-run            # default: would move <login> -> ~/.ccp/accounts/default
+ccp migrate --accounts                      # close every Claude Code session first
+ccp account use default --profile default   # writes the rule and ~/.ccp/bin/claude
+# put ~/.ccp/bin first on PATH once, machine-local, e.g. ~/.config/mise/config.local.toml:
+#   [env]
+#   _.path = ["{{env.HOME}}/.ccp/bin"]
+# then, in a new shell:
+claude auth status                          # configDirectory: ~/.ccp/accounts/default
+```
+
+There is no separate global account. The rule belongs to the profile, so the global default
+account is the rule of the global profile (`~/.claude` → `profiles/default`). A project that loads
+another profile follows that profile's rule; after `ccp use other -g`, plain `claude` follows
+`other`'s rule.
+
+### Another machine that shares the profiles (dotfiles)
+
+`profile.toml` travels with the dotfiles; logins and the PATH entry do not. Order matters:
+
+1. Upgrade ccp first (`mise up github:samhvw8/claude-code-profile`). A ccp older than 0.62.0
+   drops the `account` line whenever it rewrites `profile.toml` (a hub link, a sync).
+2. Pull the dotfiles; the rule arrives with `profile.toml`.
+3. `ccp migrate --accounts` with no Claude Code running, then add the machine-local PATH entry.
+4. Check `claude auth status` in a new login shell.
+
+Until steps 3 and 4 are done, that machine runs plain `claude` unchanged: no shim on PATH, or
+a rule naming an account that does not exist there (a note on stderr, then plain claude).
 
 ### Troubleshooting
 
@@ -389,6 +425,9 @@ login moves, plain `claude` is logged out. Prefer `ccp account add` plus a fresh
 |---|---|
 | Every account shows the same email | The browser approved each `/login` with the same claude.ai account. Sign out of claude.ai (or use Incognito), then `/logout` and `/login` in that account |
 | Logged in, but `ccp account` says "(not logged in)" | The session ran in another folder. Check `claude auth status`: `configDirectory` must be the account folder. A hand-written wrapper that calls the mise shim causes this; use `ccp account use` and its shim |
+| `claude` starts logged out after `migrate --accounts` | The shim is not on PATH: `command -v claude` must print `~/.ccp/bin/claude`. Add the `_.path` entry (or `export PATH="$HOME/.ccp/bin:$PATH"`), open a new shell, and check `ccp account use` shows a rule |
+| `ccp: account rule of profile … ; running without an account` | The rule names an account that this machine does not have, or that moved to another profile. `ccp account` lists accounts; fix it with `ccp account use <name>` or `--clear` |
+| The `account` line vanished from `profile.toml` | An older ccp (before 0.62.0) rewrote the file. Upgrade ccp, then `ccp account use` again |
 | `none of these accounts is logged in` | Log in one account (`ccp run --account <name>`, `/login`), or start through the `ccp account use` shim, which falls back to running claude unchanged |
 | `every account of pool … is linked to another profile and …` | Each pooled seat runs a Claude session on another profile (or sessions cannot be checked). Close one, or use `--or-profile` / the shim, which falls back to the profile |
 | `Warning: mcp-needs-auth-cache.json is a real file …` | Claude Code replaced that link with a file. Harmless |
