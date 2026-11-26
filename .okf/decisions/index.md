@@ -4,6 +4,7 @@ Settled choices with their rationale. Do not re-open one without a user request;
 
 # Architecture and product
 
+* [A profile's account rule](profile-account-rule.md) - 2026-11-26: ccp account use binds <name>, auto or auto:<pool> to a profile's profile.toml; the global shim ~/.ccp/bin/claude runs plain claude on it wherever the profile loads; deprecates ccp use --accounts.
 * [Linked project installs use a machine-local project ccp.toml](project-linked-sources.md) - 2026-11-25: ccp project install --link links source items into a project's .claude/ and records the source in <project>/ccp.toml and ccp.lock, kept out of git, not in ~/.ccp/ccp.toml.
 * [Account pools: auto:<pool> picks across profiles](account-pools.md) - 2026-11-23: An account names at most one pool; --account auto:<pool> picks across profiles, ccp run relinks a free Claude account (process scan plus flock), env and session never relink.
 * [Shared MCP servers: a profile mcp.json passed with --mcp-config](profile-mcp-file.md) - 2026-11-23: profiles/<name>/mcp.json reaches every account through ccp run's --mcp-config=<file>; ccp never writes .claude.json and only reports servers added on one account.

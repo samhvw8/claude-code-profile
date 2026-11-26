@@ -32,13 +32,14 @@ Hidden as of 2026-09-14:[^hidden-cmds] `auto`, `env`, `harness`, `hub outdated`,
 | `ccp migrate` | Run migrations from older ccp versions; `--accounts` (opt-in) moves each profile's Claude login into the account of the same name | `ccp migrate --accounts --dry-run` |
 | `ccp reset` | Undo ccp and restore `~/.claude`; the plan lists account folders and their orphaned logins | `ccp reset` |
 | `ccp use <name>` | Set the project profile (auto-detects mise.toml/.envrc) | `ccp use dev` |
-| `ccp use <name> --accounts [--pool <p>]` | Set the project profile, and make plain `claude` here pick the profile's account with the most limit left (`.ccp/bin/claude` shim); with `--pool`, the pool's (`auto:<p>`) | `ccp use companyA --accounts --pool company` |
+| `ccp use <name> --accounts [--pool <p>]` | Deprecated (hidden): set the project profile and write a project shim `.ccp/bin/claude` that picks the profile's (or pool's) freest account; use `ccp account use` instead | `ccp use companyA --accounts` |
 | `ccp use <name> -g` | Set the global profile (`~/.claude` symlink) | `ccp use quickfix -g` |
 | `ccp use --show` | Show the current global profile | `ccp use --show` |
 | `ccp which [--path]` | Show the active profile (and account), or its directory | `ccp which --path` |
 | `ccp account [list] [--json]` | List accounts with harness, profile, pool, email, 5-hour and weekly use and last use; text output also shows unmanaged logins read-only (`Other logins (not accounts)`) | `ccp account` |
 | `ccp account add <name> [<profile>] [--harness claude\|agy] [--pool <p>]` | Create an account for a profile (default: the current one), optionally in a pool; Claude accounts log in via `ccp run --account <name>` and `/login`, `--harness agy` accounts sign in via `ccp run --account <name>` | `ccp account add ca1 companyA` |
 | `ccp account remove <name> [--all] [--force]` | Delete an account's login (it can log in again), or with `--all` the login and its data (account folder; for agy also `~/.gemini/antigravity-cli-ccp-<name>/`); refused while a session runs on it, asks to confirm unless `--force` (alias `rm`) | `ccp account remove ca1` |
+| `ccp account use [<name>\|auto\|auto:<pool>] [--profile <p>] [--clear]` | Bind an [account rule](/decisions/profile-account-rule.md) to a profile (default: the current one); plain `claude` runs on it wherever the profile loads, through the shim `~/.ccp/bin/claude`. No value prints the rule | `ccp account use auto --profile companyA` |
 | `ccp account pool <name> <pool>\|--clear` | Put an account in a pool for `--account auto:<pool>`, or take it out (rewrites only the pool) | `ccp account pool ca1 company` |
 | `ccp status` | Status and health; with accounts, each one's harness, profile, pool (POOL column), email, 5-hour and 7-day use and last use | `ccp status` |
 | `ccp doctor` | Diagnose (accounts with a missing profile or broken links; MCP servers only on one account; on macOS, warns on orphan Claude Keychain items), and with `--fix` repair (including hub copies of source items → shadows, and a missing profile `mcp.json` created from the profile's servers) | `ccp doctor --fix` |

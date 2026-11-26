@@ -1,6 +1,6 @@
 ---
 name: ccp
-description: "Use and manage ccp — the Claude Code Profile Manager. Use when: switching profiles, creating profiles, installing skills from sources, managing hub items, linking/unlinking items, setting up ccp for the first time, activating profiles per-project. Actions: switch, create, install, link, unlink, init, find, list, update profiles and hub items. Keywords: ccp use, ccp init, profile switch, hub link, source add, install skill, settings template, find skills, profile create. Also: Claude accounts and account pools — add a Claude account or login, several accounts or seats for one client or workspace, share seats across profiles with a pool, auto-pick the account with the most limit left, load-balance logins, ccp account, ccp account pool, --account auto, --account auto:<pool>, ccp use --accounts [--pool], move or remove an account. Also: project-only skills — link a team or private repo's skills into one project for this machine only, ccp project install --link, a project ccp.toml, ccp project update. Casual triggers: 'add another Claude account', 'my company gave me more accounts', 'which account has limit left', 'switch to my dev profile', 'install a skill', 'set up ccp', 'find skills on github', 'which profile am I using', 'add this skill to my profile', 'add these skills only to this project', 'link my company repo's skills into this repo', 'how do I use ccp'."
+description: "Use and manage ccp — the Claude Code Profile Manager. Use when: switching profiles, creating profiles, installing skills from sources, managing hub items, linking/unlinking items, setting up ccp for the first time, activating profiles per-project. Actions: switch, create, install, link, unlink, init, find, list, update profiles and hub items. Keywords: ccp use, ccp init, profile switch, hub link, source add, install skill, settings template, find skills, profile create. Also: Claude accounts and account pools — add a Claude account or login, several accounts or seats for one client or workspace, share seats across profiles with a pool, auto-pick the account with the most limit left, load-balance logins, ccp account, ccp account pool, --account auto, --account auto:<pool>, ccp account use, ccp use --accounts [--pool] (deprecated), move or remove an account, make plain claude use an account by default. Also: project-only skills — link a team or private repo's skills into one project for this machine only, ccp project install --link, a project ccp.toml, ccp project update. Casual triggers: 'add another Claude account', 'my company gave me more accounts', 'which account has limit left', 'switch to my dev profile', 'install a skill', 'set up ccp', 'find skills on github', 'which profile am I using', 'add this skill to my profile', 'add these skills only to this project', 'link my company repo's skills into this repo', 'how do I use ccp'."
 ---
 
 # ccp — Claude Code Profile Manager
@@ -223,7 +223,7 @@ first.
 | Global | `ccp use dev -g` | ~/.claude symlink → profile dir |
 | Project | `ccp use dev` | Updates mise.toml/envrc |
 | Inline | env var | `CLAUDE_CONFIG_DIR=~/.ccp/profiles/dev claude` |
-| Account | `--account <name>\|auto\|auto:<pool>`, `ccp use <p> --accounts [--pool <pool>]` | One profile, several Claude logins (see below) |
+| Account | `--account <name>\|auto\|auto:<pool>`, `ccp account use <name>\|auto\|auto:<pool>` | One profile, several Claude logins (see below) |
 
 ## Accounts and pools
 
@@ -283,30 +283,36 @@ ccp account                                    # check: shows HARNESS, PROFILE, 
 ```
 
 Pick short names that say the profile (`ca1`, `acme1`). `auto` is reserved. `ccp env`, `ccp session`,
-and `ccp use --accounts` are Claude-only; start `agy` accounts with `ccp run`.
+and `ccp account use` are Claude-only; start `agy` accounts with `ccp run`.
 
-### Make a folder use its accounts (`claude` picks the account)
+### Make plain `claude` use a profile's accounts (`ccp account use`)
+
+`ccp use` picks the **profile** a place loads; `ccp account use` picks the **account** that profile
+runs on, wherever it loads (globally or in any project that uses it):
 
 ```bash
-cd ~/workspace/work/acme
-ccp use acme --accounts
+ccp account use default --profile default     # profile default -> account default
+ccp account use auto --profile acme           # acme -> its freest logged-in account
+ccp account use auto:company --profile acme   # acme -> the pool's freest, relinked when free
+ccp account use                               # show the current profile's rule
+ccp account use --clear --profile acme        # plain claude on acme runs on the profile again
 ```
 
-This writes `CLAUDE_CONFIG_DIR` into `mise.toml` (or `.envrc`), the shim `.ccp/bin/claude`, puts
-`.ccp/bin` first on PATH (`_.path` or `PATH_add`) and adds `.ccp/` to `.git/info/exclude`.
-Plain `claude` there then runs `ccp run --account auto --or-profile`:
+Without `--profile` the rule goes to the current profile (the project's `CLAUDE_CONFIG_DIR`, else
+`~/.claude`). A named account must be a Claude account linked to that profile. The rule is
+`account = "..."` in the profile's `profile.toml`; `ccp account` lists every rule.
+
+The first `ccp account use` writes the shim `~/.ccp/bin/claude`. Put `~/.ccp/bin` first on PATH
+once (ccp prints the line, for example mise `[env] _.path = ["~/.ccp/bin"]`). Plain `claude` then
+runs `ccp run --profile-rule`:
 
 - a session already on an account keeps it (sub-agents and nested `claude` stay on it);
-- otherwise the account with the most limit left;
-- with no account logged in yet, the profile itself (no error).
+- no rule: claude runs exactly as without the shim;
+- no usable account, or a rule that no longer holds: a line on stderr, then claude runs as without
+  the shim (never on another login).
 
-`ccp use acme --accounts --pool company` writes the same shim with
-`ccp run --account auto:company --or-profile`: the pool's freest account, relinked to `acme` when
-no session runs on it, else the profile. Rerunning `--accounts` without `--pool` drops the pool.
-
-Never write this shim by hand: it must start the real `claude` from `mise which claude`. A mise
-shim reapplies `mise.toml` and resets `CLAUDE_CONFIG_DIR` to the profile, so every login lands
-in the profile. Rerun `ccp use <profile> --accounts` to rewrite it.
+`ccp use <p> --accounts [--pool <pool>]` is deprecated: it still writes a project shim
+`.ccp/bin/claude`, but the profile's account rule replaces it.
 
 ### A new profile for a new client or new accounts
 
@@ -314,7 +320,8 @@ in the profile. Rerun `ccp use <profile> --accounts` to rewrite it.
 ccp profile create acme --from companyA   # same skills and settings, its own accounts
 ccp account add acme1 acme && ccp run --account acme1    # /login
 ccp account add acme2 acme && ccp run --account acme2    # /login
-cd ~/workspace/clients/acme && ccp use acme --accounts
+ccp account use auto --profile acme
+cd ~/workspace/clients/acme && ccp use acme
 ```
 
 Accounts you buy for yourself: link them to the profile you use them with (for example
@@ -381,8 +388,8 @@ login moves, plain `claude` is logged out. Prefer `ccp account add` plus a fresh
 | Symptom | Cause and fix |
 |---|---|
 | Every account shows the same email | The browser approved each `/login` with the same claude.ai account. Sign out of claude.ai (or use Incognito), then `/logout` and `/login` in that account |
-| Logged in, but `ccp account` says "(not logged in)" | The session ran in another folder. Check `claude auth status`: `configDirectory` must be the account folder. A hand-written wrapper that calls the mise shim causes this; use `ccp use --accounts` |
-| `none of these accounts is logged in` | Log in one account (`ccp run --account <name>`, `/login`), or start through the `--accounts` shim, which falls back to the profile |
+| Logged in, but `ccp account` says "(not logged in)" | The session ran in another folder. Check `claude auth status`: `configDirectory` must be the account folder. A hand-written wrapper that calls the mise shim causes this; use `ccp account use` and its shim |
+| `none of these accounts is logged in` | Log in one account (`ccp run --account <name>`, `/login`), or start through the `ccp account use` shim, which falls back to running claude unchanged |
 | `every account of pool … is linked to another profile and …` | Each pooled seat runs a Claude session on another profile (or sessions cannot be checked). Close one, or use `--or-profile` / the shim, which falls back to the profile |
 | `Warning: mcp-needs-auth-cache.json is a real file …` | Claude Code replaced that link with a file. Harmless |
 | An MCP server is gone after switching account | `claude mcp add` writes only the account in use. Put shared servers in `~/.ccp/profiles/<profile>/mcp.json` (`ccp doctor --fix` creates it from the profile's servers); `ccp run` passes it to every account. `ccp run` and `ccp doctor` list servers that exist on one account only |

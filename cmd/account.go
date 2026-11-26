@@ -36,6 +36,7 @@ file-based token storage in ~/.gemini/antigravity-cli-ccp-<name>/.
   ccp run companyA --account auto                # the account with the most limit left
   ccp account pool ca1 company                   # put ca1 in pool "company"
   ccp run --account auto:company                 # freest account of the pool, any profile
+  ccp account use auto --profile companyA        # plain claude on companyA: its freest account
   eval "$(ccp env --account ca2)"                # this terminal only (Claude only)
   ccp account remove ca1                         # log ca1 out (delete only its login)
   ccp account remove ca1 --all                   # delete login, account folder and agy data
@@ -184,6 +185,7 @@ func runAccountList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	printAccounts(statuses)
+	printAccountRules(paths)
 	if len(otherLogins) > 0 {
 		printOtherLogins(otherLogins)
 	}

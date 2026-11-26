@@ -23,15 +23,19 @@ const ManifestVersionV2 = 2
 
 // Manifest represents the profile.toml file
 type Manifest struct {
-	Version          int                 `toml:"version" yaml:"-"`
-	Name             string              `toml:"name" yaml:"name"`
-	Description      string              `toml:"description,omitempty" yaml:"description,omitempty"`
-	Engine           string              `toml:"engine,omitempty" yaml:"engine,omitempty"`   // Deprecated: flattened by migration
-	Context          string              `toml:"context,omitempty" yaml:"context,omitempty"` // Deprecated: flattened by migration
-	SettingsTemplate string              `toml:"settings-template,omitempty" yaml:"settings-template,omitempty"`
-	Created          time.Time           `toml:"created" yaml:"created"`
-	Hub              HubLinks            `toml:"hub" yaml:"hub"`
-	Hooks            []config.HookConfig `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
+	Version          int    `toml:"version" yaml:"-"`
+	Name             string `toml:"name" yaml:"name"`
+	Description      string `toml:"description,omitempty" yaml:"description,omitempty"`
+	Engine           string `toml:"engine,omitempty" yaml:"engine,omitempty"`   // Deprecated: flattened by migration
+	Context          string `toml:"context,omitempty" yaml:"context,omitempty"` // Deprecated: flattened by migration
+	SettingsTemplate string `toml:"settings-template,omitempty" yaml:"settings-template,omitempty"`
+	// Account is the account rule plain claude follows wherever this profile
+	// loads (through the ~/.ccp/bin/claude shim): an account name, "auto" or
+	// "auto:<pool>". Empty means plain claude runs on the profile as before.
+	Account string              `toml:"account,omitempty" yaml:"-"`
+	Created time.Time           `toml:"created" yaml:"created"`
+	Hub     HubLinks            `toml:"hub" yaml:"hub"`
+	Hooks   []config.HookConfig `toml:"hooks,omitempty" yaml:"hooks,omitempty"`
 }
 
 // HubLinks defines which hub items are linked to this profile

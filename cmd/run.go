@@ -139,6 +139,12 @@ func hasAppDataDirFlag(args []string) bool {
 // until then. On an error the lock is already released.
 func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func(), err error) {
 	release = noRelease
+	if ra.profileRule {
+		var plain bool
+		if ra, plain = applyProfileRule(paths, ra); plain {
+			return plainCmd(ra.command), release, nil
+		}
+	}
 	defer func() {
 		if err != nil {
 			release()
@@ -231,6 +237,10 @@ func prepareRunCmd(paths *config.Paths, ra runArgs) (_ *exec.Cmd, release func()
 	account, release, err := chooseRunAccount(paths, profileName, ra.account, ra.relink, harness)
 	pooledLock := pool != "" && harness == profile.HarnessClaude && err == nil
 	if ra.orProfile && errors.Is(err, errNoUsableAccount) {
+		if ra.plainFallback {
+			fmt.Fprintf(os.Stderr, "ccp: account rule %s of profile %s: %v; running without an account\n", ra.account, profileName, err)
+			return plainCmd(ra.command), release, nil
+		}
 		if pool != "" {
 			fmt.Fprintf(os.Stderr, "ccp: no account of pool %s is free and logged in; running on profile %s\n", pool, profileName)
 		} else {
@@ -309,9 +319,15 @@ type runArgs struct {
 	profile, account   string
 	accountSet, relink bool
 	orProfile          bool
-	help               bool
-	commandExplicit    bool
-	command            []string
+	// profileRule: the account comes from the loaded profile's rule
+	// (--profile-rule, passed by the global shim).
+	profileRule bool
+	// plainFallback: with no usable account, run the command with the
+	// environment unchanged instead of on the profile folder.
+	plainFallback   bool
+	help            bool
+	commandExplicit bool
+	command         []string
 }
 
 // parseRunArgs reads "[<profile>] [--account <name>] [--relink] [-- <command>]".
@@ -344,6 +360,8 @@ func parseRunArgs(args []string) (runArgs, error) {
 			ra.relink = true
 		case arg == "--or-profile":
 			ra.orProfile = true
+		case arg == profileRuleFlag:
+			ra.profileRule = true
 		case arg == "--account":
 			if i+1 >= len(own) {
 				return ra, fmt.Errorf("--account needs a name")
@@ -363,6 +381,15 @@ func parseRunArgs(args []string) (runArgs, error) {
 		}
 	}
 	ra.command = command
+	if ra.profileRule {
+		if ra.profile != "" || ra.accountSet || ra.relink || ra.orProfile {
+			return ra, fmt.Errorf("%s takes no profile, --account, --relink or --or-profile: the loaded profile's rule decides", profileRuleFlag)
+		}
+		if len(ra.command) == 0 {
+			return ra, fmt.Errorf("command required after --")
+		}
+		return ra, nil
+	}
 	if ra.profile == "" && !ra.accountSet {
 		return ra, fmt.Errorf("profile name required (or --account)")
 	}

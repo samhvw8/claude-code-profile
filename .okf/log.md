@@ -1,5 +1,8 @@
 # Update Log
 
+## 2026-11-26
+* **Decision**: [A profile's account rule](/decisions/profile-account-rule.md) — new `ccp account use [<name>|auto|auto:<pool>] [--profile p] [--clear]` stores `account` in `profile.toml`; the shim `~/.ccp/bin/claude` runs hidden `ccp run --profile-rule`, which keeps an account session, runs unchanged with no rule, and with no usable account leaves `CLAUDE_CONFIG_DIR` as it was. `ccp account` lists the rules. `ccp use --accounts`/`--pool` deprecated. Updated [profile.toml](/reference/profile-manifest.md), [command reference](/cli/command-reference.md), `skills/ccp/SKILL.md`. Tests: `cmd/account_use_test.go`.
+
 ## 2026-11-25
 * **Update**: Released v0.61.0: [release history](/product/release-history.md), version in `CLAUDE.md` and `.claude-plugin/plugin.json`.
 * **Update**: Review fixes for [linked project installs](/decisions/project-linked-sources.md): `ccp source remove` refuses a clone that a recorded project links (new machine-local `~/.ccp/state/project-links.toml`); a project `ccp.toml` needs ccp's marker first line, so another tool's `ccp.toml` is never read or overwritten; exclude patterns carry the path below the work-tree top; adding a source writes the excludes at once; `project remove` reads `ccp.toml` before deleting; an existing source directory is reused or refused, never fetched over, and ssh/https origins compare equal; `project list` marks linked rule directories; sync counts only linked items and reports a clone move after it happens. Updated [ccp.toml](/reference/ccp-config.md), [directory layout](/architecture/directory-layout.md), `skills/ccp/SKILL.md`. Tests in `cmd/project_link_test.go`.

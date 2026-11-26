@@ -41,16 +41,10 @@ Examples:
   ccp use                  # Interactive picker (project env)
   ccp use -g               # Interactive picker (global symlink)
   ccp use --show           # Show current active profile
-  ccp use work --accounts  # ...and claude here picks work's freest account
-  ccp use work --accounts --pool company  # ...or pool company's, relinked to work
 
---accounts also writes .ccp/bin/claude, puts .ccp/bin on PATH through
-mise.toml (or .envrc) and adds .ccp/ to .git/info/exclude. claude in the
-folder then runs on the profile's account with the most plan limit left
-(ccp run --account auto), or on the profile while no account is logged in.
-With --pool <name> the shim runs 'ccp run --account auto:<name>' instead: the
-pool's freest account, relinked to the profile when no session runs on it.
-Running --accounts again without --pool rewrites the shim without the pool.`,
+To run plain claude on an account wherever a profile loads, bind an account
+rule to the profile: ccp account use <name>|auto|auto:<pool>.
+--accounts (deprecated) still writes a project shim, .ccp/bin/claude.`,
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: completeProfileNames,
 	RunE:              runUse,
@@ -61,6 +55,9 @@ func init() {
 	useCmd.Flags().BoolVarP(&useGlobalFlag, "global", "g", false, "Update global ~/.claude symlink")
 	useCmd.Flags().BoolVar(&useAccountsFlag, "accounts", false, "Project mode: claude here picks the profile's account with the most limit left")
 	useCmd.Flags().StringVar(&useAccountsPool, "pool", "", "With --accounts: pick from this account pool (auto:<pool>) instead")
+	// Kept for existing scripts; the profile's account rule replaces them.
+	_ = useCmd.Flags().MarkDeprecated("accounts", "bind an account rule to the profile instead: ccp account use auto")
+	_ = useCmd.Flags().MarkDeprecated("pool", "bind an account rule to the profile instead: ccp account use auto:<pool>")
 	rootCmd.AddCommand(useCmd)
 }
 

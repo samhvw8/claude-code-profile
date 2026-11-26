@@ -23,6 +23,7 @@ sources:
 | `name` | string | Profile name, matches the directory |
 | `description` | string | Optional |
 | `settings-template` | string | Optional [settings template](/reference/settings-templates.md) name |
+| `account` | string | Optional [account rule](/decisions/profile-account-rule.md): an account name, `auto` or `auto:<pool>`; set with `ccp account use` |
 | `created`, `updated` | datetime | Timestamps |
 | `[hub].skills/agents/hooks/rules/commands/output-styles` | string list | Hub item names to link; `output-styles` makes a style selectable by `outputStyle` |
 | `[hub].bundles` | string list | [Bundle](/features/bundles.md) names only; members are not recorded |

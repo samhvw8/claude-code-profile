@@ -305,22 +305,23 @@ eval "$(ccp env work --account auto)"            # this terminal only
 ccp status                                       # each account's 5-hour and weekly usage
 ```
 
-To make plain `claude` in a project folder pick the account by itself:
+To make plain `claude` pick the account by itself, bind an account rule to the profile. `ccp use` picks the profile a place loads; `ccp account use` picks the account that profile runs on, wherever it loads:
 
 ```bash
-cd ~/work/acme
-ccp use work --accounts   # mise.toml (or .envrc) + a .ccp/bin/claude shim
-claude                    # runs on work's account with the most limit left
+ccp account use auto --profile work   # or a name (work1), or auto:<pool>
+# once: put ~/.ccp/bin first on PATH (ccp prints the mise _.path line)
+cd ~/work/acme && ccp use work        # this folder loads profile work
+claude                                # runs on work's account with the most limit left
 ```
 
-With no account logged in yet, `claude` there runs on the profile itself.
+The rule is `account = "..."` in the profile's `profile.toml`, followed by the shim `~/.ccp/bin/claude`. A session already on an account keeps it. With no rule, or no usable account, `claude` runs as it would without the shim (with a line on stderr in the second case). `ccp use <p> --accounts` is deprecated.
 
 Seats used from several profiles can share a **pool**:
 
 ```bash
 ccp account pool work1 company           # work1 joins pool company (any profile)
 ccp run client --account auto:company    # the pool's freest account, relinked to client if no session runs on it
-ccp use client --accounts --pool company # the folder's claude picks from the pool
+ccp account use auto:company --profile client # plain claude on client picks from the pool
 ```
 
 `ccp account pool` works on an account that already exists and keeps its login. An account is in one pool at most; `ccp account pool work1 --clear` takes it out.

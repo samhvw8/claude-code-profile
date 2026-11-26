@@ -13,46 +13,54 @@ import (
 // accountShimDir is the project folder 'ccp use --accounts' puts on PATH.
 const accountShimDir = ".ccp/bin"
 
-// accountShimTemplate is the claude shim 'ccp use --accounts' writes; its one
-// placeholder, @ACCOUNT@, is the --account value: auto (the profile's
-// accounts) or auto:<pool>. It names no profile: 'ccp run' takes the folder's
-// profile from CLAUDE_CONFIG_DIR, so a later 'ccp use <other>' needs no
-// rewrite.
+// accountShimTemplate is the claude shim ccp writes. @WRITER@ names the
+// command that wrote it and @RUN@ the 'ccp run' arguments: '--account auto
+// --or-profile' (or auto:<pool>) for a project shim from 'ccp use --accounts',
+// '--profile-rule' for the global shim from 'ccp account use'. Neither names a
+// profile: 'ccp run' takes it from CLAUDE_CONFIG_DIR, else ~/.claude, so a
+// later 'ccp use <other>' needs no rewrite.
 //
 // The real claude comes from 'mise which', never a mise shim: a mise shim
 // reapplies the folder's mise.toml and resets CLAUDE_CONFIG_DIR to the
-// profile, so the account would be dropped.
+// profile, so the account would be dropped. Without mise it is the next
+// claude on PATH that is not a ccp shim (this folder or any .ccp/bin).
 const accountShimTemplate = `#!/bin/sh
-# Written by 'ccp use <profile> --accounts'. Do not edit; run it again instead.
-# claude in this folder runs on the account that 'ccp run --account
-# @ACCOUNT@' picks: the one with the most plan limit left ('ccp account'
-# lists them). A session already on an account keeps it; with no account
-# free and logged in, claude runs on the profile.
+# Written by '@WRITER@'. Do not edit; run it again instead.
+# claude here runs through 'ccp run @RUN@': on the account the loaded
+# profile's rule picks ('ccp account' lists them). A session already on an
+# account keeps it; with no account usable, claude runs as it would without
+# this shim.
 here=$(cd "$(dirname "$0")" && pwd)
 real=$(mise which claude 2>/dev/null)
 if [ -z "$real" ]; then
-	# Not installed with mise: the next claude on PATH, skipping this folder
-	# and mise shims (see above).
-	real=$(PATH=$(printf '%s\n' "$PATH" | tr : '\n' | grep -v -x -F "$here" | grep -v '/mise/shims$' | paste -s -d : -) command -v claude)
+	real=$(PATH=$(printf '%s\n' "$PATH" | tr : '\n' | grep -v -x -F "$here" | grep -v '/mise/shims$' | grep -v '/\.ccp/bin$' | paste -s -d : -) command -v claude)
 fi
 if [ -z "$real" ]; then
 	echo "claude: not found on PATH (ccp shim in $here)" >&2
 	exit 127
 fi
-exec ccp run --account @ACCOUNT@ --or-profile -- "$real" "$@"
+exec ccp run @RUN@ -- "$real" "$@"
 `
 
-// accountShimPlaceholder marks where accountShimScript puts the --account value.
-const accountShimPlaceholder = "@ACCOUNT@"
+// accountShimPlaceholder marks where a shim script gets its 'ccp run' arguments.
+const accountShimPlaceholder = "@RUN@"
 
-// accountShimScript returns the shim: pool "" runs 'ccp run --account auto',
-// a pool runs 'ccp run --account auto:<pool>'.
+// accountShimScript returns the project shim: pool "" runs 'ccp run --account
+// auto', a pool runs 'ccp run --account auto:<pool>'.
 func accountShimScript(pool string) string {
 	value := profile.AutoAccount
 	if pool != "" {
 		value += ":" + pool
 	}
-	return strings.ReplaceAll(accountShimTemplate, accountShimPlaceholder, value)
+	s := strings.ReplaceAll(accountShimTemplate, "@WRITER@", "ccp use <profile> --accounts")
+	return strings.ReplaceAll(s, "@RUN@", "--account "+value+" --or-profile")
+}
+
+// globalShimScript returns the shim 'ccp account use' writes to
+// ~/.ccp/bin/claude: it runs the loaded profile's account rule.
+func globalShimScript() string {
+	s := strings.ReplaceAll(accountShimTemplate, "@WRITER@", "ccp account use")
+	return strings.ReplaceAll(s, "@RUN@", profileRuleFlag)
 }
 
 // installAccountShim writes .ccp/bin/claude in the current folder, puts
